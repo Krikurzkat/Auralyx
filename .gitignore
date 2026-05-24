@@ -1,0 +1,12 @@
+node_modules
+dist
+build
+.expo
+.vite
+coverage
+.DS_Store
+*.log
+.env
+.env.local
+.dbg
+output.txt

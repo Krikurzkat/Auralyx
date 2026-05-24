@@ -1,0 +1,21 @@
+{
+  "name": "go-music",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/web",
+    "apps/server",
+    "apps/desktop",
+    "apps/mobile"
+  ],
+  "scripts": {
+    "dev:web": "npm --workspace apps/web run dev",
+    "dev:server": "npm --workspace apps/server run dev",
+    "dev:desktop": "npm --workspace apps/desktop run dev",
+    "dev:mobile": "npm --workspace apps/mobile run start",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "dependencies": {}
+}
