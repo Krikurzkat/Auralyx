@@ -5,25 +5,28 @@ type AudioSlot = 0 | 1;
 
 const _blobUrlByAudio = new WeakMap<HTMLAudioElement, string>();
 let _crossfadeAnimationFrame: number | null = null;
-let _crossfadeStartTime: number | null = null;
 
 // #region debug-point A:reporter
-const reportTrackSwitchDebug = (hypothesisId: string, msg: string, data: Record<string, unknown> = {}) => {
-  fetch('http://127.0.0.1:7777/event', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      sessionId: 'track-switch-delay',
-      runId: 'pre-fix',
-      hypothesisId,
-      location: 'playerStore.ts',
-      msg: `[DEBUG] ${msg}`,
-      data,
-      ts: Date.now(),
-    }),
-  }).catch(() => {});
-};
+const reportTrackSwitchDebug = (_hypothesisId: string, _msg: string, _data: Record<string, unknown> = {}) => {};
 // #endregion
+
+function getAudioDebugSnapshot(audio: HTMLAudioElement | null, label: string) {
+  if (!audio) {
+    return { label, exists: false };
+  }
+
+  return {
+    label,
+    exists: true,
+    currentSrc: audio.currentSrc,
+    paused: audio.paused,
+    currentTime: audio.currentTime,
+    readyState: audio.readyState,
+    networkState: audio.networkState,
+    volume: audio.volume,
+    ended: audio.ended,
+  };
+}
 
 export type RepeatMode = 'off' | 'all' | 'one';
 
@@ -90,6 +93,7 @@ interface PlayerState {
   setProgress: (progress: number) => void;
   setCurrentTime: (time: number) => void;
   setDuration: (duration: number) => void;
+  resetPlaybackState: () => void;
 }
 
 function shuffleArray<T>(arr: T[]): T[] {
@@ -135,11 +139,15 @@ function clearCrossfadeAnimation() {
     cancelAnimationFrame(_crossfadeAnimationFrame);
     _crossfadeAnimationFrame = null;
   }
-  _crossfadeStartTime = null;
 }
 
 function getTargetVolume(state: Pick<PlayerState, 'volume' | 'isMuted'>) {
   return state.isMuted ? 0 : state.volume / 100;
+}
+
+function clampAudioVolume(volume: number) {
+  if (!Number.isFinite(volume)) return 0;
+  return Math.min(1, Math.max(0, volume));
 }
 
 function resetAndStopAudio(audio: HTMLAudioElement | null, state: Pick<PlayerState, 'volume' | 'isMuted'>) {
@@ -153,16 +161,19 @@ function resetAndStopAudio(audio: HTMLAudioElement | null, state: Pick<PlayerSta
   });
   // #endregion
   clearCrossfadeAnimation();
-  audio.volume = getTargetVolume(state);
+  audio.volume = clampAudioVolume(getTargetVolume(state));
   audio.pause();
   audio.currentTime = 0;
 }
 
 function stopInactiveAudio(audio: HTMLAudioElement | null) {
   if (!audio) return;
+  // #region debug-point D:stop-inactive-audio
+  reportTrackSwitchDebug('D', 'stopInactiveAudio', getAudioDebugSnapshot(audio, 'inactive-before-stop'));
+  // #endregion
   audio.pause();
   audio.currentTime = 0;
-  audio.volume = 0;
+  audio.volume = clampAudioVolume(0);
 }
 
 function setAudioSource(audio: HTMLAudioElement, track: Track) {
@@ -178,6 +189,16 @@ function setAudioSource(audio: HTMLAudioElement, track: Track) {
     audio.removeAttribute('src');
     audio.load();
   }
+
+  // #region debug-point A:set-audio-source
+  reportTrackSwitchDebug('A', 'setAudioSource', {
+    trackId: track.id,
+    isLocal: track.isLocal,
+    hasBlob: !!track.blob,
+    hasAudioUrl: !!track.audioUrl,
+    audio: getAudioDebugSnapshot(audio, 'after-set-source'),
+  });
+  // #endregion
 }
 
 /**
@@ -213,7 +234,7 @@ function fadeInAudio(audio: HTMLAudioElement | null, targetVolume: number, durat
   // #endregion
   
   clearCrossfadeAnimation();
-  audio.volume = 0;
+  audio.volume = clampAudioVolume(0);
   
   // Start playback
   audio.play().catch((err) => {
@@ -222,7 +243,7 @@ function fadeInAudio(audio: HTMLAudioElement | null, targetVolume: number, durat
 
   // Instant volume if no fade duration
   if (targetVolume <= 0 || durationMs <= 0) {
-    audio.volume = targetVolume;
+    audio.volume = clampAudioVolume(targetVolume);
     return;
   }
 
@@ -234,7 +255,7 @@ function fadeInAudio(audio: HTMLAudioElement | null, targetVolume: number, durat
     
     // Use sine curve for smooth fade-in (equal-power)
     const gain = Math.sin(progress * Math.PI * 0.5);
-    audio.volume = targetVolume * gain;
+    audio.volume = clampAudioVolume(targetVolume * gain);
     
     if (progress < 1) {
       _crossfadeAnimationFrame = requestAnimationFrame(animate);
@@ -266,24 +287,65 @@ function performManualCrossfade(
   targetVolume: number,
   durationMs: number,
   nextSlot: AudioSlot,
-  setState: (state: Partial<PlayerState>) => void
+  setState: (state: Partial<PlayerState>) => void,
+  onPlayFailure: () => void
 ) {
+  // #region debug-point B:manual-crossfade-entry
+  reportTrackSwitchDebug('B', 'performManualCrossfade entry', {
+    nextTrackId: nextTrack.id,
+    nextIndex,
+    durationMs,
+    nextSlot,
+    queueLength: queue.length,
+    activeAudio: getAudioDebugSnapshot(activeAudio, 'active-entry'),
+    inactiveAudio: getAudioDebugSnapshot(inactiveAudio, 'inactive-entry'),
+  });
+  // #endregion
   // Prepare next track
   clearCrossfadeAnimation();
+  stopInactiveAudio(inactiveAudio);
   setAudioSource(inactiveAudio, nextTrack);
   inactiveAudio.currentTime = 0;
-  inactiveAudio.volume = 0;
+  inactiveAudio.volume = clampAudioVolume(0);
   
   // Preload and start playing
   inactiveAudio.load();
-  
-  const playPromise = inactiveAudio.play().catch((err) => {
-    console.error('Manual crossfade failed:', err);
+  // #region debug-point B:manual-crossfade-after-load
+  reportTrackSwitchDebug('B', 'performManualCrossfade after load', {
+    nextTrackId: nextTrack.id,
+    inactiveAudio: getAudioDebugSnapshot(inactiveAudio, 'inactive-after-load'),
   });
-  
-  if (playPromise && durationMs > 0) {
-    playPromise.then(() => {
-      // Update state immediately
+  // #endregion
+
+  inactiveAudio.play()
+    .then(() => {
+      // #region debug-point B:manual-crossfade-play-resolved
+      reportTrackSwitchDebug('B', 'performManualCrossfade play resolved', {
+        nextTrackId: nextTrack.id,
+        activeAudio: getAudioDebugSnapshot(activeAudio, 'active-play-resolved'),
+        inactiveAudio: getAudioDebugSnapshot(inactiveAudio, 'inactive-play-resolved'),
+      });
+      // #endregion
+      if (durationMs <= 0) {
+        activeAudio.pause();
+        activeAudio.currentTime = 0;
+        inactiveAudio.volume = clampAudioVolume(targetVolume);
+
+        setState({
+          currentTrack: nextTrack,
+          queueIndex: nextIndex,
+          history,
+          progress: 0,
+          currentTime: 0,
+          isPlaying: true,
+          isCrossfading: false,
+          activeAudioSlot: nextSlot,
+          audioRef: inactiveAudio,
+        });
+        return;
+      }
+
+      // Update state immediately so progress/time listeners follow the new slot.
       setState({
         currentTrack: nextTrack,
         queueIndex: nextIndex,
@@ -295,22 +357,22 @@ function performManualCrossfade(
         activeAudioSlot: nextSlot,
         audioRef: inactiveAudio,
       });
-      
+
       // Start equal-power crossfade
       const startTime = performance.now();
       const startVolume = activeAudio.volume;
-      
+
       const animate = (currentTime: number) => {
         const elapsed = currentTime - startTime;
         const progress = Math.min(1, elapsed / durationMs);
-        
+
         // Calculate equal-power gains
         const { fadeOut, fadeIn } = calculateEqualPowerGains(progress);
-        
+
         // Apply volumes
-        activeAudio.volume = Math.max(0, startVolume * fadeOut);
-        inactiveAudio.volume = targetVolume * fadeIn;
-        
+        activeAudio.volume = clampAudioVolume(startVolume * fadeOut);
+        inactiveAudio.volume = clampAudioVolume(targetVolume * fadeIn);
+
         if (progress < 1) {
           _crossfadeAnimationFrame = requestAnimationFrame(animate);
         } else {
@@ -318,34 +380,74 @@ function performManualCrossfade(
           clearCrossfadeAnimation();
           activeAudio.pause();
           activeAudio.currentTime = 0;
-          activeAudio.volume = targetVolume;
-          inactiveAudio.volume = targetVolume;
-          
+          activeAudio.volume = clampAudioVolume(targetVolume);
+          inactiveAudio.volume = clampAudioVolume(targetVolume);
+
           setState({ isCrossfading: false });
         }
       };
-      
+
       _crossfadeAnimationFrame = requestAnimationFrame(animate);
+    })
+    .catch((err) => {
+      console.error('Manual crossfade failed:', err);
+      // #region debug-point C:manual-crossfade-play-rejected
+      reportTrackSwitchDebug('C', 'performManualCrossfade play rejected', {
+        nextTrackId: nextTrack.id,
+        error: err instanceof Error ? err.message : String(err),
+        activeAudio: getAudioDebugSnapshot(activeAudio, 'active-play-rejected'),
+        inactiveAudio: getAudioDebugSnapshot(inactiveAudio, 'inactive-play-rejected'),
+      });
+      // #endregion
+      stopInactiveAudio(inactiveAudio);
+      onPlayFailure();
     });
-  } else {
-    // No crossfade, instant switch
-    activeAudio.pause();
-    activeAudio.currentTime = 0;
-    
-    setState({
-      currentTrack: nextTrack,
-      queueIndex: nextIndex,
-      history,
-      progress: 0,
-      currentTime: 0,
-      isPlaying: true,
-      isCrossfading: false,
-      activeAudioSlot: nextSlot,
-      audioRef: inactiveAudio,
-    });
-    
-    inactiveAudio.volume = targetVolume;
+}
+
+function performDirectTrackSwitch(
+  activeAudio: HTMLAudioElement | null,
+  inactiveAudio: HTMLAudioElement | null,
+  nextTrack: Track,
+  nextIndex: number,
+  queue: Track[],
+  history: Track[],
+  targetVolume: number,
+  fadeDurationMs: number,
+  state: Pick<PlayerState, 'volume' | 'isMuted' | 'activeAudioSlot'>,
+  setState: (state: Partial<PlayerState>) => void
+) {
+  // #region debug-point D:direct-track-switch-entry
+  reportTrackSwitchDebug('D', 'performDirectTrackSwitch entry', {
+    nextTrackId: nextTrack.id,
+    nextIndex,
+    fadeDurationMs,
+    queueLength: queue.length,
+    activeSlot: state.activeAudioSlot,
+    activeAudio: getAudioDebugSnapshot(activeAudio, 'active-direct-entry'),
+    inactiveAudio: getAudioDebugSnapshot(inactiveAudio, 'inactive-direct-entry'),
+  });
+  // #endregion
+  if (activeAudio) {
+    clearCrossfadeAnimation();
+    resetAndStopAudio(activeAudio, state);
+    stopInactiveAudio(inactiveAudio);
+    setAudioSource(activeAudio, nextTrack);
   }
+
+  setState({
+    currentTrack: nextTrack,
+    isPlaying: true,
+    progress: 0,
+    currentTime: 0,
+    queue,
+    queueIndex: nextIndex,
+    history,
+    isCrossfading: false,
+    activeAudioSlot: state.activeAudioSlot,
+    audioRef: activeAudio,
+  });
+
+  fadeInAudio(activeAudio, targetVolume, fadeDurationMs);
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -363,8 +465,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   shuffle: false,
   repeat: 'off',
-  manualFadeDuration: 0,
-  autoFadeDuration: 6,
+  manualFadeDuration: typeof window !== 'undefined' && localStorage.getItem('manualFadeDuration') !== null
+    ? Number(localStorage.getItem('manualFadeDuration'))
+    : 0,
+  autoFadeDuration: typeof window !== 'undefined' && localStorage.getItem('autoFadeDuration') !== null
+    ? Number(localStorage.getItem('autoFadeDuration'))
+    : 15,
 
   isFullscreen: false,
   isFullscreenOpen: false,
@@ -385,7 +491,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   playTrack: (track, context, isAutoAdvance = false) => {
     const state = get();
-    const audio = getActiveAudio(state);
+    const activeAudio = getActiveAudio(state);
     const inactiveAudio = getInactiveAudio(state);
     const targetVolume = getTargetVolume(state);
 
@@ -431,35 +537,81 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       toTrackId: track.id,
       queueLength: newQueue.length,
       newIndex,
-      hasAudio: !!audio,
+      hasAudio: !!activeAudio,
       isFullscreen: state.isFullscreen,
     });
     // #endregion
-    if (audio) {
-      clearCrossfadeAnimation();
-      resetAndStopAudio(audio, state);
-      stopInactiveAudio(inactiveAudio);
-      setAudioSource(audio, track);
-    }
-
     const history = state.currentTrack
       ? [state.currentTrack, ...state.history.slice(0, 49)]
       : state.history;
 
-    set({
-      currentTrack: track,
-      isPlaying: true,
-      progress: 0,
-      currentTime: 0,
-      queue: newQueue,
-      queueIndex: newIndex,
-      history,
-      isCrossfading: false,
-      audioRef: audio,
-    });
-
     const fadeDurationMs = isAutoAdvance ? state.autoFadeDuration * 1000 : state.manualFadeDuration * 1000;
-    fadeInAudio(audio, targetVolume, fadeDurationMs);
+    const shouldManualCrossfade =
+      !isAutoAdvance &&
+      state.manualFadeDuration > 0 &&
+      state.isPlaying &&
+      !!state.currentTrack &&
+      state.currentTrack.id !== track.id &&
+      !!activeAudio &&
+      !!inactiveAudio;
+
+    // #region debug-point A:play-track-branch
+    reportTrackSwitchDebug('A', 'playTrack branch evaluation', {
+      trackId: track.id,
+      currentTrackId: state.currentTrack?.id ?? null,
+      isAutoAdvance,
+      manualFadeDuration: state.manualFadeDuration,
+      autoFadeDuration: state.autoFadeDuration,
+      fadeDurationMs,
+      shouldManualCrossfade,
+      isPlaying: state.isPlaying,
+      activeSlot: state.activeAudioSlot,
+      activeAudio: getAudioDebugSnapshot(activeAudio, 'active-playTrack'),
+      inactiveAudio: getAudioDebugSnapshot(inactiveAudio, 'inactive-playTrack'),
+    });
+    // #endregion
+
+    if (shouldManualCrossfade) {
+      const nextSlot = getInactiveSlot(state.activeAudioSlot);
+      performManualCrossfade(
+        activeAudio,
+        inactiveAudio,
+        track,
+        newIndex,
+        newQueue,
+        history,
+        targetVolume,
+        fadeDurationMs,
+        nextSlot,
+        (newState) => set(newState),
+        () => performDirectTrackSwitch(
+          activeAudio,
+          inactiveAudio,
+          track,
+          newIndex,
+          newQueue,
+          history,
+          targetVolume,
+          0,
+          state,
+          (newState) => set(newState),
+        )
+      );
+      return;
+    }
+
+    performDirectTrackSwitch(
+      activeAudio,
+      inactiveAudio,
+      track,
+      newIndex,
+      newQueue,
+      history,
+      targetVolume,
+      fadeDurationMs,
+      state,
+      (newState) => set(newState),
+    );
   },
 
   handleTrackEnded: () => {
@@ -560,7 +712,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     stopInactiveAudio(inactiveAudio);
     setAudioSource(inactiveAudio, nextTrack);
     inactiveAudio.currentTime = 0;
-    inactiveAudio.volume = 0;
+          inactiveAudio.volume = clampAudioVolume(0);
 
     // Preload next track
     inactiveAudio.load();
@@ -605,8 +757,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           const { fadeOut, fadeIn } = calculateEqualPowerGains(progress);
           
           // Apply volumes with equal-power curve
-          activeAudio.volume = Math.max(0, startVolume * fadeOut);
-          inactiveAudio.volume = targetVolume * fadeIn;
+          activeAudio.volume = clampAudioVolume(startVolume * fadeOut);
+          inactiveAudio.volume = clampAudioVolume(targetVolume * fadeIn);
           
           if (progress < 1) {
             _crossfadeAnimationFrame = requestAnimationFrame(animate);
@@ -615,8 +767,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
             clearCrossfadeAnimation();
             activeAudio.pause();
             activeAudio.currentTime = 0;
-            activeAudio.volume = targetVolume;
-            inactiveAudio.volume = targetVolume;
+            activeAudio.volume = clampAudioVolume(targetVolume);
+            inactiveAudio.volume = clampAudioVolume(targetVolume);
             
             set({ isCrossfading: false });
             
@@ -705,7 +857,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         targetVolume,
         durationMs,
         nextSlot,
-        (newState) => set(newState)
+        (newState) => set(newState),
+        () => performDirectTrackSwitch(
+          activeAudio,
+          inactiveAudio,
+          nextTrack,
+          nextIndex,
+          queue,
+          history,
+          targetVolume,
+          0,
+          state,
+          (newState) => set(newState),
+        )
       );
     } else {
       // No crossfade, use standard playTrack
@@ -750,7 +914,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           targetVolume,
           durationMs,
           nextSlot,
-          (newState) => set(newState)
+          (newState) => set(newState),
+          () => performDirectTrackSwitch(
+            activeAudio,
+            inactiveAudio,
+            prevTrack,
+            prevIndex,
+            queue,
+            history,
+            targetVolume,
+            0,
+            state,
+            (newState) => set(newState),
+          )
         );
       } else {
         // No crossfade, use standard playTrack
@@ -770,7 +946,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setVolume: (vol) => {
     const audio = getActiveAudio(get());
-    if (audio) audio.volume = vol / 100;
+    if (audio) audio.volume = clampAudioVolume(vol / 100);
     set({ volume: vol, isMuted: vol === 0 });
   },
 
@@ -778,10 +954,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const state = get();
     const audio = getActiveAudio(state);
     if (state.isMuted) {
-      if (audio) audio.volume = state.volume / 100;
+      if (audio) audio.volume = clampAudioVolume(state.volume / 100);
       set({ isMuted: false });
     } else {
-      if (audio) audio.volume = 0;
+      if (audio) audio.volume = clampAudioVolume(0);
       set({ isMuted: true });
     }
   },
@@ -805,8 +981,18 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set({ repeat: modes[(currentIdx + 1) % 3] });
   },
 
-  setManualFadeDuration: (seconds) => set({ manualFadeDuration: seconds }),
-  setAutoFadeDuration: (seconds) => set({ autoFadeDuration: seconds }),
+  setManualFadeDuration: (seconds) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('manualFadeDuration', seconds.toString());
+    }
+    set({ manualFadeDuration: seconds });
+  },
+  setAutoFadeDuration: (seconds) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('autoFadeDuration', seconds.toString());
+    }
+    set({ autoFadeDuration: seconds });
+  },
   setFullscreenOpen: (value) => set({ isFullscreen: value, isFullscreenOpen: value }),
   toggleFullscreen: () => set(s => ({ isFullscreen: !s.isFullscreenOpen, isFullscreenOpen: !s.isFullscreenOpen })),
   toggleLyrics: () => set(s => ({ showLyrics: !s.showLyrics })),
@@ -839,4 +1025,25 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setProgress: (progress) => set({ progress }),
   setCurrentTime: (time) => set({ currentTime: time }),
   setDuration: (duration) => set({ duration }),
+  
+  resetPlaybackState: () => set({
+    shuffle: false,
+    repeat: 'off',
+    isPlaying: false,
+    isCrossfading: false,
+  }),
 }));
+
+// Reset shuffle and repeat on page load/refresh
+if (typeof window !== 'undefined') {
+  window.addEventListener('load', () => {
+    usePlayerStore.getState().resetPlaybackState();
+  });
+  
+  // Also reset on page show (handles back/forward cache)
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) {
+      usePlayerStore.getState().resetPlaybackState();
+    }
+  });
+}

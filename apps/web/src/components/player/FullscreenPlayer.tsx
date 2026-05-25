@@ -17,9 +17,11 @@ import {
   RiHeartFill,
   RiVolumeUpLine,
   RiVolumeMuteLine,
+  RiCarLine,
 } from 'react-icons/ri';
 import { gsap } from 'gsap';
 import { bottomPlayerCoverRef } from '../layout/BottomPlayer';
+import DrivePlayer from './DrivePlayer';
 
 type TransitionState = 'closed' | 'opening' | 'settling' | 'open' | 'closing';
 
@@ -248,7 +250,6 @@ export default function FullscreenPlayer() {
     nextTrack,
     prevTrack,
     seekTo,
-    setVolume,
     toggleMute,
     toggleShuffle,
     cycleRepeat,
@@ -262,14 +263,17 @@ export default function FullscreenPlayer() {
   const [show3DCanvas, setShow3DCanvas] = useState(false);
   const [isFullscreenInteractable, setFullscreenInteractable] = useState(false);
   const [transitionState, setTransitionState] = useState<TransitionState>('closed');
+  const [isDriveMode, setIsDriveMode] = useState(false);
 
   const shellRef = useRef<HTMLDivElement>(null);
   const coverWrapperRef = useRef<HTMLDivElement>(null);
+  const driveModeButtonRef = useRef<HTMLButtonElement>(null);
   const previousOpenRef = useRef(isFullscreenOpen);
   const activeTransitionRef = useRef<gsap.core.Timeline | null>(null);
   const closeCanvasTimeoutRef = useRef<number | null>(null);
   const previousTrackIdRef = useRef<string | null>(null);
   const autoTransitionFrameRef = useRef<number | null>(null);
+  const queueAnimationFrameRef = useRef<number | null>(null);
 
   const visualTrack = currentTrack;
   const coverUrl = getTrackCoverUrl(visualTrack);
@@ -297,10 +301,53 @@ export default function FullscreenPlayer() {
   const panelTitle = isLyricsPanelActive ? 'Lyrics' : 'Up Next';
   const isLiked = visualTrack ? likedTrackIds.has(visualTrack.id) : false;
 
+  const animateModeToggle = (button: HTMLButtonElement | null, hovered: boolean, active: boolean) => {
+    if (!button) return;
+    const icon = button.querySelector('svg');
+
+    gsap.to(button, {
+      scale: hovered ? 1.05 : active ? 1.03 : 1,
+      y: hovered ? -2 : 0,
+      boxShadow: active
+        ? '0 14px 30px rgba(232,71,10,0.22)'
+        : hovered
+        ? '0 12px 24px rgba(0,0,0,0.24)'
+        : '0 0px 0px rgba(0,0,0,0)',
+      duration: 0.22,
+      ease: 'power2.out',
+      overwrite: 'auto',
+      force3D: true,
+    });
+
+    if (icon) {
+      gsap.to(icon, {
+        rotation: hovered ? 12 : 0,
+        scale: active ? 1.08 : hovered ? 1.04 : 1,
+        duration: 0.22,
+        ease: 'power2.out',
+        overwrite: 'auto',
+      });
+    }
+  };
+
+  const pressModeToggle = (button: HTMLButtonElement | null) => {
+    if (!button) return;
+    gsap.to(button, {
+      scale: 0.96,
+      duration: 0.1,
+      ease: 'power2.out',
+      overwrite: 'auto',
+    });
+  };
+
   const selectWithinShell = (selector: string) => {
     if (!shellRef.current) return [] as HTMLElement[];
     return Array.from(shellRef.current.querySelectorAll<HTMLElement>(selector));
   };
+
+  useEffect(() => {
+    animateModeToggle(driveModeButtonRef.current, false, isDriveMode);
+  }, [isDriveMode]);
 
   const clearCloseCanvasTimeout = () => {
     if (closeCanvasTimeoutRef.current !== null) {
@@ -314,6 +361,51 @@ export default function FullscreenPlayer() {
       window.cancelAnimationFrame(autoTransitionFrameRef.current);
       autoTransitionFrameRef.current = null;
     }
+  };
+
+  const clearQueueAnimationFrame = () => {
+    if (queueAnimationFrameRef.current !== null) {
+      window.cancelAnimationFrame(queueAnimationFrameRef.current);
+      queueAnimationFrameRef.current = null;
+    }
+  };
+
+  const animateUpNextQueueItems = (delay = 0) => {
+    clearQueueAnimationFrame();
+    queueAnimationFrameRef.current = window.requestAnimationFrame(() => {
+      const queueItems = selectWithinShell('.queue-item');
+      if (queueItems.length === 0) return;
+
+      gsap.killTweensOf(queueItems);
+      gsap.set(queueItems, {
+        willChange: 'transform, opacity, filter',
+      });
+
+      gsap.fromTo(
+        queueItems,
+        {
+          autoAlpha: 0,
+          y: 18,
+          scale: 0.972,
+          filter: 'blur(10px)',
+        },
+        {
+          autoAlpha: 1,
+          y: 0,
+          scale: 1,
+          filter: 'blur(0px)',
+          duration: 0.64,
+          delay,
+          stagger: {
+            each: 0.065,
+            from: 'start',
+          },
+          ease: 'power4.out',
+          overwrite: 'auto',
+          clearProps: 'transform,opacity,visibility,filter,willChange',
+        }
+      );
+    });
   };
 
   const resetAnimatedState = () => {
@@ -344,6 +436,7 @@ export default function FullscreenPlayer() {
       killActiveTransition();
       clearCloseCanvasTimeout();
       clearAutoTransitionFrame();
+      clearQueueAnimationFrame();
     };
   }, []);
 
@@ -675,6 +768,7 @@ export default function FullscreenPlayer() {
     // Create animation timeline
     const tl = gsap.timeline({
       onComplete: () => {
+        clearQueueAnimationFrame();
         document.body.removeChild(coverClone);
       }
     });
@@ -729,52 +823,21 @@ export default function FullscreenPlayer() {
       ease: 'power3.out',
     }, 0.95);
 
-    // Step 5: Fade in queue items with wavy stagger (0.35s)
-    tl.fromTo(queueItems,
-      {
-        opacity: 0,
-        y: 15,
-      },
-      {
-        opacity: 1,
-        y: 0,
-        duration: 0.35,
-        stagger: {
-          each: 0.05,
-          from: 'start',
-        },
-        ease: 'power3.out',
-        clearProps: 'all',
-      },
-      1.1
-    );
+    // Step 5: Reveal the refreshed Up Next list after the track switch settles.
+    tl.add(() => {
+      animateUpNextQueueItems(0.02);
+    }, 0.96);
   };
 
   const handleAutoTrackTransition = () => {
     if (!isFullscreenOpen || transitionState !== 'open') return;
-
-    const queueItems = selectWithinShell('.queue-item');
-    if (queueItems.length === 0) return;
-
-    // Single fade-in animation only (no fade-out)
-    gsap.fromTo(queueItems,
-      {
-        opacity: 0,
-        y: 15,
-      },
-      {
-        opacity: 1,
-        y: 0,
-        duration: 0.35,
-        stagger: {
-          each: 0.05,
-          from: 'start',
-        },
-        ease: 'power3.out',
-        clearProps: 'all',
-      }
-    );
+    animateUpNextQueueItems();
   };
+
+  // Show DrivePlayer when drive mode is active
+  if (isDriveMode && visualTrack) {
+    return <DrivePlayer onClose={() => setIsDriveMode(false)} />;
+  }
 
   return (
     <div
@@ -789,24 +852,54 @@ export default function FullscreenPlayer() {
       <div
         className="fullscreen-overlay-bg absolute inset-0 backdrop-blur-3xl"
         style={{
-          opacity: 0,
-          background: `linear-gradient(180deg, ${startColor}66 0%, rgba(13, 13, 13, 0.96) 56%, rgba(13, 13, 13, 1) 100%)`,
+          background: `linear-gradient(180deg, ${startColor}33 0%, rgba(13, 13, 13, 0.85) 56%, rgba(13, 13, 13, 0.95) 100%)`,
           willChange: 'opacity',
         }}
-        onClick={startCloseTransition}
+        onClick={(e) => {
+          e.stopPropagation();
+          startCloseTransition();
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
       />
 
       {visualTrack ? (
-        <div className="relative flex h-full w-full flex-col overflow-hidden p-4 pt-6 md:p-8">
-          <div className="fullscreen-close-btn mb-3 flex w-full justify-start">
+        <div 
+          className="relative flex h-full w-full flex-col overflow-hidden p-4 pt-6 md:p-8"
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+        >
+          <div className="fullscreen-close-btn mb-3 flex w-full justify-between items-center">
             <button
               onClick={startCloseTransition}
-              className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/35 px-4 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur-md transition hover:bg-black/50"
+              className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 backdrop-blur-xl px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:bg-white/20 hover:border-white/30"
               aria-label="Go back"
             >
               <RiArrowLeftLine size={22} />
               <span>Back</span>
             </button>
+            
+            <div className="flex items-center gap-3">
+              <button
+                ref={driveModeButtonRef}
+                data-gsap-ignore
+                onMouseEnter={() => animateModeToggle(driveModeButtonRef.current, true, isDriveMode)}
+                onMouseLeave={() => animateModeToggle(driveModeButtonRef.current, false, isDriveMode)}
+                onPointerDown={() => pressModeToggle(driveModeButtonRef.current)}
+                onPointerUp={() => animateModeToggle(driveModeButtonRef.current, true, isDriveMode)}
+                onClick={() => setIsDriveMode(!isDriveMode)}
+                className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold shadow-lg backdrop-blur-xl transition ${
+                  isDriveMode 
+                    ? 'border-accent/50 bg-accent/30 text-accent hover:bg-accent/40' 
+                    : 'border-white/20 bg-white/10 text-white hover:bg-white/20 hover:border-white/30'
+                }`}
+                aria-label="Toggle drive mode"
+              >
+                <RiCarLine size={22} />
+                <span>Drive Mode</span>
+              </button>
+            </div>
           </div>
 
           <div className="m-auto flex h-full w-full max-w-5xl flex-col items-center justify-between gap-4 overflow-hidden pt-0 lg:flex-row lg:gap-12 lg:pt-0">
@@ -853,14 +946,14 @@ export default function FullscreenPlayer() {
                     {visualTrack.artist}
                   </p>
                   <div className="mt-2 flex flex-wrap items-center justify-center gap-2 lg:justify-start">
-                    <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/70">
+                    <span className="rounded-full border border-white/20 bg-white/10 backdrop-blur-xl px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/80 shadow-md">
                       Queue {currentQueuePosition}/{Math.max(queue.length, 1)}
                     </span>
-                    <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/70">
+                    <span className="rounded-full border border-white/20 bg-white/10 backdrop-blur-xl px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/80 shadow-md">
                       {visualTrack.isLocal ? 'Local Track' : 'Streaming'}
                     </span>
                     {repeat !== 'off' ? (
-                      <span className="rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-accent">
+                      <span className="rounded-full border border-accent/40 bg-accent/20 backdrop-blur-xl px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-accent shadow-md">
                         {repeat === 'one' ? 'Repeat One' : 'Repeat All'}
                       </span>
                     ) : null}
@@ -868,11 +961,11 @@ export default function FullscreenPlayer() {
                 </div>
 
                 <div className="my-3 flex w-full max-w-md flex-1 flex-col gap-2.5 overflow-hidden">
-                  <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 p-1.5">
+                  <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/20 bg-white/10 backdrop-blur-xl p-1.5 shadow-lg">
                     <button
                       onClick={handleShowLyrics}
                       className={`flex flex-1 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold transition ${
-                        isLyricsPanelActive ? 'bg-white text-surface' : 'text-white/70 hover:bg-white/5 hover:text-white'
+                        isLyricsPanelActive ? 'bg-white text-surface shadow-md' : 'text-white/70 hover:bg-white/10 hover:text-white'
                       }`}
                     >
                       Lyrics
@@ -880,14 +973,14 @@ export default function FullscreenPlayer() {
                     <button
                       onClick={handleShowQueue}
                       className={`flex flex-1 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold transition ${
-                        !isLyricsPanelActive ? 'bg-white text-surface' : 'text-white/70 hover:bg-white/5 hover:text-white'
+                        !isLyricsPanelActive ? 'bg-white text-surface shadow-md' : 'text-white/70 hover:bg-white/10 hover:text-white'
                       }`}
                     >
                       Queue
                     </button>
                   </div>
 
-                  <div className="fullscreen-lyrics-panel min-h-0 rounded-[24px] border border-white/10 bg-black/20 p-3 backdrop-blur-md md:p-4">
+                  <div className="fullscreen-lyrics-panel min-h-0 rounded-[24px] border border-white/20 bg-white/10 backdrop-blur-2xl p-3 shadow-2xl md:p-4">
                     <div className="mb-2 flex items-center justify-between">
                       <h2 className="text-xs font-bold uppercase tracking-[0.18em] text-white/60">{panelTitle}</h2>
                       <div className="flex items-end gap-1">
@@ -924,8 +1017,28 @@ export default function FullscreenPlayer() {
                             })}
                           </div>
                         ) : (
-                          <div className="rounded-2xl bg-white/5 p-2.5 text-sm text-white/60">
-                            Lyrics are not available for this track yet.
+                          <div className="space-y-3">
+                            <div className="rounded-2xl bg-white/5 p-2.5 text-sm text-white/60 text-center">
+                              ♪ Lyrics are not available for this track ♪
+                            </div>
+                            <label className="flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 backdrop-blur-xl px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-white/20 hover:border-white/30 cursor-pointer">
+                              <input
+                                type="file"
+                                accept=".lrc"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    // TODO: Implement LRC file import
+                                    console.log('Import LRC file:', file.name);
+                                  }
+                                }}
+                              />
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                              </svg>
+                              Import Lyrics (.lrc)
+                            </label>
                           </div>
                         )}
                       </div>

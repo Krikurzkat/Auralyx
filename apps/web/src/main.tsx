@@ -20,6 +20,7 @@ import RecentlyPlayedPage from './pages/RecentlyPlayedPage';
 import ListeningHistoryPage from './pages/ListeningHistoryPage';
 import QueuePage from './pages/QueuePage';
 import { useAuthStore } from './stores/authStore';
+import GlobalInteractionEffects from './components/motion/GlobalInteractionEffects';
 import './index.css';
 
 import { gsap } from "gsap";
@@ -47,30 +48,32 @@ function AdminRoute() {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/signup" element={<SignUpPage />} />
-        <Route element={<AppShell />}>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/search" element={<SearchPage />} />
-          <Route path="/library" element={<LibraryPage />} />
-          <Route path="/playlist/:id" element={<PlaylistPage />} />
-          <Route path="/album/:id" element={<AlbumPage />} />
-          <Route path="/artist/:id" element={<ArtistPage />} />
-          <Route path="/podcast/:id" element={<PodcastPage />} />
-          <Route path="/podcasts" element={<SearchPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/liked" element={<LikedSongsPage />} />
-          <Route path="/local" element={<LocalLibraryPage />} />
-          <Route path="/recently-played" element={<RecentlyPlayedPage />} />
-          <Route path="/listening-history" element={<ListeningHistoryPage />} />
-          <Route path="/queue" element={<QueuePage />} />
-          <Route path="/upgrade" element={<ProfilePage />} />
-          <Route path="/admin" element={<AdminRoute />} />
-          <Route path="*" element={<HomePage />} />
-        </Route>
-      </Routes>
+      <GlobalInteractionEffects>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignUpPage />} />
+          <Route element={<AppShell />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/search" element={<SearchPage />} />
+            <Route path="/library" element={<LibraryPage />} />
+            <Route path="/playlist/:id" element={<PlaylistPage />} />
+            <Route path="/album/:id" element={<AlbumPage />} />
+            <Route path="/artist/:id" element={<ArtistPage />} />
+            <Route path="/podcast/:id" element={<PodcastPage />} />
+            <Route path="/podcasts" element={<SearchPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/liked" element={<LikedSongsPage />} />
+            <Route path="/local" element={<LocalLibraryPage />} />
+            <Route path="/recently-played" element={<RecentlyPlayedPage />} />
+            <Route path="/listening-history" element={<ListeningHistoryPage />} />
+            <Route path="/queue" element={<QueuePage />} />
+            <Route path="/upgrade" element={<ProfilePage />} />
+            <Route path="/admin" element={<AdminRoute />} />
+            <Route path="*" element={<HomePage />} />
+          </Route>
+        </Routes>
+      </GlobalInteractionEffects>
     </BrowserRouter>
   </React.StrictMode>
 );

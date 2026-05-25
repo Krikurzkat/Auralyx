@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { useState, useRef, useEffect } from 'react';
 import { Track, Artist, Album, Playlist } from '../../types';
 import { useLocalLibraryStore } from '../../stores/localLibraryStore';
+import { gsap } from 'gsap';
 
 export default function TopBar() {
   const navigate = useNavigate();
@@ -13,8 +14,12 @@ export default function TopBar() {
   const { searchQuery, setSearchQuery, toggleMobileSidebar } = useUIStore();
   const { user, isAuthenticated, logout } = useAuthStore();
   const [searchFocused, setSearchFocused] = useState(false);
+  const [searchHovered, setSearchHovered] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
+  const searchShellRef = useRef<HTMLDivElement>(null);
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
+  const profileButtonRef = useRef<HTMLButtonElement>(null);
 
   const [suggestions, setSuggestions] = useState<{
     tracks: Track[];
@@ -79,6 +84,101 @@ export default function TopBar() {
     return () => clearTimeout(timer);
   }, [searchQuery, searchTracks, localPlaylists]);
 
+  useEffect(() => {
+    const searchShell = searchShellRef.current;
+    if (!searchShell) return;
+
+    const icon = searchShell.querySelector('.topbar-search-icon');
+    const isActive = searchFocused || searchHovered;
+
+    gsap.killTweensOf(searchShell);
+    if (icon) gsap.killTweensOf(icon);
+
+    gsap.to(searchShell, {
+      scale: isActive ? 1.012 : 1,
+      y: isActive ? -2 : 0,
+      boxShadow: isActive ? '0 18px 36px rgba(0,0,0,0.24)' : '0 0px 0px rgba(0,0,0,0)',
+      duration: 0.24,
+      ease: 'power2.out',
+      overwrite: 'auto',
+      force3D: true,
+    });
+
+    if (icon) {
+      gsap.to(icon, {
+        x: isActive ? 2 : 0,
+        scale: isActive ? 1.08 : 1,
+        opacity: isActive ? 1 : 0.85,
+        duration: 0.24,
+        ease: 'power2.out',
+        overwrite: 'auto',
+      });
+    }
+  }, [searchFocused, searchHovered]);
+
+  const animateSettingsButton = (hovered: boolean) => {
+    const button = settingsButtonRef.current;
+    if (!button) return;
+    const icon = button.querySelector('svg');
+
+    gsap.to(button, {
+      scale: hovered ? 1.08 : 1,
+      y: hovered ? -2 : 0,
+      backgroundColor: hovered ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0)',
+      boxShadow: hovered ? '0 12px 26px rgba(0,0,0,0.22)' : '0 0px 0px rgba(0,0,0,0)',
+      duration: 0.2,
+      ease: 'power2.out',
+      overwrite: 'auto',
+      force3D: true,
+    });
+
+    if (icon) {
+      gsap.to(icon, {
+        rotation: hovered ? 90 : 0,
+        duration: 0.3,
+        ease: hovered ? 'back.out(1.7)' : 'power2.out',
+        overwrite: 'auto',
+      });
+    }
+  };
+
+  const pressSettingsButton = () => {
+    const button = settingsButtonRef.current;
+    if (!button) return;
+    gsap.to(button, {
+      scale: 0.94,
+      duration: 0.1,
+      ease: 'power2.out',
+      overwrite: 'auto',
+    });
+  };
+
+  const animateProfileButton = (hovered: boolean) => {
+    const button = profileButtonRef.current;
+    if (!button) return;
+
+    gsap.to(button, {
+      scale: hovered ? 1.1 : 1,
+      y: hovered ? -2 : 0,
+      boxShadow: hovered ? '0 14px 30px rgba(232,71,10,0.28)' : '0 0px 0px rgba(232,71,10,0)',
+      duration: 0.22,
+      ease: 'power2.out',
+      overwrite: 'auto',
+      force3D: true,
+    });
+  };
+
+  const pressProfileButton = () => {
+    const button = profileButtonRef.current;
+    if (!button) return;
+    gsap.to(button, {
+      scale: 0.95,
+      duration: 0.1,
+      ease: 'power2.out',
+      overwrite: 'auto',
+    });
+  };
+
   const hasSuggestions = suggestions && (suggestions.tracks.length > 0 || suggestions.artists.length > 0 || suggestions.albums.length > 0 || suggestions.playlists.length > 0);
 
   return (
@@ -108,10 +208,15 @@ export default function TopBar() {
 
         {/* Center: Search */}
         <div className="relative flex-1 max-w-xl" ref={searchRef}>
-          <div className={`flex items-center gap-2 rounded-full border px-4 py-2 transition-all ${
+          <div
+            ref={searchShellRef}
+            onMouseEnter={() => setSearchHovered(true)}
+            onMouseLeave={() => setSearchHovered(false)}
+            className={`flex items-center gap-2 rounded-full border px-4 py-2 transition-all ${
             searchFocused ? 'border-white/20 bg-white/10' : 'border-transparent bg-white/5'
-          }`}>
-            <RiSearchLine size={18} className="text-softText" />
+          }`}
+          >
+            <RiSearchLine size={18} className="topbar-search-icon text-softText" />
             <input
               type="text"
               placeholder="Search songs, artists, albums, podcasts..."
@@ -253,10 +358,25 @@ export default function TopBar() {
                   ADMIN
                 </button>
               )}
-              <button onClick={() => navigate('/settings')} className="rounded-full p-2 text-softText transition hover:bg-white/5 hover:text-white">
+              <button
+                ref={settingsButtonRef}
+                data-gsap-ignore
+                onMouseEnter={() => animateSettingsButton(true)}
+                onMouseLeave={() => animateSettingsButton(false)}
+                onPointerDown={pressSettingsButton}
+                onPointerUp={() => animateSettingsButton(true)}
+                onClick={() => navigate('/settings')}
+                className="rounded-full p-2 text-softText transition hover:bg-white/5 hover:text-white"
+              >
                 <RiSettings4Line size={20} />
               </button>
               <button
+                ref={profileButtonRef}
+                data-gsap-ignore
+                onMouseEnter={() => animateProfileButton(true)}
+                onMouseLeave={() => animateProfileButton(false)}
+                onPointerDown={pressProfileButton}
+                onPointerUp={() => animateProfileButton(true)}
                 onClick={() => navigate('/profile')}
                 className="flex h-8 w-8 items-center justify-center rounded-full bg-go-gradient text-xs font-bold text-white shadow-glow-sm"
               >

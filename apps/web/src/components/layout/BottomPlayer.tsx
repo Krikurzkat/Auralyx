@@ -8,6 +8,10 @@ import { useNavigate } from 'react-router-dom';
 
 export const bottomPlayerCoverRef: { current: HTMLElement | null } = { current: null };
 
+// #region debug-point E:audio-event-reporter
+const reportAudioEventDebug = (_hypothesisId: string, _msg: string, _data: Record<string, unknown> = {}) => {};
+// #endregion
+
 export default function BottomPlayer() {
   const navigate = useNavigate();
   const primaryAudioRef = useRef<HTMLAudioElement>(null);
@@ -52,6 +56,25 @@ export default function BottomPlayer() {
     if (audios.length === 0) return;
 
     const cleanups = audios.map((audio) => {
+      const getAudioPayload = (eventName: string) => {
+        const state = usePlayerStore.getState();
+        return {
+          eventName,
+          currentTrackId: state.currentTrack?.id ?? null,
+          audioIsActiveRef: audio === state.audioRef,
+          activeAudioSlot: state.activeAudioSlot,
+          isPlaying: state.isPlaying,
+          isCrossfading: state.isCrossfading,
+          currentSrc: audio.currentSrc,
+          paused: audio.paused,
+          currentTime: audio.currentTime,
+          duration: audio.duration,
+          readyState: audio.readyState,
+          networkState: audio.networkState,
+          volume: audio.volume,
+        };
+      };
+
       const handleTimeUpdate = () => {
         const state = usePlayerStore.getState();
         if (audio !== state.audioRef) return;
@@ -66,6 +89,10 @@ export default function BottomPlayer() {
         const state = usePlayerStore.getState();
         if (audio !== state.audioRef) return;
 
+        // #region debug-point E:audio-loadedmetadata
+        reportAudioEventDebug('E', 'audio loadedmetadata', getAudioPayload('loadedmetadata'));
+        // #endregion
+
         setDuration(audio.duration);
 
         // Auto-repair 0:00 track duration bug
@@ -77,17 +104,60 @@ export default function BottomPlayer() {
       const handleEnded = () => {
         const state = usePlayerStore.getState();
         if (audio !== state.audioRef) return;
+        // #region debug-point E:audio-ended
+        reportAudioEventDebug('E', 'audio ended', getAudioPayload('ended'));
+        // #endregion
         handleTrackEnded();
+      };
+
+      const handlePlay = () => {
+        // #region debug-point E:audio-play
+        reportAudioEventDebug('E', 'audio play', getAudioPayload('play'));
+        // #endregion
+      };
+
+      const handlePlaying = () => {
+        // #region debug-point E:audio-playing
+        reportAudioEventDebug('E', 'audio playing', getAudioPayload('playing'));
+        // #endregion
+      };
+
+      const handlePause = () => {
+        // #region debug-point E:audio-pause
+        reportAudioEventDebug('E', 'audio pause', getAudioPayload('pause'));
+        // #endregion
+      };
+
+      const handleStalled = () => {
+        // #region debug-point E:audio-stalled
+        reportAudioEventDebug('E', 'audio stalled', getAudioPayload('stalled'));
+        // #endregion
+      };
+
+      const handleWaiting = () => {
+        // #region debug-point E:audio-waiting
+        reportAudioEventDebug('E', 'audio waiting', getAudioPayload('waiting'));
+        // #endregion
       };
 
       audio.addEventListener('timeupdate', handleTimeUpdate);
       audio.addEventListener('loadedmetadata', handleLoadedMetadata);
       audio.addEventListener('ended', handleEnded);
+      audio.addEventListener('play', handlePlay);
+      audio.addEventListener('playing', handlePlaying);
+      audio.addEventListener('pause', handlePause);
+      audio.addEventListener('stalled', handleStalled);
+      audio.addEventListener('waiting', handleWaiting);
 
       return () => {
         audio.removeEventListener('timeupdate', handleTimeUpdate);
         audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
         audio.removeEventListener('ended', handleEnded);
+        audio.removeEventListener('play', handlePlay);
+        audio.removeEventListener('playing', handlePlaying);
+        audio.removeEventListener('pause', handlePause);
+        audio.removeEventListener('stalled', handleStalled);
+        audio.removeEventListener('waiting', handleWaiting);
       };
     });
 

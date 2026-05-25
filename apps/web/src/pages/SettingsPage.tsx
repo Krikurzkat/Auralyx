@@ -169,10 +169,12 @@ export default function SettingsPage() {
               }}
             >
               <option value="0">Off</option>
-              <option value="6">6 seconds</option>
               <option value="8">8 seconds</option>
               <option value="10">10 seconds</option>
               <option value="12">12 seconds</option>
+              <option value="15">15 seconds</option>
+              <option value="18">18 seconds</option>
+              <option value="21">21 seconds</option>
             </select>
           </div>
         </div>

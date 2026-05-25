@@ -19,6 +19,7 @@ export interface Track {
   isLocal?: boolean;
   blob?: Blob;
   year?: number;
+  lyrics?: string;
 }
 
 export interface Album {

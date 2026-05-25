@@ -14,7 +14,7 @@ export default function HomePage() {
   const { playTrack, currentTrack, setFullscreenOpen } = usePlayerStore();
   const {
     localTracks, localPlaylists, isLoaded, loadLibrary,
-    getMostPlayed, getRecentlyPlayed, lastPlayed
+    getMostPlayed, getRecentlyPlayed, lastPlayed, playCounts
   } = useLocalLibraryStore();
 
   useEffect(() => {
@@ -328,7 +328,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Side Stats Card - Enhanced */}
+        {/* Side Stats Card - Your Stats */}
         <div className="space-y-4">
           <div className="relative w-full rounded-[32px] border border-white/10 bg-gradient-to-br from-card via-surface to-background p-8 flex flex-col overflow-hidden shadow-xl">
             {/* Background Pattern */}
@@ -337,39 +337,54 @@ export default function HomePage() {
             </div>
             
             <div className="relative z-10">
-              <div className="inline-flex items-center gap-2 rounded-full bg-accentAlt/15 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-accentAlt mb-3 border border-accentAlt/30">
-                <RiMusic2Line size={12} />
-                Stats
+              <div className="flex items-center gap-2 mb-6">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/15">
+                  <RiBarChartBoxLine size={16} className="text-accent" />
+                </div>
+                <h3 className="text-2xl font-black text-white tracking-tight">Your Stats</h3>
               </div>
-              <h3 className="text-3xl font-black text-white mb-6 tracking-tight">Total Music</h3>
               
-              <div className="space-y-4">
-                <div className="group flex items-center justify-between border-b border-white/10 pb-4 transition-all hover:border-accent/30">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/15 group-hover:bg-accent/25 transition-colors">
-                      <RiMusic2Line size={18} className="text-accent" />
-                    </div>
-                    <span className="text-sm font-medium text-softText group-hover:text-white transition-colors">Tracks</span>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                {/* TODAY Card */}
+                <div className="rounded-2xl border border-white/10 bg-surface/50 p-4 backdrop-blur-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    <RiHeadphoneLine size={14} className="text-accent" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-accent">Today</span>
                   </div>
-                  <span className="text-2xl font-black text-white">{localTracks.length}</span>
+                  <div className="text-3xl font-black text-white mb-1">0</div>
+                  <div className="text-xs text-dimText">tracks played</div>
                 </div>
-                <div className="group flex items-center justify-between border-b border-white/10 pb-4 transition-all hover:border-accentAlt/30">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accentAlt/15 group-hover:bg-accentAlt/25 transition-colors">
-                      <RiPlayListLine size={18} className="text-accentAlt" />
-                    </div>
-                    <span className="text-sm font-medium text-softText group-hover:text-white transition-colors">Playlists</span>
+
+                {/* STREAK Card */}
+                <div className="rounded-2xl border border-white/10 bg-surface/50 p-4 backdrop-blur-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    <RiFireLine size={14} className="text-accentAlt" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-accentAlt">Streak</span>
                   </div>
-                  <span className="text-2xl font-black text-white">{localPlaylists.length}</span>
+                  <div className="text-3xl font-black text-white mb-1">0</div>
+                  <div className="text-xs text-dimText">days</div>
                 </div>
-                <div className="group flex items-center justify-between transition-all">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 group-hover:bg-white/20 transition-colors">
-                      <RiUserLine size={18} className="text-white/70" />
-                    </div>
-                    <span className="text-sm font-medium text-softText group-hover:text-white transition-colors">Artists</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {/* LIBRARY Card */}
+                <div className="rounded-2xl border border-white/10 bg-surface/50 p-4 backdrop-blur-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    <RiMusic2Line size={14} className="text-white/70" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-white/70">Library</span>
                   </div>
-                  <span className="text-2xl font-black text-white">{popularArtists.length}</span>
+                  <div className="text-3xl font-black text-white mb-1">{localTracks.length}</div>
+                  <div className="text-xs text-dimText">total tracks</div>
+                </div>
+
+                {/* TOP GENRE Card */}
+                <div className="rounded-2xl border border-purple-500/20 bg-purple-950/30 p-4 backdrop-blur-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    <RiTrophyLine size={14} className="text-purple-400" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">Top Genre</span>
+                  </div>
+                  <div className="text-lg font-black text-white mb-1 truncate">Various</div>
+                  <div className="text-xs text-dimText">most played</div>
                 </div>
               </div>
             </div>
