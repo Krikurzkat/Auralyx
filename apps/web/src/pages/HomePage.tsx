@@ -213,10 +213,10 @@ export default function HomePage() {
             </div>
 
             {/* Listening Streak */}
-            <div className="group rounded-2xl bg-gradient-to-br from-accentAlt/10 to-accentAlt/5 border border-accentAlt/20 p-3 transition hover:border-accentAlt/40 hover:scale-[1.02]">
+            <div className="group rounded-2xl bg-gradient-to-br from-gradient-from/10 to-gradient-to/5 border border-gradient-to/20 p-3 transition hover:border-gradient-to/40 hover:scale-[1.02]">
               <div className="flex items-center gap-2 mb-1">
-                <RiFireLine size={14} className="text-accentAlt" />
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-accentAlt/80">Streak</span>
+                <RiFireLine size={14} className="text-gradient-to" />
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gradient-to/80">Streak</span>
               </div>
               <div className="text-2xl font-black text-white">{quickStats.streak}</div>
               <div className="text-[11px] text-softText">day{quickStats.streak !== 1 ? 's' : ''}</div>
@@ -274,7 +274,7 @@ export default function HomePage() {
               <button
                 onClick={() => { if (topListenedTracks[0]) playTrack(topListenedTracks[0], localTracks); }}
                 disabled={topListenedTracks.length === 0}
-                className="group flex items-center gap-3 rounded-full bg-go-gradient px-8 py-4 text-base font-bold text-white transition-all hover:scale-[1.05] hover:shadow-glow-lg active:scale-95 disabled:opacity-50 disabled:hover:scale-100 shadow-glow"
+                className="group flex items-center gap-3 rounded-full bg-theme-gradient px-8 py-4 text-base font-bold text-white transition-all hover:scale-[1.05] hover:shadow-glow-lg active:scale-95 disabled:opacity-50 disabled:hover:scale-100 shadow-glow"
               >
                 <RiPlayFill size={24} className="group-hover:scale-110 transition-transform" /> 
                 Play Most Listened
@@ -346,7 +346,7 @@ export default function HomePage() {
               
               <div className="grid grid-cols-2 gap-3 mb-3">
                 {/* TODAY Card */}
-                <div className="rounded-2xl border border-white/10 bg-surface/50 p-4 backdrop-blur-sm">
+                <div className="rounded-2xl border border-white/10 bg-glass backdrop-blur-2xl/50 p-4 backdrop-blur-sm">
                   <div className="flex items-center gap-2 mb-2">
                     <RiHeadphoneLine size={14} className="text-accent" />
                     <span className="text-[10px] font-bold uppercase tracking-wider text-accent">Today</span>
@@ -356,10 +356,10 @@ export default function HomePage() {
                 </div>
 
                 {/* STREAK Card */}
-                <div className="rounded-2xl border border-white/10 bg-surface/50 p-4 backdrop-blur-sm">
+                <div className="rounded-2xl border border-white/10 bg-glass backdrop-blur-2xl/50 p-4 backdrop-blur-sm">
                   <div className="flex items-center gap-2 mb-2">
-                    <RiFireLine size={14} className="text-accentAlt" />
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-accentAlt">Streak</span>
+                    <RiFireLine size={14} className="text-gradient-to" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-gradient-to">Streak</span>
                   </div>
                   <div className="text-3xl font-black text-white mb-1">0</div>
                   <div className="text-xs text-dimText">days</div>
@@ -368,7 +368,7 @@ export default function HomePage() {
 
               <div className="grid grid-cols-2 gap-3">
                 {/* LIBRARY Card */}
-                <div className="rounded-2xl border border-white/10 bg-surface/50 p-4 backdrop-blur-sm">
+                <div className="rounded-2xl border border-white/10 bg-glass backdrop-blur-2xl/50 p-4 backdrop-blur-sm">
                   <div className="flex items-center gap-2 mb-2">
                     <RiMusic2Line size={14} className="text-white/70" />
                     <span className="text-[10px] font-bold uppercase tracking-wider text-white/70">Library</span>
@@ -398,7 +398,7 @@ export default function HomePage() {
           <div className="mb-5 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accentAlt/15">
-                <RiTimeLine size={20} className="text-accentAlt" />
+                <RiTimeLine size={20} className="text-gradient-to" />
               </div>
               <h2 className="text-2xl font-bold">Jump back in</h2>
             </div>
@@ -469,7 +469,7 @@ export default function HomePage() {
               </div>
               <p className="text-base font-bold text-white mb-2">No playlists found</p>
               <p className="text-sm text-dimText mb-5">Create your first playlist in the Library.</p>
-              <button onClick={() => navigate('/local')} className="px-6 py-3 bg-go-gradient rounded-full text-sm font-bold hover:scale-105 transition-transform shadow-glow-sm">
+              <button onClick={() => navigate('/local')} className="px-6 py-3 bg-theme-gradient rounded-full text-sm font-bold hover:scale-105 transition-transform shadow-glow-sm">
                 Go to Library
               </button>
             </div>

@@ -18,8 +18,8 @@ export default function ProfilePage() {
   return (
     <div className="page-enter space-y-8 pb-8">
       {/* Header */}
-      <div className="flex flex-col items-center gap-6 rounded-[32px] bg-card p-8 text-center md:flex-row md:text-left">
-        <div className="flex h-32 w-32 items-center justify-center rounded-full bg-go-gradient text-5xl font-bold text-white shadow-glow-lg">
+      <div className="flex flex-col items-center gap-6 rounded-[32px] bg-glass-card backdrop-blur-xl p-8 text-center md:flex-row md:text-left">
+        <div className="flex h-32 w-32 items-center justify-center rounded-full bg-theme-gradient text-5xl font-bold text-white shadow-glow-lg">
           {user?.displayName?.[0]?.toUpperCase() || 'U'}
         </div>
         <div className="flex-1">
@@ -41,17 +41,17 @@ export default function ProfilePage() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <div className="rounded-[24px] bg-card p-6">
+        <div className="rounded-[24px] bg-glass-card backdrop-blur-xl p-6">
           <h3 className="text-lg font-bold">Local Library Size</h3>
           <div className="mt-4 text-4xl font-black text-accent">{localTracks.length}</div>
           <div className="mt-1 text-sm text-softText">Audio files indexed</div>
         </div>
-        <div className="rounded-[24px] bg-card p-6">
+        <div className="rounded-[24px] bg-glass-card backdrop-blur-xl p-6">
           <h3 className="text-lg font-bold">Custom Folders</h3>
           <div className="mt-4 text-4xl font-black text-blue-400">{localPlaylists.length}</div>
           <div className="mt-1 text-sm text-softText">Playlists created</div>
         </div>
-        <div className="rounded-[24px] bg-card p-6">
+        <div className="rounded-[24px] bg-glass-card backdrop-blur-xl p-6">
           <h3 className="text-lg font-bold">Total Listening Time</h3>
           <div className="mt-4 text-4xl font-black text-purple-400">
             {Math.floor(totalListens * 3.5 / 60)} <span className="text-2xl font-bold text-softText">hours</span>

@@ -43,6 +43,8 @@ interface PlayerState {
   // Queue
   queue: Track[];
   queueIndex: number;
+  originalQueue: Track[];
+  originalQueueIndex: number;
   history: Track[];
 
   // Modes
@@ -461,6 +463,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   queue: [],
   queueIndex: -1,
+  originalQueue: [],
+  originalQueueIndex: -1,
   history: [],
 
   shuffle: false,
@@ -500,7 +504,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
     if (context && context.length > 0) {
       // Playing from a new context (e.g., album, playlist)
-      newQueue = state.shuffle ? shuffleArray(context) : context;
+      if (state.shuffle) {
+        // Save original context order before shuffling
+        const originalIndex = context.findIndex(t => t.id === track.id);
+        set({
+          originalQueue: [...context],
+          originalQueueIndex: originalIndex >= 0 ? originalIndex : 0,
+        });
+        newQueue = shuffleArray(context);
+      } else {
+        newQueue = context;
+        // Clear any stored original queue since we're not shuffled
+        set({ originalQueue: [], originalQueueIndex: -1 });
+      }
       newIndex = newQueue.findIndex(t => t.id === track.id);
       if (newIndex === -1) newIndex = 0;
     } else {
@@ -965,12 +981,35 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   toggleShuffle: () => {
     const state = get();
     if (!state.shuffle) {
+      // Turning shuffle ON: save original queue, then shuffle
       const current = state.queue[state.queueIndex];
       const rest = state.queue.filter((_, i) => i !== state.queueIndex);
       const shuffled = [current, ...shuffleArray(rest)];
-      set({ shuffle: true, queue: shuffled, queueIndex: 0 });
+      set({
+        shuffle: true,
+        originalQueue: [...state.queue],
+        originalQueueIndex: state.queueIndex,
+        queue: shuffled,
+        queueIndex: 0,
+      });
     } else {
-      set({ shuffle: false });
+      // Turning shuffle OFF: restore original queue order
+      const current = state.queue[state.queueIndex];
+      const origQueue = state.originalQueue;
+
+      if (origQueue.length > 0 && current) {
+        // Find where the currently-playing track sits in the original order
+        const restoredIndex = origQueue.findIndex(t => t.id === current.id);
+        set({
+          shuffle: false,
+          queue: origQueue,
+          queueIndex: restoredIndex >= 0 ? restoredIndex : 0,
+          originalQueue: [],
+          originalQueueIndex: -1,
+        });
+      } else {
+        set({ shuffle: false, originalQueue: [], originalQueueIndex: -1 });
+      }
     }
   },
 
@@ -1031,6 +1070,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     repeat: 'off',
     isPlaying: false,
     isCrossfading: false,
+    originalQueue: [],
+    originalQueueIndex: -1,
   }),
 }));
 

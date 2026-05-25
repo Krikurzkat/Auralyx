@@ -109,7 +109,7 @@ export default function ArtistPage() {
         >
           {isCurrentArtist && isPlaying ? <RiPauseFill size={28} /> : <RiPlayFill size={28} className="ml-1" />}
         </button>
-        <button className="rounded-full bg-card p-3.5 text-softText transition hover:bg-card-hover hover:text-white">
+        <button className="rounded-full bg-glass-card backdrop-blur-xl p-3.5 text-softText transition hover:bg-card-hover hover:text-white">
           <RiShuffleLine size={22} />
         </button>
         <button

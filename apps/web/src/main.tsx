@@ -31,6 +31,35 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 
 gsap.registerPlugin(useGSAP, Flip, ScrollTrigger, CustomEase);
 
+// Initialize theme from localStorage on app start
+const initializeTheme = () => {
+  const savedTheme = localStorage.getItem('selectedTheme') || 'cyan-blue';
+  
+  const colorPalettes = [
+    { id: 'cyan-blue', gradient: ['#06B6D4', '#3B82F6'] },
+    { id: 'blue-purple', gradient: ['#3B82F6', '#8B5CF6'] },
+    { id: 'cyan-teal', gradient: ['#22D3EE', '#14B8A6'] },
+    { id: 'lime-green', gradient: ['#BEF264', '#4ADE80'] },
+    { id: 'yellow-orange', gradient: ['#FDE047', '#FB923C'] },
+    { id: 'orange-red', gradient: ['#FB923C', '#F87171'] },
+    { id: 'red-rose', gradient: ['#F87171', '#FB7185'] },
+    { id: 'pink-rose', gradient: ['#F472B6', '#FB7185'] },
+    { id: 'purple-pink', gradient: ['#A855F7', '#EC4899'] },
+    { id: 'red-purple', gradient: ['#EF4444', '#8B5CF6'] },
+    { id: 'purple-blue', gradient: ['#8B5CF6', '#3B82F6'] },
+    { id: 'blue-cyan', gradient: ['#0EA5E9', '#06B6D4'] },
+  ];
+  
+  const palette = colorPalettes.find(p => p.id === savedTheme);
+  if (palette) {
+    document.documentElement.style.setProperty('--gradient-from', palette.gradient[0]);
+    document.documentElement.style.setProperty('--gradient-to', palette.gradient[1]);
+    document.documentElement.style.setProperty('--color-accent', palette.gradient[0]);
+  }
+};
+
+initializeTheme();
+
 function AdminRoute() {
   const { isAuthenticated, user } = useAuthStore();
 

@@ -14,7 +14,7 @@ export default function RecentlyPlayedPage() {
     <div className="page-enter space-y-6 pb-8">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-accentAlt to-accent">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-gradient-from to-accent">
           <RiTimeLine size={24} className="text-white" />
         </div>
         <div>
@@ -30,7 +30,7 @@ export default function RecentlyPlayedPage() {
             <button
               key={`${track.id}-${index}`}
               onClick={() => playTrack(track, localTracks)}
-              className="group flex w-full items-center gap-4 rounded-xl bg-card p-3 text-left transition hover:bg-card-hover"
+              className="group flex w-full items-center gap-4 rounded-xl bg-glass-card backdrop-blur-xl p-3 text-left transition hover:bg-card-hover"
             >
               {track.coverUrl ? (
                 <img

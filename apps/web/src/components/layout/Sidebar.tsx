@@ -70,7 +70,7 @@ export default function Sidebar() {
     <div className="flex h-full flex-col">
       {/* ─── TOP SECTION: Branding + Core Nav ─── */}
       <div className="mb-5 flex items-center gap-3 px-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-go-gradient text-lg font-bold shadow-glow-sm">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-theme-gradient text-lg font-bold shadow-glow-sm">
           G
         </div>
         <div>
@@ -220,7 +220,7 @@ export default function Sidebar() {
               {isMobile && followedArtistList.length > 4 && (
                 <button
                   onClick={() => { navigate('/library?filter=artists'); toggleMobileSidebar(); }}
-                  className="w-full px-3 py-2 text-left text-xs font-medium text-accent transition hover:text-accentAlt"
+                  className="w-full px-3 py-2 text-left text-xs font-medium text-accent transition hover:text-gradient-to"
                 >
                   See All ({followedArtistList.length})
                 </button>

@@ -27,10 +27,10 @@ export default function LikedSongsPage() {
   return (
     <div className="page-enter pb-8">
       {/* Header */}
-      <div className="relative mb-6 overflow-hidden rounded-[28px] bg-go-gradient-subtle p-6 md:p-8">
+      <div className="relative mb-6 overflow-hidden rounded-[28px] bg-theme-gradient-subtle p-6 md:p-8">
         <div className="absolute inset-0 backdrop-blur-3xl" />
         <div className="relative flex flex-col gap-6 md:flex-row md:items-end">
-          <div className="flex h-48 w-48 flex-shrink-0 items-center justify-center rounded-2xl bg-go-gradient shadow-glow-lg md:h-56 md:w-56">
+          <div className="flex h-48 w-48 flex-shrink-0 items-center justify-center rounded-2xl bg-theme-gradient shadow-glow-lg md:h-56 md:w-56">
             <RiHeartFill size={80} className="text-white" />
           </div>
 

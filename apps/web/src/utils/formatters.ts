@@ -1,3 +1,5 @@
+import { parseLRC, type LyricLine } from './lrcParser';
+
 export function formatDuration(seconds: number): string {
   if (!seconds || isNaN(seconds)) return '0:00';
   const m = Math.floor(seconds / 60);
@@ -19,10 +21,17 @@ export function formatListeners(n: number): string {
   return n.toString();
 }
 
-export function getLyricsForTrack(_trackId: string): { time: number; text: string }[] {
-  // Offline fallback
-  return [
-    { time: 0, text: '♪ Music playing ♪' },
-    { time: 15, text: 'Local track playing' },
-  ];
+export function getLyricsForTrack(trackId: string, lrcContent?: string): LyricLine[] {
+  // If LRC content is provided, parse it
+  if (lrcContent) {
+    try {
+      return parseLRC(lrcContent);
+    } catch (error) {
+      console.error('Error parsing LRC content:', error);
+    }
+  }
+
+  // Fallback for tracks without lyrics
+  return [];
 }
+

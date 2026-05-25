@@ -71,7 +71,7 @@ export default function LibraryPage() {
             const name = prompt('Enter playlist name:');
             if (name) createPlaylist(name);
           }}
-          className="flex items-center gap-2 rounded-full bg-go-gradient px-6 py-3 text-sm font-bold text-white transition-all hover:scale-105 hover:shadow-glow-sm active:scale-95"
+          className="flex items-center gap-2 rounded-full bg-theme-gradient px-6 py-3 text-sm font-bold text-white transition-all hover:scale-105 hover:shadow-glow-sm active:scale-95"
         >
           <RiAddLine size={18} /> Create playlist
         </button>
@@ -80,9 +80,9 @@ export default function LibraryPage() {
       {/* Liked songs banner - Enhanced */}
       <button
         onClick={() => navigate('/liked')}
-        className="group flex w-full items-center gap-5 rounded-3xl bg-gradient-to-br from-accent/20 via-accent/10 to-accentAlt/10 p-6 text-left transition-all hover:from-accent/30 hover:via-accent/15 hover:to-accentAlt/15 hover:scale-[1.01] border border-accent/20 hover:border-accent/30 shadow-xl hover:shadow-2xl backdrop-blur-sm"
+        className="group flex w-full items-center gap-5 rounded-3xl bg-gradient-to-br from-gradient-from/20 via-accent/10 to-gradient-to/10 p-6 text-left transition-all hover:from-accent/30 hover:via-accent/15 hover:to-gradient-to/15 hover:scale-[1.01] border border-accent/20 hover:border-accent/30 shadow-xl hover:shadow-2xl backdrop-blur-sm"
       >
-        <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-go-gradient shadow-glow group-hover:scale-110 transition-transform">
+        <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-theme-gradient shadow-glow group-hover:scale-110 transition-transform">
           <RiHeartFill size={36} />
         </div>
         <div>
@@ -100,8 +100,8 @@ export default function LibraryPage() {
               onClick={() => setTab(t.key)}
               className={`group flex flex-shrink-0 items-center gap-2.5 rounded-full px-5 py-3 text-sm font-semibold transition-all ${
                 tab === t.key 
-                  ? 'bg-go-gradient text-white shadow-glow-sm scale-105' 
-                  : 'bg-card/80 text-softText hover:bg-card hover:text-white border border-white/5 hover:border-white/10'
+                  ? 'bg-theme-gradient text-white shadow-glow-sm scale-105' 
+                  : 'bg-glass-card backdrop-blur-xl/80 text-softText hover:bg-glass-card backdrop-blur-xl hover:text-white border border-white/5 hover:border-white/10'
               }`}
             >
               <t.icon size={18} className={tab === t.key ? '' : 'group-hover:scale-110 transition-transform'} />
@@ -116,14 +116,14 @@ export default function LibraryPage() {
           <select
             value={sortBy}
             onChange={e => setSortBy(e.target.value as typeof sortBy)}
-            className="rounded-xl bg-card/80 border border-white/10 px-4 py-2 text-sm text-softText hover:bg-card transition-colors"
+            className="rounded-xl bg-glass-card backdrop-blur-xl/80 border border-white/10 px-4 py-2 text-sm text-softText hover:bg-glass-card backdrop-blur-xl transition-colors"
           >
             <option value="recent">Recently added</option>
             <option value="alpha">Alphabetical</option>
           </select>
           <button 
             onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')} 
-            className="rounded-xl bg-card/80 border border-white/10 p-2.5 text-softText transition-all hover:bg-card hover:text-white hover:scale-105"
+            className="rounded-xl bg-glass-card backdrop-blur-xl/80 border border-white/10 p-2.5 text-softText transition-all hover:bg-glass-card backdrop-blur-xl hover:text-white hover:scale-105"
           >
             {viewMode === 'grid' ? <RiListUnordered size={20} /> : <RiGridLine size={20} />}
           </button>

@@ -65,7 +65,7 @@ export default function QueuePage() {
               return (
                 <div
                   key={`${track.id}-${index}`}
-                  className="group flex w-full items-center gap-4 rounded-xl bg-card p-3 transition hover:bg-card-hover"
+                  className="group flex w-full items-center gap-4 rounded-xl bg-glass-card backdrop-blur-xl p-3 transition hover:bg-card-hover"
                 >
                   <span className="w-8 text-center text-sm font-bold text-dimText">
                     {index + 1}

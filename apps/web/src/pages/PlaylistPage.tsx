@@ -102,7 +102,7 @@ export default function PlaylistPage() {
         >
           {isCurrentPlaylist && isPlaying ? <RiPauseFill size={24} /> : <RiPlayFill size={24} className="ml-0.5" />}
         </button>
-        <button className="rounded-full bg-card p-3 text-softText transition hover:bg-card-hover hover:text-white">
+        <button className="rounded-full bg-glass-card backdrop-blur-xl p-3 text-softText transition hover:bg-card-hover hover:text-white">
           <RiShuffleLine size={20} />
         </button>
         <button
@@ -111,13 +111,13 @@ export default function PlaylistPage() {
         >
           {isSaved ? <RiHeartFill size={22} /> : <RiHeartLine size={22} />}
         </button>
-        <button className="rounded-full bg-card p-3 text-softText transition hover:bg-card-hover hover:text-white">
+        <button className="rounded-full bg-glass-card backdrop-blur-xl p-3 text-softText transition hover:bg-card-hover hover:text-white">
           <RiDownloadLine size={20} />
         </button>
-        <button className="rounded-full bg-card p-3 text-softText transition hover:bg-card-hover hover:text-white">
+        <button className="rounded-full bg-glass-card backdrop-blur-xl p-3 text-softText transition hover:bg-card-hover hover:text-white">
           <RiShareLine size={20} />
         </button>
-        <button className="rounded-full bg-card p-3 text-softText transition hover:bg-card-hover hover:text-white">
+        <button className="rounded-full bg-glass-card backdrop-blur-xl p-3 text-softText transition hover:bg-card-hover hover:text-white">
           <RiMoreLine size={20} />
         </button>
       </div>

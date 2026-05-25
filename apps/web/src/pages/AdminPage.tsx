@@ -451,7 +451,7 @@ export default function AdminPage() {
             className={`upload-zone group relative flex flex-col items-center justify-center rounded-3xl border-2 border-dashed p-12 text-center transition-all duration-300
               ${isDragging
                 ? 'border-accent bg-accent/10 shadow-glow scale-[1.01]'
-                : 'border-white/15 bg-panel hover:border-accent/50 hover:bg-white/[0.03]'
+                : 'border-white/15 bg-glass-heavy backdrop-blur-2xl hover:border-accent/50 hover:bg-white/[0.03]'
               }`}
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
@@ -459,7 +459,7 @@ export default function AdminPage() {
             onDrop={handleDrop}
           >
             {/* Animated background glow */}
-            <div className={`absolute inset-0 rounded-3xl bg-go-gradient opacity-0 blur-3xl transition-opacity duration-500 ${isDragging ? 'opacity-15' : 'group-hover:opacity-5'}`} />
+            <div className={`absolute inset-0 rounded-3xl bg-theme-gradient opacity-0 blur-3xl transition-opacity duration-500 ${isDragging ? 'opacity-15' : 'group-hover:opacity-5'}`} />
 
             <div className="relative z-10">
               <div className={`mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full transition-all duration-300 ${isDragging ? 'bg-accent/20 scale-110' : 'bg-white/5'}`}>
@@ -515,7 +515,7 @@ export default function AdminPage() {
                     <button
                       onClick={handleBatchSubmit}
                       disabled={isSubmitting}
-                      className="flex items-center gap-2 rounded-full bg-go-gradient px-6 py-2 text-sm font-bold text-white shadow-glow transition hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex items-center gap-2 rounded-full bg-theme-gradient px-6 py-2 text-sm font-bold text-white shadow-glow transition hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isSubmitting ? (
                         <>
@@ -543,14 +543,14 @@ export default function AdminPage() {
                         ? 'border-red-500/30 bg-red-500/5'
                         : item.status === 'uploading' || item.status === 'creating'
                         ? 'border-accent/30 bg-accent/5'
-                        : 'border-white/10 bg-panel'
+                        : 'border-white/10 bg-glass-heavy backdrop-blur-2xl'
                     }`}
                     style={{ animationDelay: `${index * 50}ms` }}
                   >
                     {/* Progress bar for uploading/creating state */}
                     {(item.status === 'uploading' || item.status === 'creating') && (
                       <div className="absolute inset-x-0 top-0 h-0.5 overflow-hidden bg-white/5">
-                        <div className="upload-progress-bar h-full bg-go-gradient" />
+                        <div className="upload-progress-bar h-full bg-theme-gradient" />
                       </div>
                     )}
 
@@ -700,7 +700,7 @@ export default function AdminPage() {
 
           {/* Empty state */}
           {queue.length === 0 && (
-            <div className="rounded-2xl border border-white/5 bg-panel/50 p-8 text-center">
+            <div className="rounded-2xl border border-white/5 bg-glass-heavy backdrop-blur-2xl/50 p-8 text-center">
               <RiFileMusicLine className="mx-auto mb-3 text-3xl text-dimText" />
               <p className="text-sm text-dimText">
                 Drop MP3 files above to get started. Metadata like artist, album, genre, and duration
@@ -713,7 +713,7 @@ export default function AdminPage() {
 
       {/* ═══════════ ARTIST TAB ═══════════ */}
       {activeTab === 'artist' && (
-        <div className="rounded-3xl border border-white/10 bg-panel p-8 shadow-float glass-heavy animate-fade-in">
+        <div className="rounded-3xl border border-white/10 bg-glass-heavy backdrop-blur-2xl p-8 shadow-float glass-heavy animate-fade-in">
           <form onSubmit={handleArtistSubmit} className="flex flex-col gap-4">
             <h2 className="mb-4 text-xl font-bold flex items-center gap-2">
               <RiMicLine className="text-accent" /> Create New Artist
@@ -730,7 +730,7 @@ export default function AdminPage() {
               <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-dimText">Avatar Image URL</label>
               <input type="url" value={artistForm.avatarUrl} onChange={(e) => setArtistForm({ ...artistForm, avatarUrl: e.target.value })} placeholder="https://..." className="w-full rounded-xl border border-white/10 bg-white/5 py-3 px-4 text-white outline-none transition focus:border-accent/50" />
             </div>
-            <button type="submit" disabled={loading} className="mt-4 flex w-max items-center gap-2 rounded-full bg-go-gradient px-8 py-3 text-sm font-bold text-white shadow-glow transition hover:scale-105 active:scale-95 disabled:opacity-50">
+            <button type="submit" disabled={loading} className="mt-4 flex w-max items-center gap-2 rounded-full bg-theme-gradient px-8 py-3 text-sm font-bold text-white shadow-glow transition hover:scale-105 active:scale-95 disabled:opacity-50">
               <RiAddLine size={20} /> Submit Artist
             </button>
           </form>
@@ -739,7 +739,7 @@ export default function AdminPage() {
 
       {/* ═══════════ ALBUM TAB ═══════════ */}
       {activeTab === 'album' && (
-        <div className="rounded-3xl border border-white/10 bg-panel p-8 shadow-float glass-heavy animate-fade-in">
+        <div className="rounded-3xl border border-white/10 bg-glass-heavy backdrop-blur-2xl p-8 shadow-float glass-heavy animate-fade-in">
           <form onSubmit={handleAlbumSubmit} className="flex flex-col gap-4">
             <h2 className="mb-4 text-xl font-bold flex items-center gap-2">
               <RiDiscLine className="text-accent" /> Create New Album
@@ -751,7 +751,7 @@ export default function AdminPage() {
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-dimText">Artist *</label>
-                <select value={albumForm.artistId} onChange={(e) => setAlbumForm({ ...albumForm, artistId: e.target.value })} required className="w-full rounded-xl border border-white/10 bg-surface py-3 px-4 text-white outline-none transition focus:border-accent/50">
+                <select value={albumForm.artistId} onChange={(e) => setAlbumForm({ ...albumForm, artistId: e.target.value })} required className="w-full rounded-xl border border-white/10 bg-glass backdrop-blur-2xl py-3 px-4 text-white outline-none transition focus:border-accent/50">
                   <option value="" disabled>Select an artist</option>
                   {artists.map((a) => <option key={a._id} value={a._id}>{a.name}</option>)}
                 </select>
@@ -771,7 +771,7 @@ export default function AdminPage() {
               <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-dimText">Cover Image URL</label>
               <input type="url" value={albumForm.coverUrl} onChange={(e) => setAlbumForm({ ...albumForm, coverUrl: e.target.value })} placeholder="https://..." className="w-full rounded-xl border border-white/10 bg-white/5 py-3 px-4 text-white outline-none transition focus:border-accent/50" />
             </div>
-            <button type="submit" disabled={loading} className="mt-4 flex w-max items-center gap-2 rounded-full bg-go-gradient px-8 py-3 text-sm font-bold text-white shadow-glow transition hover:scale-105 active:scale-95 disabled:opacity-50">
+            <button type="submit" disabled={loading} className="mt-4 flex w-max items-center gap-2 rounded-full bg-theme-gradient px-8 py-3 text-sm font-bold text-white shadow-glow transition hover:scale-105 active:scale-95 disabled:opacity-50">
               <RiAddLine size={20} /> Submit Album
             </button>
           </form>
@@ -780,7 +780,7 @@ export default function AdminPage() {
 
       {/* ═══════════ TRACK TAB ═══════════ */}
       {activeTab === 'track' && (
-        <div className="rounded-3xl border border-white/10 bg-panel p-8 shadow-float glass-heavy animate-fade-in">
+        <div className="rounded-3xl border border-white/10 bg-glass-heavy backdrop-blur-2xl p-8 shadow-float glass-heavy animate-fade-in">
           <form onSubmit={handleTrackSubmit} className="flex flex-col gap-4">
             <h2 className="mb-4 text-xl font-bold flex items-center gap-2">
               <RiMusic2Line className="text-accent" /> Add New Track (Manual)
@@ -792,14 +792,14 @@ export default function AdminPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-dimText">Artist *</label>
-                <select value={trackForm.artistId} onChange={(e) => setTrackForm({ ...trackForm, artistId: e.target.value, albumId: '' })} required className="w-full rounded-xl border border-white/10 bg-surface py-3 px-4 text-white outline-none transition focus:border-accent/50">
+                <select value={trackForm.artistId} onChange={(e) => setTrackForm({ ...trackForm, artistId: e.target.value, albumId: '' })} required className="w-full rounded-xl border border-white/10 bg-glass backdrop-blur-2xl py-3 px-4 text-white outline-none transition focus:border-accent/50">
                   <option value="" disabled>Select an artist</option>
                   {artists.map((a) => <option key={a._id} value={a._id}>{a.name}</option>)}
                 </select>
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-dimText">Album *</label>
-                <select value={trackForm.albumId} onChange={(e) => setTrackForm({ ...trackForm, albumId: e.target.value })} required disabled={!trackForm.artistId} className="w-full rounded-xl border border-white/10 bg-surface py-3 px-4 text-white outline-none transition focus:border-accent/50 disabled:opacity-50 disabled:cursor-not-allowed">
+                <select value={trackForm.albumId} onChange={(e) => setTrackForm({ ...trackForm, albumId: e.target.value })} required disabled={!trackForm.artistId} className="w-full rounded-xl border border-white/10 bg-glass backdrop-blur-2xl py-3 px-4 text-white outline-none transition focus:border-accent/50 disabled:opacity-50 disabled:cursor-not-allowed">
                   <option value="" disabled>Select an album</option>
                   {albums.filter((a) => a.artistId === trackForm.artistId).map((a) => <option key={a._id} value={a._id}>{a.title}</option>)}
                 </select>
@@ -815,7 +815,7 @@ export default function AdminPage() {
                 <input type="url" value={trackForm.audioUrl} onChange={(e) => setTrackForm({ ...trackForm, audioUrl: e.target.value })} required placeholder="https://...mp3" className="w-full rounded-xl border border-white/10 bg-white/5 py-3 px-4 text-white outline-none transition focus:border-accent/50" />
               </div>
             </div>
-            <button type="submit" disabled={loading} className="mt-4 flex w-max items-center gap-2 rounded-full bg-go-gradient px-8 py-3 text-sm font-bold text-white shadow-glow transition hover:scale-105 active:scale-95 disabled:opacity-50">
+            <button type="submit" disabled={loading} className="mt-4 flex w-max items-center gap-2 rounded-full bg-theme-gradient px-8 py-3 text-sm font-bold text-white shadow-glow transition hover:scale-105 active:scale-95 disabled:opacity-50">
               <RiAddLine size={20} /> Submit Track
             </button>
           </form>

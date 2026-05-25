@@ -2,6 +2,7 @@ import { usePlayerStore } from '../../stores/playerStore';
 import { useLibraryStore } from '../../stores/libraryStore';
 import type { Track } from '../../types';
 import { formatDuration, getLyricsForTrack } from '../../utils/formatters';
+import { useFluidLyricMotion } from '../../utils/lyricMotion';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   RiArrowLeftLine,
@@ -31,203 +32,6 @@ export const clickedTrackCoverRef: { current: HTMLElement | null } = { current: 
 function getTrackCoverUrl(track: Track | null) {
   if (!track?.coverUrl) return null;
   return track.coverUrl.startsWith('/') ? `http://localhost:3001${track.coverUrl}` : track.coverUrl;
-}
-
-function hexToRgb(hex: string): [number, number, number] {
-  const sanitized = hex.replace('#', '');
-  const expanded = sanitized.length === 3
-    ? sanitized.split('').map((char) => `${char}${char}`).join('')
-    : sanitized;
-  const value = Number.parseInt(expanded, 16);
-
-  if (Number.isNaN(value)) return [51, 51, 51];
-
-  return [
-    (value >> 16) & 255,
-    (value >> 8) & 255,
-    value & 255,
-  ];
-}
-
-function SpinningVinyl3D({ track }: { track: Track }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const frameRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const gl = canvas.getContext('webgl', { alpha: true, antialias: true });
-    if (!gl) return;
-
-    const vertexShaderSource = `
-      attribute vec2 a_position;
-      varying vec2 v_uv;
-
-      void main() {
-        v_uv = a_position * 0.5 + 0.5;
-        gl_Position = vec4(a_position, 0.0, 1.0);
-      }
-    `;
-
-    const fragmentShaderSource = `
-      precision mediump float;
-
-      varying vec2 v_uv;
-      uniform vec2 u_resolution;
-      uniform float u_time;
-      uniform vec3 u_color_a;
-      uniform vec3 u_color_b;
-
-      mat2 rotation2d(float angle) {
-        float s = sin(angle);
-        float c = cos(angle);
-        return mat2(c, -s, s, c);
-      }
-
-      void main() {
-        vec2 uv = v_uv - 0.5;
-        float aspect = u_resolution.x / max(u_resolution.y, 1.0);
-        uv.x *= aspect;
-
-        vec2 rotated = rotation2d(u_time * 0.6) * uv;
-        float dist = length(rotated);
-        float discMask = 1.0 - smoothstep(0.47, 0.5, dist);
-        float holeMask = smoothstep(0.05, 0.075, dist);
-
-        float angle = atan(rotated.y, rotated.x);
-        float grooves = 0.5 + 0.5 * sin((dist * 220.0) - (u_time * 10.0));
-        float sheen = 0.5 + 0.5 * cos(angle * 5.0 - u_time * 2.8);
-        float pulse = 0.5 + 0.5 * sin(u_time * 1.8);
-
-        vec3 baseColor = mix(u_color_a, u_color_b, clamp((rotated.y * 0.5) + 0.5, 0.0, 1.0));
-        vec3 vinylColor = mix(vec3(0.03, 0.03, 0.04), baseColor * 0.72, smoothstep(0.14, 0.28, 0.42 - dist));
-        vinylColor += grooves * 0.06;
-        vinylColor += sheen * 0.08;
-
-        float labelMask = 1.0 - smoothstep(0.12, 0.16, dist);
-        vec3 labelColor = mix(baseColor * 0.95, vec3(0.96, 0.96, 0.98), 0.22 + pulse * 0.08);
-        vec3 color = mix(vinylColor, labelColor, labelMask);
-
-        float rim = smoothstep(0.38, 0.47, dist) * 0.18;
-        color += rim;
-        color *= discMask * holeMask;
-
-        gl_FragColor = vec4(color, discMask * holeMask);
-      }
-    `;
-
-    const compileShader = (type: number, source: string) => {
-      const shader = gl.createShader(type);
-      if (!shader) return null;
-      gl.shaderSource(shader, source);
-      gl.compileShader(shader);
-      return gl.getShaderParameter(shader, gl.COMPILE_STATUS) ? shader : null;
-    };
-
-    const vertexShader = compileShader(gl.VERTEX_SHADER, vertexShaderSource);
-    const fragmentShader = compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource);
-    if (!vertexShader || !fragmentShader) {
-      if (vertexShader) gl.deleteShader(vertexShader);
-      if (fragmentShader) gl.deleteShader(fragmentShader);
-      return;
-    }
-
-    const program = gl.createProgram();
-    if (!program) {
-      gl.deleteShader(vertexShader);
-      gl.deleteShader(fragmentShader);
-      return;
-    }
-
-    gl.attachShader(program, vertexShader);
-    gl.attachShader(program, fragmentShader);
-    gl.linkProgram(program);
-
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      gl.deleteProgram(program);
-      gl.deleteShader(vertexShader);
-      gl.deleteShader(fragmentShader);
-      return;
-    }
-
-    const positionBuffer = gl.createBuffer();
-    if (!positionBuffer) {
-      gl.deleteProgram(program);
-      gl.deleteShader(vertexShader);
-      gl.deleteShader(fragmentShader);
-      return;
-    }
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      new Float32Array([
-        -1, -1,
-        1, -1,
-        -1, 1,
-        -1, 1,
-        1, -1,
-        1, 1,
-      ]),
-      gl.STATIC_DRAW,
-    );
-
-    const positionLocation = gl.getAttribLocation(program, 'a_position');
-    const resolutionLocation = gl.getUniformLocation(program, 'u_resolution');
-    const timeLocation = gl.getUniformLocation(program, 'u_time');
-    const colorALocation = gl.getUniformLocation(program, 'u_color_a');
-    const colorBLocation = gl.getUniformLocation(program, 'u_color_b');
-
-    const colorA = hexToRgb(track.coverGradient?.[0] || '#E8470A').map((value) => value / 255);
-    const colorB = hexToRgb(track.coverGradient?.[1] || '#222222').map((value) => value / 255);
-
-    const resize = () => {
-      const dpr = window.devicePixelRatio || 1;
-      const width = Math.max(1, Math.floor(canvas.clientWidth * dpr));
-      const height = Math.max(1, Math.floor(canvas.clientHeight * dpr));
-
-      if (canvas.width !== width || canvas.height !== height) {
-        canvas.width = width;
-        canvas.height = height;
-      }
-
-      gl.viewport(0, 0, canvas.width, canvas.height);
-    };
-
-    const render = (time: number) => {
-      resize();
-      gl.clearColor(0, 0, 0, 0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.useProgram(program);
-      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-      gl.enableVertexAttribArray(positionLocation);
-      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
-      gl.uniform2f(resolutionLocation, canvas.width, canvas.height);
-      gl.uniform1f(timeLocation, time * 0.001);
-      gl.uniform3f(colorALocation, colorA[0], colorA[1], colorA[2]);
-      gl.uniform3f(colorBLocation, colorB[0], colorB[1], colorB[2]);
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
-      frameRef.current = window.requestAnimationFrame(render);
-    };
-
-    resize();
-    frameRef.current = window.requestAnimationFrame(render);
-    window.addEventListener('resize', resize);
-
-    return () => {
-      window.removeEventListener('resize', resize);
-      if (frameRef.current !== null) {
-        window.cancelAnimationFrame(frameRef.current);
-      }
-      gl.deleteBuffer(positionBuffer);
-      gl.deleteProgram(program);
-      gl.deleteShader(vertexShader);
-      gl.deleteShader(fragmentShader);
-    };
-  }, [track]);
-
-  return <canvas ref={canvasRef} className="h-full w-full" aria-hidden="true" />;
 }
 
 export default function FullscreenPlayer() {
@@ -260,14 +64,18 @@ export default function FullscreenPlayer() {
   } = usePlayerStore();
   const { likedTrackIds, toggleLike } = useLibraryStore();
 
-  const [show3DCanvas, setShow3DCanvas] = useState(false);
   const [isFullscreenInteractable, setFullscreenInteractable] = useState(false);
   const [transitionState, setTransitionState] = useState<TransitionState>('closed');
   const [isDriveMode, setIsDriveMode] = useState(false);
+  const [isDriveModeTransitioning, setIsDriveModeTransitioning] = useState(false);
+  const [isTitleOverflowing, setIsTitleOverflowing] = useState(false);
 
   const shellRef = useRef<HTMLDivElement>(null);
   const coverWrapperRef = useRef<HTMLDivElement>(null);
   const driveModeButtonRef = useRef<HTMLButtonElement>(null);
+  const driveModeTransitionRef = useRef<gsap.core.Timeline | null>(null);
+  const titleContainerRef = useRef<HTMLDivElement>(null);
+  const titleTextRef = useRef<HTMLHeadingElement>(null);
   const previousOpenRef = useRef(isFullscreenOpen);
   const activeTransitionRef = useRef<gsap.core.Timeline | null>(null);
   const closeCanvasTimeoutRef = useRef<number | null>(null);
@@ -277,22 +85,21 @@ export default function FullscreenPlayer() {
 
   const visualTrack = currentTrack;
   const coverUrl = getTrackCoverUrl(visualTrack);
-  const lyrics = useMemo(() => (visualTrack ? getLyricsForTrack(visualTrack.id) : []), [visualTrack]);
-
-  const currentLyricIndex = useMemo(() => {
-    if (!lyrics.length) return -1;
-    for (let i = lyrics.length - 1; i >= 0; i -= 1) {
-      if (currentTime >= lyrics[i].time) return i;
-    }
-    return 0;
-  }, [lyrics, currentTime]);
+  const lyrics = useMemo(() => (visualTrack ? getLyricsForTrack(visualTrack.id, visualTrack.lyrics) : []), [visualTrack]);
+  // Perfect sync offset (800ms look-ahead) – matches DrivePlayer
+  const { focusPosition: lyricFocusPosition, activeLyricIndex } = useFluidLyricMotion(lyrics, currentTime + 0.90, isPlaying);
+  const lyricWindowCenter = lyrics.length > 0
+    ? Math.max(0, Math.min(lyrics.length - 1, Math.floor(lyricFocusPosition)))
+    : -1;
+  const lyricWindowStart = lyricWindowCenter >= 0 ? Math.max(0, lyricWindowCenter - 4) : 0;
+  const visibleLyrics = lyrics.slice(lyricWindowStart, lyricWindowCenter >= 0 ? lyricWindowCenter + 7 : 0);
 
   const upcomingTracks = useMemo(() => {
     if (queueIndex < 0) return queue.slice(0, 5);
     return queue.slice(queueIndex + 1, queueIndex + 6);
   }, [queue, queueIndex]);
 
-  const visibleUpcomingTracks = upcomingTracks.slice(0, 3);
+  const visibleUpcomingTracks = upcomingTracks.slice(0, 4);
   const shellShouldBeVisible = !!visualTrack && (isFullscreenOpen || transitionState !== 'closed');
   const RepeatIcon = repeat === 'one' ? RiRepeatOneLine : repeat === 'all' ? RiRepeat2Line : RiRepeatLine;
   const startColor = visualTrack?.coverGradient?.[0] || '#333333';
@@ -343,6 +150,12 @@ export default function FullscreenPlayer() {
   const selectWithinShell = (selector: string) => {
     if (!shellRef.current) return [] as HTMLElement[];
     return Array.from(shellRef.current.querySelectorAll<HTMLElement>(selector));
+  };
+
+  const gsapSetIfPresent = (targets: HTMLElement[], vars: gsap.TweenVars) => {
+    if (targets.length > 0) {
+      gsap.set(targets, vars);
+    }
   };
 
   useEffect(() => {
@@ -413,13 +226,12 @@ export default function FullscreenPlayer() {
     const shell = shellRef.current;
     if (!coverWrapper || !shell) return;
 
-    gsap.set(selectWithinShell('.fullscreen-overlay-bg'), { opacity: 0 });
-    gsap.set(selectWithinShell('.fullscreen-cover-2d'), { opacity: 1 });
-    gsap.set(selectWithinShell('.fullscreen-cover-3d'), { opacity: 0 });
-    gsap.set(selectWithinShell('.fullscreen-close-btn, .fullscreen-track-title, .fullscreen-artist, .fullscreen-progress-bar, .fullscreen-controls, .fullscreen-lyrics-panel'), {
-      clearProps: 'transform,opacity',
+    gsapSetIfPresent(selectWithinShell('.fullscreen-overlay-bg'), { opacity: 0 });
+    gsapSetIfPresent(selectWithinShell('.fullscreen-cover-2d'), { opacity: 1 });
+    gsapSetIfPresent(selectWithinShell('.fullscreen-close-btn, .fullscreen-track-title, .fullscreen-artist, .fullscreen-track-badges, .fullscreen-tabs, .fullscreen-progress-bar, .fullscreen-controls, .fullscreen-lyrics-panel'), {
+      clearProps: 'transform,opacity,scale',
     });
-    gsap.set(selectWithinShell('.queue-item'), {
+    gsapSetIfPresent(selectWithinShell('.queue-item'), {
       clearProps: 'transform,opacity',
     });
     gsap.set(coverWrapper, { clearProps: 'x,y,scaleX,scaleY,transformOrigin,opacity' });
@@ -441,42 +253,10 @@ export default function FullscreenPlayer() {
   }, []);
 
   useEffect(() => {
-    if (show3DCanvas && transitionState === 'settling') {
-      const crossfadeTl = gsap.timeline({
-        onComplete: () => {
-          activeTransitionRef.current = null;
-          setTransitionState('open');
-        },
-      });
-
-      activeTransitionRef.current = crossfadeTl;
-      gsap.set(selectWithinShell('.fullscreen-cover-3d'), { opacity: 0 });
-      crossfadeTl
-        .to(selectWithinShell('.fullscreen-cover-2d'), {
-          opacity: 0,
-          duration: 0.4,
-          ease: 'power2.inOut',
-        }, 0)
-        .to(selectWithinShell('.fullscreen-cover-3d'), {
-          opacity: 1,
-          duration: 0.4,
-          ease: 'power2.inOut',
-        }, 0);
-
-      return () => {
-        crossfadeTl.kill();
-      };
-    }
-
-    return undefined;
-  }, [show3DCanvas, transitionState]);
-
-  useEffect(() => {
     if (!currentTrack) {
       clearCloseCanvasTimeout();
       clearAutoTransitionFrame();
       killActiveTransition();
-      setShow3DCanvas(false);
       setFullscreenInteractable(false);
       setTransitionState('closed');
       resetAnimatedState();
@@ -499,6 +279,19 @@ export default function FullscreenPlayer() {
     previousTrackIdRef.current = currentTrack.id;
   }, [currentTrack, isFullscreenOpen, setFullscreenOpen, transitionState]);
 
+  // Check if title overflows and needs marquee
+  useLayoutEffect(() => {
+    const checkOverflow = () => {
+      if (titleContainerRef.current && titleTextRef.current) {
+        setIsTitleOverflowing(titleTextRef.current.scrollWidth > titleContainerRef.current.clientWidth);
+      }
+    };
+    
+    checkOverflow();
+    window.addEventListener('resize', checkOverflow);
+    return () => window.removeEventListener('resize', checkOverflow);
+  }, [visualTrack?.title]);
+
   useLayoutEffect(() => {
     const wasOpen = previousOpenRef.current;
     previousOpenRef.current = isFullscreenOpen;
@@ -507,7 +300,6 @@ export default function FullscreenPlayer() {
 
     clearCloseCanvasTimeout();
     killActiveTransition();
-    setShow3DCanvas(false);
     setFullscreenInteractable(false);
     setTransitionState('opening');
 
@@ -545,16 +337,22 @@ export default function FullscreenPlayer() {
       // Clear the clicked cover ref after using it
       clickedTrackCoverRef.current = null;
 
+      // Set initial visibility for all elements
+      gsap.set(selectWithinShell('.fullscreen-tabs, .fullscreen-track-badges'), {
+        opacity: 1,
+        clearProps: 'transform,scale',
+      });
+
       const openTl = gsap.timeline({
         onComplete: () => {
           activeTransitionRef.current = null;
-          setShow3DCanvas(true);
           setFullscreenInteractable(true);
-          setTransitionState('settling');
+          setTransitionState('open');
         },
       });
 
       activeTransitionRef.current = openTl;
+      const queueItems = selectWithinShell('.queue-item');
       openTl
         .to(selectWithinShell('.fullscreen-overlay-bg'), {
           opacity: 1,
@@ -588,20 +386,19 @@ export default function FullscreenPlayer() {
           duration: 0.45,
           ease: 'power4.out',
         }, 0.25)
-        .from(selectWithinShell('.fullscreen-progress-bar'), {
+        .from(selectWithinShell('.fullscreen-track-badges'), {
+          y: 15,
           opacity: 0,
-          scaleX: 0,
-          duration: 0.5,
+          duration: 0.4,
           ease: 'power3.out',
-          transformOrigin: 'left center',
-        }, 0.35)
-        .from(selectWithinShell('.fullscreen-controls'), {
-          y: 40,
+        }, 0.3)
+        .from(selectWithinShell('.fullscreen-tabs'), {
+          y: 20,
           opacity: 0,
           scale: 0.95,
-          duration: 0.5,
-          ease: 'power4.out',
-        }, 0.3)
+          duration: 0.45,
+          ease: 'power3.out',
+        }, 0.35)
         .from(selectWithinShell('.fullscreen-lyrics-panel'), {
           y: 50,
           opacity: 0,
@@ -609,7 +406,23 @@ export default function FullscreenPlayer() {
           duration: 0.55,
           ease: 'power4.out',
         }, 0.4)
-        .fromTo(selectWithinShell('.queue-item'), {
+        .from(selectWithinShell('.fullscreen-progress-bar'), {
+          opacity: 0,
+          scaleX: 0,
+          duration: 0.5,
+          ease: 'power3.out',
+          transformOrigin: 'left center',
+        }, 0.45)
+        .from(selectWithinShell('.fullscreen-controls'), {
+          y: 40,
+          opacity: 0,
+          scale: 0.95,
+          duration: 0.5,
+          ease: 'power4.out',
+        }, 0.5);
+
+      if (queueItems.length > 0) {
+        openTl.fromTo(queueItems, {
           y: 20,
           opacity: 0,
           scale: 0.95,
@@ -624,6 +437,7 @@ export default function FullscreenPlayer() {
             from: 'start',
           },
         }, 0.6);
+      }
     });
   }, [isFullscreenOpen, visualTrack]);
 
@@ -637,7 +451,6 @@ export default function FullscreenPlayer() {
 
     const coverWrapper = coverWrapperRef.current;
     if (!coverWrapper) {
-      setShow3DCanvas(false);
       setTransitionState('closed');
       setFullscreenOpen(false);
       return;
@@ -653,7 +466,6 @@ export default function FullscreenPlayer() {
     const closeTl = gsap.timeline({
       onComplete: () => {
         clearCloseCanvasTimeout();
-        setShow3DCanvas(false);
         setTransitionState('closed');
         setFullscreenOpen(false);
         resetAnimatedState();
@@ -661,8 +473,9 @@ export default function FullscreenPlayer() {
     });
 
     activeTransitionRef.current = closeTl;
-    closeTl
-      .to(selectWithinShell('.queue-item'), {
+    const queueItems = selectWithinShell('.queue-item');
+    if (queueItems.length > 0) {
+      closeTl.to(queueItems, {
         opacity: 0,
         y: -20,
         duration: 0.4,
@@ -671,26 +484,51 @@ export default function FullscreenPlayer() {
           from: 'end',
         },
         ease: 'power2.in',
-      }, 0)
-      .to(selectWithinShell('.fullscreen-cover-3d'), {
-        opacity: 0,
-        duration: 0.2,
-        ease: 'power2.out',
-      }, 0.25)
-      .to(selectWithinShell('.fullscreen-cover-2d'), {
-        opacity: 1,
-        duration: 0.2,
-        ease: 'power2.out',
-      }, 0.25)
+      }, 0);
+    }
+    closeTl
       .add(() => {
         closeCanvasTimeoutRef.current = null;
-        setShow3DCanvas(false);
-      }, 0.45)
-      .to(selectWithinShell('.fullscreen-controls, .fullscreen-track-title, .fullscreen-artist, .fullscreen-lyrics-panel, .fullscreen-progress-bar'), {
+      }, 0.25)
+      .to(selectWithinShell('.fullscreen-controls'), {
         opacity: 0,
         y: 20,
+        scale: 0.95,
         duration: 0.25,
-        stagger: 0.04,
+        ease: 'power2.in',
+      }, 0.15)
+      .to(selectWithinShell('.fullscreen-progress-bar'), {
+        opacity: 0,
+        scaleX: 0,
+        duration: 0.2,
+        ease: 'power2.in',
+        transformOrigin: 'left center',
+      }, 0.15)
+      .to(selectWithinShell('.fullscreen-lyrics-panel'), {
+        opacity: 0,
+        y: 20,
+        scale: 0.98,
+        duration: 0.25,
+        ease: 'power2.in',
+      }, 0.15)
+      .to(selectWithinShell('.fullscreen-tabs'), {
+        opacity: 0,
+        y: -10,
+        scale: 0.95,
+        duration: 0.2,
+        ease: 'power2.in',
+      }, 0.15)
+      .to(selectWithinShell('.fullscreen-track-badges'), {
+        opacity: 0,
+        y: -10,
+        duration: 0.2,
+        ease: 'power2.in',
+      }, 0.15)
+      .to(selectWithinShell('.fullscreen-track-title, .fullscreen-artist'), {
+        opacity: 0,
+        y: -15,
+        duration: 0.25,
+        stagger: 0.03,
         ease: 'power2.in',
       }, 0.15)
       .to(selectWithinShell('.fullscreen-close-btn'), {
@@ -802,18 +640,7 @@ export default function FullscreenPlayer() {
       }
     }, 0.25);
 
-    // Step 3: Crossfade main cover (happens during move-up)
-    tl.to(selectWithinShell('.fullscreen-cover-2d'), {
-      opacity: 0,
-      duration: 0.3,
-      ease: 'power2.inOut',
-    }, 0.5);
-
-    tl.to(selectWithinShell('.fullscreen-cover-2d'), {
-      opacity: 1,
-      duration: 0.3,
-      ease: 'power2.inOut',
-    }, 0.8);
+    // Crossfade removed - album cover stays visible during track change
 
     // Step 4: Fade in new track name and artist (0.4s)
     tl.to([trackTitle, trackArtist], {
@@ -834,6 +661,84 @@ export default function FullscreenPlayer() {
     animateUpNextQueueItems();
   };
 
+  const toggleDriveMode = () => {
+    if (isDriveModeTransitioning) return;
+    
+    const coverWrapper = coverWrapperRef.current;
+    if (!coverWrapper) {
+      setIsDriveMode(!isDriveMode);
+      return;
+    }
+
+    setIsDriveModeTransitioning(true);
+
+    if (!isDriveMode) {
+      // Entering Drive Mode - store fullscreen cover position for animation
+      const fullscreenRect = coverWrapper.getBoundingClientRect();
+      
+      // Store the fullscreen position for DrivePlayer to use
+      (window as any).__fullscreenCoverRect = {
+        top: fullscreenRect.top,
+        left: fullscreenRect.left,
+        width: fullscreenRect.width,
+        height: fullscreenRect.height,
+      };
+      
+      // Kill any existing animation
+      if (driveModeTransitionRef.current) {
+        driveModeTransitionRef.current.kill();
+      }
+
+      // Switch to Drive Mode immediately - DrivePlayer will handle the animation
+      setIsDriveMode(true);
+      setIsDriveModeTransitioning(false);
+    } else {
+      // Exiting Drive Mode - just switch back
+      setIsDriveMode(false);
+      setIsDriveModeTransitioning(false);
+    }
+  };
+
+  // Animate cover when returning from Drive Mode
+  useLayoutEffect(() => {
+    if (!isDriveMode && coverWrapperRef.current) {
+      const driveModeRect = (window as any).__driveModeBackRect;
+      
+      if (driveModeRect) {
+        const coverWrapper = coverWrapperRef.current;
+        const finalRect = coverWrapper.getBoundingClientRect();
+        
+        // Calculate initial position (from Drive Mode)
+        const initialX = driveModeRect.left - finalRect.left;
+        const initialY = driveModeRect.top - finalRect.top;
+        const initialScaleX = driveModeRect.width / finalRect.width;
+        const initialScaleY = driveModeRect.height / finalRect.height;
+        
+        // Set initial state
+        gsap.set(coverWrapper, {
+          x: initialX,
+          y: initialY,
+          scaleX: initialScaleX,
+          scaleY: initialScaleY,
+          transformOrigin: 'top left',
+        });
+        
+        // Animate to final position
+        gsap.to(coverWrapper, {
+          x: 0,
+          y: 0,
+          scaleX: 1,
+          scaleY: 1,
+          duration: 0.5,
+          ease: 'expo.out',
+        });
+        
+        // Clear the stored rect
+        delete (window as any).__driveModeBackRect;
+      }
+    }
+  }, [isDriveMode]);
+
   // Show DrivePlayer when drive mode is active
   if (isDriveMode && visualTrack) {
     return <DrivePlayer onClose={() => setIsDriveMode(false)} />;
@@ -844,15 +749,49 @@ export default function FullscreenPlayer() {
       ref={shellRef}
       className="fixed inset-0 z-50 overflow-hidden"
       style={{
+        display: shellShouldBeVisible ? 'block' : 'none',
         opacity: shellShouldBeVisible ? 1 : 0,
         pointerEvents: isFullscreenInteractable ? 'auto' : 'none',
         transform: 'translateZ(0)',
       }}
     >
+      {/* Background Layer - Content to be blurred */}
+      <div className="absolute inset-0 -z-30">
+        {/* Animated gradient blobs */}
+        <div className="absolute left-[-20%] top-[-20%] h-[600px] w-[600px] rounded-full opacity-60 animate-pulse-glow" 
+          style={{ 
+            background: `radial-gradient(circle, ${visualTrack?.coverGradient?.[0] || '#FF6B35'} 0%, transparent 70%)`,
+            filter: 'blur(80px)'
+          }} 
+        />
+        <div className="absolute right-[-15%] top-[30%] h-[500px] w-[500px] rounded-full opacity-50 animate-pulse-glow" 
+          style={{ 
+            background: `radial-gradient(circle, ${visualTrack?.coverGradient?.[1] || '#E8470A'} 0%, transparent 70%)`,
+            filter: 'blur(80px)',
+            animationDelay: '2s'
+          }} 
+        />
+        <div className="absolute bottom-[-10%] left-[20%] h-[550px] w-[550px] rounded-full opacity-40 animate-pulse-glow" 
+          style={{ 
+            background: 'radial-gradient(circle, #8B5CF6 0%, transparent 70%)',
+            filter: 'blur(80px)',
+            animationDelay: '4s'
+          }} 
+        />
+        
+        {/* Gradient overlay */}
+        <div className="absolute inset-0" style={{
+          background: `linear-gradient(180deg, ${startColor}40 0%, #0a0a0a 50%, #000000 100%)`
+        }} />
+      </div>
+
+      {/* Glassmorphism layer with extreme blur */}
       <div
-        className="fullscreen-overlay-bg absolute inset-0 backdrop-blur-3xl"
+        className="fullscreen-overlay-bg absolute inset-0 -z-20"
         style={{
-          background: `linear-gradient(180deg, ${startColor}33 0%, rgba(13, 13, 13, 0.85) 56%, rgba(13, 13, 13, 0.95) 100%)`,
+          backdropFilter: 'blur(120px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(120px) saturate(180%)',
+          background: 'rgba(13, 13, 13, 0.4)',
           willChange: 'opacity',
         }}
         onClick={(e) => {
@@ -888,7 +827,7 @@ export default function FullscreenPlayer() {
                 onMouseLeave={() => animateModeToggle(driveModeButtonRef.current, false, isDriveMode)}
                 onPointerDown={() => pressModeToggle(driveModeButtonRef.current)}
                 onPointerUp={() => animateModeToggle(driveModeButtonRef.current, true, isDriveMode)}
-                onClick={() => setIsDriveMode(!isDriveMode)}
+                onClick={toggleDriveMode}
                 className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold shadow-lg backdrop-blur-xl transition ${
                   isDriveMode 
                     ? 'border-accent/50 bg-accent/30 text-accent hover:bg-accent/40' 
@@ -928,24 +867,30 @@ export default function FullscreenPlayer() {
                   )}
                 </div>
 
-                {show3DCanvas ? (
-                  <div className="fullscreen-cover-3d absolute inset-0" style={{ opacity: 0 }}>
-                    <SpinningVinyl3D key={visualTrack.id} track={visualTrack} />
-                  </div>
-                ) : null}
+                {/* 3D Vinyl removed - only show album cover */}
               </div>
             </div>
 
             <div className="flex w-full max-w-lg flex-1 flex-col items-center justify-between overflow-hidden lg:items-start">
               <div className="w-full">
                 <div className="text-center lg:text-left">
-                  <h1 className="fullscreen-track-title text-2xl font-bold leading-tight md:text-3xl">
-                    {visualTrack.title}
-                  </h1>
-                  <p className="fullscreen-artist mt-1 text-base text-white/70 md:text-lg">
+                  <div ref={titleContainerRef} className="overflow-hidden">
+                    <h1 
+                      ref={titleTextRef}
+                      className={`fullscreen-track-title text-2xl font-bold leading-tight md:text-3xl ${
+                        isTitleOverflowing ? 'animate-marquee inline-block whitespace-nowrap' : 'truncate'
+                      }`}
+                    >
+                      <span className={isTitleOverflowing ? 'pr-8' : ''}>{visualTrack.title}</span>
+                      {isTitleOverflowing && (
+                        <span className="pr-8" aria-hidden="true">{visualTrack.title}</span>
+                      )}
+                    </h1>
+                  </div>
+                  <p className="fullscreen-artist mt-1 text-base text-white/70 md:text-lg truncate">
                     {visualTrack.artist}
                   </p>
-                  <div className="mt-2 flex flex-wrap items-center justify-center gap-2 lg:justify-start">
+                  <div className="fullscreen-track-badges mt-2 flex flex-wrap items-center justify-center gap-2 lg:justify-start">
                     <span className="rounded-full border border-white/20 bg-white/10 backdrop-blur-xl px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/80 shadow-md">
                       Queue {currentQueuePosition}/{Math.max(queue.length, 1)}
                     </span>
@@ -961,19 +906,19 @@ export default function FullscreenPlayer() {
                 </div>
 
                 <div className="my-3 flex w-full max-w-md flex-1 flex-col gap-2.5 overflow-hidden">
-                  <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/20 bg-white/10 backdrop-blur-xl p-1.5 shadow-lg">
+                  <div className="fullscreen-tabs flex items-center justify-between gap-3 rounded-2xl border border-white/20 bg-white/10 backdrop-blur-xl p-1.5 shadow-lg">
                     <button
                       onClick={handleShowLyrics}
-                      className={`flex flex-1 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold transition ${
-                        isLyricsPanelActive ? 'bg-white text-surface shadow-md' : 'text-white/70 hover:bg-white/10 hover:text-white'
+                      className={`flex flex-1 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold transition-all duration-200 ${
+                        isLyricsPanelActive ? 'bg-white text-black shadow-md' : 'text-white hover:bg-white/10'
                       }`}
                     >
                       Lyrics
                     </button>
                     <button
                       onClick={handleShowQueue}
-                      className={`flex flex-1 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold transition ${
-                        !isLyricsPanelActive ? 'bg-white text-surface shadow-md' : 'text-white/70 hover:bg-white/10 hover:text-white'
+                      className={`flex flex-1 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold transition-all duration-200 ${
+                        !isLyricsPanelActive ? 'bg-white text-black shadow-md' : 'text-white hover:bg-white/10'
                       }`}
                     >
                       Queue
@@ -999,17 +944,47 @@ export default function FullscreenPlayer() {
                     </div>
 
                     {isLyricsPanelActive ? (
-                      <div className="max-h-[90px] overflow-hidden sm:max-h-[180px]">
+                      <div className="relative h-[280px] w-full overflow-hidden sm:h-[400px] md:h-[480px]">
                         {lyrics.length > 0 ? (
-                          <div className="space-y-1.5">
-                            {lyrics.slice(Math.max(0, currentLyricIndex - 1), currentLyricIndex + 4).map((line, index) => {
-                              const actualIndex = Math.max(0, currentLyricIndex - 1) + index;
+                          <div className="absolute inset-0">
+                            {visibleLyrics.map((line, index) => {
+                              const actualIndex = lyricWindowStart + index;
+                              const relativePosition = actualIndex - lyricFocusPosition;
+                              const distance = Math.abs(relativePosition);
+                              const direction = relativePosition < 0 ? -1 : 1;
+                              const drift = direction * Math.pow(distance, 1.3) * 125; // Reduced from 150px to 90px for tighter spacing
+                              const scale = 1.1 - Math.min(distance * 0.15, 0.45); // Match DrivePlayer
+                              const opacity = Math.max(0.08, 1 - distance * 0.2);
+                              const blur = Math.min(8, Math.pow(distance, 1.3) * 1.1);
+                              const glow = Math.max(0, 1 - distance * 0.52);
+                              const isCurrent = actualIndex === activeLyricIndex;
+
                               return (
                                 <div
-                                  key={actualIndex}
-                                  className={`text-base font-medium ${
-                                    actualIndex === currentLyricIndex ? 'text-white' : 'text-white/40'
-                                  }`}
+                                  key={`${line.time}-${actualIndex}`}
+                                  className="absolute left-0 right-0 top-1/2 px-6 text-center font-bold"
+                                  style={{
+                                    fontSize: '1.25rem', // Fixed font size for stable wrapping
+                                    lineHeight: '1.4', // Increased line height for better readability
+                                    transform: `translate3d(0, ${drift.toFixed(2)}px, 0) translateY(-50%) scale(${scale.toFixed(3)})`,
+                                    opacity,
+                                    filter: `blur(${blur.toFixed(2)}px) saturate(${(0.76 + glow * 0.5).toFixed(2)})`,
+                                    color: 'white',
+                                    textShadow: isCurrent
+                                      ? `0 0 ${Math.round(60 * glow)}px rgba(255,255,255,0.8), 0 0 ${Math.round(30 * glow)}px rgba(255,255,255,0.6), 0 2px 4px rgba(0,0,0,0.3)`
+                                      : `0 0 ${Math.round(18 * glow)}px rgba(255,255,255,${0.06 + glow * 0.1})`,
+                                    fontWeight: isCurrent ? '900' : '700',
+                                    willChange: 'transform, opacity, filter',
+                                    wordWrap: 'break-word',
+                                    overflowWrap: 'break-word',
+                                    hyphens: 'auto',
+                                    whiteSpace: 'normal',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    minHeight: '1.4em', // Match line height
+                                    maxHeight: '4.2em', // Allow up to 3 lines (1.4em × 3)
+                                  }}
                                 >
                                   {line.text || '♪'}
                                 </div>
@@ -1017,67 +992,49 @@ export default function FullscreenPlayer() {
                             })}
                           </div>
                         ) : (
-                          <div className="space-y-3">
-                            <div className="rounded-2xl bg-white/5 p-2.5 text-sm text-white/60 text-center">
-                              ♪ Lyrics are not available for this track ♪
-                            </div>
-                            <label className="flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 backdrop-blur-xl px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-white/20 hover:border-white/30 cursor-pointer">
-                              <input
-                                type="file"
-                                accept=".lrc"
-                                className="hidden"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) {
-                                    // TODO: Implement LRC file import
-                                    console.log('Import LRC file:', file.name);
-                                  }
-                                }}
-                              />
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                              </svg>
-                              Import Lyrics (.lrc)
-                            </label>
+                          <div className="rounded-2xl bg-white/5 p-2.5 text-sm text-white/60 text-center">
+                            ♪ Lyrics are not available for this track ♪
                           </div>
                         )}
                       </div>
                     ) : (
-                      <div className="space-y-2">
-                        {visibleUpcomingTracks.length > 0 ? (
-                          visibleUpcomingTracks.map((track, index) => {
-                            const queuedCoverUrl = getTrackCoverUrl(track);
-                            return (
-                              <button
-                                key={`${track.id}-${index}`}
-                                onClick={() => handleTrackClick(track, index)}
-                                className="queue-item flex w-full items-center gap-3 rounded-2xl p-2.5 text-left transition hover:bg-white/5"
-                              >
-                                {queuedCoverUrl ? (
-                                  <img
-                                    src={queuedCoverUrl}
-                                    alt={track.title}
-                                    className="h-11 w-11 rounded-xl object-cover"
-                                  />
-                                ) : (
-                                  <div
-                                    className="h-11 w-11 rounded-xl"
-                                    style={{ background: `linear-gradient(135deg, ${track.coverGradient?.[0] || '#333333'}, ${track.coverGradient?.[1] || '#222222'})` }}
-                                  />
-                                )}
-                                <div className="min-w-0 flex-1">
-                                  <div className="truncate text-sm font-semibold text-white">{track.title}</div>
-                                  <div className="truncate text-xs text-white/50">{track.artist}</div>
-                                </div>
-                                <span className="text-xs font-semibold text-white/40">#{index + 1}</span>
-                              </button>
-                            );
-                          })
-                        ) : (
-                          <div className="rounded-2xl bg-white/5 p-3 text-sm text-white/60">
-                            No tracks queued after this one.
-                          </div>
-                        )}
+                      <div className="max-h-[280px] overflow-hidden sm:max-h-[400px] md:max-h-[480px] flex items-center justify-center">
+                        <div className="space-y-2 w-full">
+                          {visibleUpcomingTracks.length > 0 ? (
+                            visibleUpcomingTracks.map((track, index) => {
+                              const queuedCoverUrl = getTrackCoverUrl(track);
+                              return (
+                                <button
+                                  key={`${track.id}-${index}`}
+                                  onClick={() => handleTrackClick(track, index)}
+                                  className="queue-item flex w-full items-center gap-3 rounded-2xl p-2.5 text-left transition hover:bg-white/5"
+                                >
+                                  {queuedCoverUrl ? (
+                                    <img
+                                      src={queuedCoverUrl}
+                                      alt={track.title}
+                                      className="h-11 w-11 rounded-xl object-cover"
+                                    />
+                                  ) : (
+                                    <div
+                                      className="h-11 w-11 rounded-xl"
+                                      style={{ background: `linear-gradient(135deg, ${track.coverGradient?.[0] || '#333333'}, ${track.coverGradient?.[1] || '#222222'})` }}
+                                    />
+                                  )}
+                                  <div className="min-w-0 flex-1">
+                                    <div className="truncate text-sm font-semibold text-white">{track.title}</div>
+                                    <div className="truncate text-xs text-white/50">{track.artist}</div>
+                                  </div>
+                                  <span className="text-xs font-semibold text-white/40">#{index + 1}</span>
+                                </button>
+                              );
+                            })
+                          ) : (
+                            <div className="rounded-2xl bg-white/5 p-3 text-sm text-white/60 text-center">
+                              No tracks queued after this one.
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>

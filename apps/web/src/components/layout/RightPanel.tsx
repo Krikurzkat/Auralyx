@@ -9,7 +9,7 @@ export default function RightPanel() {
   const { rightPanelView, setRightPanel, reduceMotion, toggleReduceMotion } = useUIStore();
 
   const lyrics = useMemo(() => {
-    return currentTrack ? getLyricsForTrack(currentTrack.id) : [];
+    return currentTrack ? getLyricsForTrack(currentTrack.id, currentTrack.lyrics) : [];
   }, [currentTrack]);
 
   const currentLyricIndex = useMemo(() => {
@@ -33,16 +33,16 @@ export default function RightPanel() {
   if (!showQueue && !showLyrics) return null;
 
   return (
-    <aside className="hidden w-[320px] flex-shrink-0 border-l border-white/5 bg-panel/60 xl:block">
+    <aside className="hidden w-[320px] flex-shrink-0 border-l border-white/5 bg-glass-heavy backdrop-blur-2xl/60 xl:block">
       <div className="flex h-full flex-col overflow-y-auto p-4 pb-24 scrollbar-hidden">
         {/* Panel tabs */}
-        <div className="mb-4 flex items-center gap-1 rounded-xl bg-surface/60 p-1">
+        <div className="mb-4 flex items-center gap-1 rounded-xl bg-glass backdrop-blur-2xl/60 p-1">
           {(['queue', 'lyrics', 'activity'] as const).map(view => (
             <button
               key={view}
               onClick={() => setRightPanel(view)}
               className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium capitalize transition ${
-                rightPanelView === view ? 'bg-card text-white' : 'text-dimText hover:text-softText'
+                rightPanelView === view ? 'bg-glass-card backdrop-blur-xl text-white' : 'text-dimText hover:text-softText'
               }`}
             >
               {view}
@@ -56,7 +56,7 @@ export default function RightPanel() {
             {currentTrack && (
               <div className="mb-4">
                 <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-dimText">Now playing</div>
-                <div className="flex items-center gap-3 rounded-xl bg-go-gradient-subtle p-3">
+                <div className="flex items-center gap-3 rounded-xl bg-theme-gradient-subtle p-3">
                   <div className="relative h-11 w-11 flex-shrink-0 overflow-hidden rounded-lg">
                     {currentTrack.coverUrl ? (
                       <img
@@ -136,7 +136,7 @@ export default function RightPanel() {
         {rightPanelView === 'lyrics' && (
           <div className="animate-fade-in">
             {currentTrack ? (
-              <div className="rounded-2xl bg-go-gradient p-5">
+              <div className="rounded-2xl bg-theme-gradient p-5">
                 <div className="mb-4 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/60">Synced Lyrics</div>
                 <div className="space-y-3">
                   {lyrics.map((line, i) => (
@@ -182,7 +182,7 @@ export default function RightPanel() {
 
         {/* Settings / Accessibility (Always at bottom) */}
         <div className="mt-auto pt-8">
-          <div className="rounded-xl bg-surface/40 p-3">
+          <div className="rounded-xl bg-glass backdrop-blur-2xl/40 p-3">
             <label className="flex cursor-pointer items-center justify-between text-sm">
               <span className="text-softText font-medium">Reduce Motion (3D)</span>
               <div className="relative">

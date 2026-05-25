@@ -172,6 +172,25 @@ export default function BottomPlayer() {
   const RepeatIcon = repeatIcon;
   const openFullscreenPlayer = () => {
     if (!currentTrack) return;
+    
+    // Get the mini player cover element
+    const miniCover = bottomPlayerCoverRef.current;
+    if (!miniCover) {
+      setFullscreenOpen(true);
+      return;
+    }
+
+    // Get mini cover position
+    const miniRect = miniCover.getBoundingClientRect();
+    
+    // Store the position for the fullscreen player to use
+    (window as any).__miniPlayerCoverRect = {
+      top: miniRect.top,
+      left: miniRect.left,
+      width: miniRect.width,
+      height: miniRect.height,
+    };
+    
     setFullscreenOpen(true);
   };
 
@@ -227,7 +246,7 @@ export default function BottomPlayer() {
               </>
             ) : (
               <>
-                <div className="h-12 w-12 flex-shrink-0 rounded-xl bg-card" />
+                <div className="h-12 w-12 flex-shrink-0 rounded-xl bg-glass-card backdrop-blur-xl" />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm text-softText">No track playing</div>
                   <div className="text-xs text-dimText">Select a song to start</div>

@@ -7,53 +7,61 @@ import toast from 'react-hot-toast';
 interface ColorPalette {
   id: string;
   name: string;
-  colors: [string, string, string]; // [primary, secondary, accent]
+  gradient: [string, string]; // [from, to] for gradient
 }
 
 const colorPalettes: ColorPalette[] = [
-  { id: 'sunset', name: 'Sunset Blaze', colors: ['#E8470A', '#FF6B35', '#F7931E'] },
-  { id: 'ocean', name: 'Ocean Deep', colors: ['#0077BE', '#00A8E8', '#00C9FF'] },
-  { id: 'forest', name: 'Forest Green', colors: ['#2D5016', '#4A7C2C', '#6BA547'] },
-  { id: 'purple', name: 'Purple Haze', colors: ['#6B2D8F', '#8E44AD', '#A569BD'] },
-  { id: 'rose', name: 'Rose Garden', colors: ['#C2185B', '#E91E63', '#F06292'] },
-  { id: 'amber', name: 'Amber Glow', colors: ['#E65100', '#FF6F00', '#FF9800'] },
-  { id: 'teal', name: 'Teal Wave', colors: ['#00695C', '#00897B', '#26A69A'] },
-  { id: 'crimson', name: 'Crimson Fire', colors: ['#B71C1C', '#D32F2F', '#E57373'] },
-  { id: 'indigo', name: 'Indigo Night', colors: ['#283593', '#3F51B5', '#5C6BC0'] },
-  { id: 'lime', name: 'Lime Burst', colors: ['#827717', '#AFB42B', '#CDDC39'] },
-  { id: 'cyan', name: 'Cyan Sky', colors: ['#00838F', '#00ACC1', '#26C6DA'] },
-  { id: 'magenta', name: 'Magenta Dream', colors: ['#AD1457', '#C2185B', '#E91E63'] },
-  { id: 'gold', name: 'Golden Hour', colors: ['#F57F17', '#FBC02D', '#FFEB3B'] },
-  { id: 'emerald', name: 'Emerald City', colors: ['#1B5E20', '#388E3C', '#66BB6A'] },
-  { id: 'sapphire', name: 'Sapphire Blue', colors: ['#0D47A1', '#1976D2', '#42A5F5'] },
-  { id: 'ruby', name: 'Ruby Red', colors: ['#880E4F', '#C2185B', '#EC407A'] },
-  { id: 'coral', name: 'Coral Reef', colors: ['#D84315', '#FF5722', '#FF8A65'] },
-  { id: 'mint', name: 'Mint Fresh', colors: ['#00695C', '#009688', '#4DB6AC'] },
-  { id: 'lavender', name: 'Lavender Fields', colors: ['#512DA8', '#673AB7', '#9575CD'] },
-  { id: 'bronze', name: 'Bronze Age', colors: ['#5D4037', '#795548', '#A1887F'] },
+  { id: 'cyan-blue', name: 'Cyan Blue', gradient: ['#06B6D4', '#3B82F6'] },
+  { id: 'blue-purple', name: 'Blue Purple', gradient: ['#3B82F6', '#8B5CF6'] },
+  { id: 'cyan-teal', name: 'Cyan Teal', gradient: ['#22D3EE', '#14B8A6'] },
+  { id: 'lime-green', name: 'Lime Green', gradient: ['#BEF264', '#4ADE80'] },
+  { id: 'yellow-orange', name: 'Yellow Orange', gradient: ['#FDE047', '#FB923C'] },
+  { id: 'orange-red', name: 'Orange Red', gradient: ['#FB923C', '#F87171'] },
+  { id: 'red-rose', name: 'Red Rose', gradient: ['#F87171', '#FB7185'] },
+  { id: 'pink-rose', name: 'Pink Rose', gradient: ['#F472B6', '#FB7185'] },
+  { id: 'purple-pink', name: 'Purple Pink', gradient: ['#A855F7', '#EC4899'] },
+  { id: 'red-purple', name: 'Red Purple', gradient: ['#EF4444', '#8B5CF6'] },
+  { id: 'purple-blue', name: 'Purple Blue', gradient: ['#8B5CF6', '#3B82F6'] },
+  { id: 'blue-cyan', name: 'Blue Cyan', gradient: ['#0EA5E9', '#06B6D4'] },
 ];
 
 export default function SettingsPage() {
   const navigate = useNavigate();
   const { manualFadeDuration, autoFadeDuration, setManualFadeDuration, setAutoFadeDuration } = usePlayerStore();
-  const [selectedPalette, setSelectedPalette] = useState('sunset');
+  
+  // Load saved theme or default to cyan-blue
+  const [selectedPalette, setSelectedPalette] = useState(() => {
+    return localStorage.getItem('selectedTheme') || 'cyan-blue';
+  });
+  
   const [showAllPalettes, setShowAllPalettes] = useState(false);
 
-  const displayedPalettes = showAllPalettes ? colorPalettes : colorPalettes.slice(0, 4);
+  const displayedPalettes = showAllPalettes ? colorPalettes : colorPalettes.slice(0, 6);
+
+  // Apply saved theme on mount
+  useState(() => {
+    const savedTheme = localStorage.getItem('selectedTheme') || 'cyan-blue';
+    const palette = colorPalettes.find(p => p.id === savedTheme);
+    if (palette) {
+      document.documentElement.style.setProperty('--gradient-from', palette.gradient[0]);
+      document.documentElement.style.setProperty('--gradient-to', palette.gradient[1]);
+      document.documentElement.style.setProperty('--color-accent', palette.gradient[0]);
+    }
+  });
 
   const handlePaletteSelect = (paletteId: string) => {
     setSelectedPalette(paletteId);
     const palette = colorPalettes.find(p => p.id === paletteId);
     if (palette) {
-      // Update CSS variables for theme colors
-      document.documentElement.style.setProperty('--color-accent', palette.colors[0]);
-      document.documentElement.style.setProperty('--color-accent-alt', palette.colors[1]);
-      document.documentElement.style.setProperty('--color-accent-tertiary', palette.colors[2]);
+      // Update CSS variables for gradient theme colors
+      document.documentElement.style.setProperty('--gradient-from', palette.gradient[0]);
+      document.documentElement.style.setProperty('--gradient-to', palette.gradient[1]);
       
-      // Update Tailwind CSS custom properties
-      const root = document.documentElement;
-      root.style.setProperty('--tw-gradient-from', palette.colors[0]);
-      root.style.setProperty('--tw-gradient-to', palette.colors[1]);
+      // Update primary accent color (use gradient start as primary)
+      document.documentElement.style.setProperty('--color-accent', palette.gradient[0]);
+      
+      // Store selection in localStorage
+      localStorage.setItem('selectedTheme', paletteId);
       
       toast.success(`Theme changed to ${palette.name}`);
     }
@@ -62,14 +70,14 @@ export default function SettingsPage() {
   return (
     <div className="page-enter mx-auto max-w-4xl space-y-6 pb-8">
       <div className="flex items-center gap-3">
-        <button onClick={() => navigate(-1)} className="rounded-full bg-card p-2 text-softText transition hover:text-white">
+        <button onClick={() => navigate(-1)} className="rounded-full bg-glass-card backdrop-blur-xl p-2 text-softText transition hover:text-white">
           <RiArrowLeftLine size={20} />
         </button>
         <h1 className="text-3xl font-bold">Settings</h1>
       </div>
 
       {/* Theme Color Palettes */}
-      <div className="rounded-2xl border border-white/5 bg-card p-6">
+      <div className="rounded-2xl border border-white/5 bg-glass-card backdrop-blur-xl p-6">
         <div className="mb-5 flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-dimText">
             <RiPaletteLine size={16} />
@@ -99,11 +107,12 @@ export default function SettingsPage() {
               }`}
             >
               <div className="flex h-24 flex-col">
-                <div className="flex flex-1">
-                  <div className="flex-1" style={{ backgroundColor: palette.colors[0] }} />
-                  <div className="flex-1" style={{ backgroundColor: palette.colors[1] }} />
-                  <div className="flex-1" style={{ backgroundColor: palette.colors[2] }} />
-                </div>
+                <div 
+                  className="flex-1"
+                  style={{ 
+                    background: `linear-gradient(135deg, ${palette.gradient[0]}, ${palette.gradient[1]})` 
+                  }} 
+                />
                 <div className="bg-black/80 px-2 py-1.5 text-center backdrop-blur">
                   <div className="text-[10px] font-semibold text-white">{palette.name}</div>
                 </div>
@@ -127,7 +136,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Playback Settings */}
-      <div className="rounded-2xl border border-white/5 bg-card p-6">
+      <div className="rounded-2xl border border-white/5 bg-glass-card backdrop-blur-xl p-6">
         <div className="mb-5 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-dimText">
           <RiEqualizerLine size={16} />
           Playback Settings
@@ -139,7 +148,7 @@ export default function SettingsPage() {
               <div className="text-xs text-dimText">Crossfade when manually changing tracks</div>
             </div>
             <select 
-              className="rounded-lg bg-surface px-3 py-1.5 text-sm text-white outline-none cursor-pointer hover:bg-surface-light transition"
+              className="rounded-lg bg-glass backdrop-blur-2xl px-3 py-1.5 text-sm text-white outline-none cursor-pointer hover:bg-surface-light transition"
               value={manualFadeDuration.toString()}
               onChange={(e) => {
                 const value = parseInt(e.target.value);
@@ -160,7 +169,7 @@ export default function SettingsPage() {
               <div className="text-xs text-dimText">Blend the next song in before the current one ends</div>
             </div>
             <select 
-              className="rounded-lg bg-surface px-3 py-1.5 text-sm text-white outline-none cursor-pointer hover:bg-surface-light transition"
+              className="rounded-lg bg-glass backdrop-blur-2xl px-3 py-1.5 text-sm text-white outline-none cursor-pointer hover:bg-surface-light transition"
               value={autoFadeDuration.toString()}
               onChange={(e) => {
                 const value = parseInt(e.target.value);

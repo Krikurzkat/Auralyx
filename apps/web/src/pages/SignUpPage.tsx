@@ -45,7 +45,7 @@ export default function SignUpPage() {
 
   return (
     <div className="flex h-full min-h-screen items-center justify-center p-4">
-      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-panel p-8 shadow-float glass-heavy">
+      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-glass-heavy backdrop-blur-2xl p-8 shadow-float glass-heavy">
         <h2 className="mb-2 text-center text-3xl font-bold text-white">Create Account</h2>
         <p className="mb-8 text-center text-sm text-dimText">Join the Go-Music community today</p>
 
@@ -90,7 +90,7 @@ export default function SignUpPage() {
           <button
             type="submit"
             disabled={loading}
-            className="mt-4 flex w-full items-center justify-center rounded-xl bg-go-gradient px-4 py-3.5 font-bold text-white shadow-glow transition hover:shadow-glow-lg disabled:opacity-75"
+            className="mt-4 flex w-full items-center justify-center rounded-xl bg-theme-gradient px-4 py-3.5 font-bold text-white shadow-glow transition hover:shadow-glow-lg disabled:opacity-75"
           >
             {loading ? 'Creating Account...' : 'Sign Up'}
           </button>

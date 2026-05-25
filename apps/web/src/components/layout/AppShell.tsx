@@ -10,7 +10,14 @@ export default function AppShell() {
   const { contextMenu, closeContextMenu, modalContent, closeModal } = useUIStore();
 
   return (
-    <div className="flex h-[100dvh] bg-surface text-white">
+    <div className="relative flex h-[100dvh] bg-glass backdrop-blur-2xl text-white overflow-hidden">
+      {/* Animated Background Blobs for Glassmorphism Effect */}
+      <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+        <div className="absolute left-[-10%] top-[-10%] h-[500px] w-[500px] rounded-full bg-gradient-to-br from-gradient-from/20 to-gradient-to/10 blur-[120px] animate-pulse-glow" />
+        <div className="absolute right-[-15%] top-[20%] h-[600px] w-[600px] rounded-full bg-gradient-to-br from-gradient-to/15 to-gradient-from/10 blur-[140px] animate-pulse-glow" style={{ animationDelay: '2s' }} />
+        <div className="absolute bottom-[-20%] left-[30%] h-[550px] w-[550px] rounded-full bg-gradient-to-br from-purple-500/10 to-blue-500/10 blur-[130px] animate-pulse-glow" style={{ animationDelay: '4s' }} />
+      </div>
+
       {/* Sidebar */}
       <Sidebar />
 
@@ -37,7 +44,7 @@ export default function AppShell() {
         <>
           <div className="fixed inset-0 z-50" onClick={closeContextMenu} />
           <div
-            className="fixed z-50 min-w-[180px] animate-scale-in rounded-xl border border-white/10 bg-panel py-1 shadow-float"
+            className="fixed z-50 min-w-[180px] animate-scale-in rounded-xl border border-white/10 bg-glass-heavy backdrop-blur-2xl py-1 shadow-float"
             style={{ left: contextMenu.x, top: contextMenu.y }}
           >
             {contextMenu.items.map((item, i) => (

@@ -145,8 +145,8 @@ export default function SearchPage() {
                 onClick={() => setActiveTab(tab.key)}
                 className={`flex-shrink-0 rounded-full px-5 py-2.5 text-sm font-semibold transition-all ${
                   activeTab === tab.key
-                    ? 'bg-go-gradient text-white shadow-glow-sm scale-105'
-                    : 'bg-card/80 text-softText hover:bg-card hover:text-white border border-white/5 hover:border-white/10'
+                    ? 'bg-theme-gradient text-white shadow-glow-sm scale-105'
+                    : 'bg-glass-card backdrop-blur-xl/80 text-softText hover:bg-glass-card backdrop-blur-xl hover:text-white border border-white/5 hover:border-white/10'
                 }`}
               >
                 {tab.label}
@@ -230,7 +230,7 @@ export default function SearchPage() {
           {/* No results - Enhanced */}
           {results.tracks.length === 0 && results.artists.length === 0 && results.albums.length === 0 && results.playlists.length === 0 && (
             <div className="py-20 text-center">
-              <div className="inline-flex h-24 w-24 items-center justify-center rounded-3xl bg-gradient-to-br from-accent/20 to-accentAlt/20 mb-6 shadow-xl">
+              <div className="inline-flex h-24 w-24 items-center justify-center rounded-3xl bg-gradient-to-br from-accent/20 to-gradient-to/20 mb-6 shadow-xl">
                 <RiSearchLine size={48} className="text-accent" />
               </div>
               <h3 className="text-2xl font-bold mb-3">No results found for "{searchQuery}"</h3>

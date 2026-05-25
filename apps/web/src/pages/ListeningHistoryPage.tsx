@@ -30,7 +30,7 @@ export default function ListeningHistoryPage() {
             <button
               key={`${track.id}-${index}`}
               onClick={() => playTrack(track, localTracks)}
-              className="group flex w-full items-center gap-4 rounded-xl bg-card p-3 text-left transition hover:bg-card-hover"
+              className="group flex w-full items-center gap-4 rounded-xl bg-glass-card backdrop-blur-xl p-3 text-left transition hover:bg-card-hover"
             >
               <span className="w-8 text-center text-sm font-bold text-dimText">
                 {index + 1}

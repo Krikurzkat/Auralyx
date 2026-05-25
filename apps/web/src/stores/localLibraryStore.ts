@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { localDb, LocalTrack } from '../services/localDb';
 import { Playlist } from '../types';
+import { usePlayerStore } from './playerStore';
 
 // ─── Helpers ───
 
@@ -35,6 +36,24 @@ async function getAudioDuration(file: File): Promise<number> {
       resolve(0);
       cleanup();
     });
+  });
+}
+
+function syncTrackIntoPlayer(updatedTrack: LocalTrack) {
+  const playerState = usePlayerStore.getState();
+  const mergeTrack = <T extends { id: string }>(track: T): T =>
+    track.id === updatedTrack.id ? ({ ...track, ...updatedTrack } as T) : track;
+
+  const nextCurrentTrack = playerState.currentTrack
+    ? mergeTrack(playerState.currentTrack)
+    : null;
+  const nextQueue = playerState.queue.map(mergeTrack);
+  const nextHistory = playerState.history.map(mergeTrack);
+
+  usePlayerStore.setState({
+    currentTrack: nextCurrentTrack,
+    queue: nextQueue,
+    history: nextHistory,
   });
 }
 
@@ -219,9 +238,10 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
     const { localTracks } = get();
     const track = localTracks.find(t => t.id === id);
     if (!track) return;
-    const updated = { ...track, ...updates };
+    const updated: LocalTrack = { ...track, ...updates };
     await localDb.saveTrack(updated);
     set(s => ({ localTracks: s.localTracks.map(t => t.id === id ? updated : t) }));
+    syncTrackIntoPlayer(updated);
   },
 
   clearLibrary: async () => {
@@ -234,9 +254,10 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
     const { localTracks } = get();
     const track = localTracks.find(t => t.id === id);
     if (!track) return;
-    const updated = { ...track, duration };
+    const updated: LocalTrack = { ...track, duration };
     await localDb.saveTrack(updated);
     set(s => ({ localTracks: s.localTracks.map(t => t.id === id ? updated : t) }));
+    syncTrackIntoPlayer(updated);
   },
 
   createPlaylist: async (title: string) => {

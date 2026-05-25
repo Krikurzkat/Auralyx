@@ -39,7 +39,7 @@ export default function ContentCard({ id, title, subtitle, gradient, coverUrl, t
       onClick={handleClick}
       role="button"
       tabIndex={0}
-      className="group w-full cursor-pointer rounded-md border border-white/5 bg-card/80 p-1.5 text-left transition-all hover:-translate-y-0.5 hover:border-white/10 hover:bg-card hover:shadow-card-hover"
+      className="group w-full cursor-pointer rounded-md border border-white/5 bg-glass-card backdrop-blur-xl/80 p-1.5 text-left transition-all hover:-translate-y-0.5 hover:border-white/10 hover:bg-glass-card backdrop-blur-xl hover:shadow-card-hover"
     >
       <div className="relative mb-1">
         {coverUrl ? (

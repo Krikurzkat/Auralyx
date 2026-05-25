@@ -334,8 +334,11 @@ export default function VisualizerPlayer({ onClose }: VisualizerPlayerProps) {
               className="group relative h-1.5 cursor-pointer rounded-full bg-white/10 transition-all hover:h-2"
             >
               <div
-                className="h-full rounded-full bg-gradient-to-r from-accent to-orange-500 transition-all duration-100"
-                style={{ width: `${progressPercent}%` }}
+                className="h-full rounded-full transition-all duration-100"
+                style={{ 
+                  width: `${progressPercent}%`,
+                  background: `linear-gradient(to right, var(--gradient-from), var(--gradient-to))`
+                }}
               />
             </div>
             <div className="mt-2 flex justify-between text-xs font-semibold text-white/40">
