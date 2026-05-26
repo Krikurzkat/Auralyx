@@ -11,36 +11,63 @@ interface ColorPalette {
 }
 
 const colorPalettes: ColorPalette[] = [
-  { id: 'cyan-blue', name: 'Cyan Blue', gradient: ['#06B6D4', '#3B82F6'] },
-  { id: 'blue-purple', name: 'Blue Purple', gradient: ['#3B82F6', '#8B5CF6'] },
-  { id: 'cyan-teal', name: 'Cyan Teal', gradient: ['#22D3EE', '#14B8A6'] },
-  { id: 'lime-green', name: 'Lime Green', gradient: ['#BEF264', '#4ADE80'] },
-  { id: 'yellow-orange', name: 'Yellow Orange', gradient: ['#FDE047', '#FB923C'] },
-  { id: 'orange-red', name: 'Orange Red', gradient: ['#FB923C', '#F87171'] },
-  { id: 'red-rose', name: 'Red Rose', gradient: ['#F87171', '#FB7185'] },
-  { id: 'pink-rose', name: 'Pink Rose', gradient: ['#F472B6', '#FB7185'] },
-  { id: 'purple-pink', name: 'Purple Pink', gradient: ['#A855F7', '#EC4899'] },
-  { id: 'red-purple', name: 'Red Purple', gradient: ['#EF4444', '#8B5CF6'] },
-  { id: 'purple-blue', name: 'Purple Blue', gradient: ['#8B5CF6', '#3B82F6'] },
-  { id: 'blue-cyan', name: 'Blue Cyan', gradient: ['#0EA5E9', '#06B6D4'] },
+  // Row 1
+  { id: 'sunset-fire', name: 'Sunset Fire', gradient: ['#FF6B35', '#8B1538'] },
+  { id: 'ocean-deep', name: 'Ocean Deep', gradient: ['#1E88E5', '#6A1B9A'] },
+  { id: 'twilight-sky', name: 'Twilight Sky', gradient: ['#90CAF9', '#E1BEE7'] },
+  { id: 'pink-sunrise', name: 'Pink Sunrise', gradient: ['#EC407A', '#FDD835'] },
+  { id: 'azure-blue', name: 'Azure Blue', gradient: ['#1976D2', '#42A5F5'] },
+  { id: 'coral-reef', name: 'Coral Reef', gradient: ['#26C6DA', '#FF8A65'] },
+  { id: 'golden-hour', name: 'Golden Hour', gradient: ['#26C6DA', '#FFD54F'] },
+  { id: 'tropical-sunset', name: 'Tropical Sunset', gradient: ['#66BB6A', '#FF7043'] },
+  
+  // Row 2
+  { id: 'purple-haze', name: 'Purple Haze', gradient: ['#7E57C2', '#FF8A65'] },
+  { id: 'lavender-dream', name: 'Lavender Dream', gradient: ['#CE93D8', '#F48FB1'] },
+  { id: 'royal-purple', name: 'Royal Purple', gradient: ['#5E35B1', '#512DA8'] },
+  { id: 'violet-mist', name: 'Violet Mist', gradient: ['#9575CD', '#B39DDB'] },
+  { id: 'magenta-pink', name: 'Magenta Pink', gradient: ['#EC407A', '#AB47BC'] },
+  { id: 'electric-blue', name: 'Electric Blue', gradient: ['#42A5F5', '#5C6BC0'] },
+  { id: 'lime-fresh', name: 'Lime Fresh', gradient: ['#9CCC65', '#26C6DA'] },
+  { id: 'teal-ocean', name: 'Teal Ocean', gradient: ['#26A69A', '#00897B'] },
+  
+  // Row 3
+  { id: 'peach-cream', name: 'Peach Cream', gradient: ['#FFCCBC', '#FFAB91'] },
+  { id: 'hot-pink', name: 'Hot Pink', gradient: ['#FF1744', '#F50057'] },
+  { id: 'cotton-candy', name: 'Cotton Candy', gradient: ['#FF80AB', '#FF4081'] },
+  { id: 'mint-lime', name: 'Mint Lime', gradient: ['#FFD54F', '#66BB6A'] },
+  { id: 'deep-teal', name: 'Deep Teal', gradient: ['#00695C', '#004D40'] },
+  { id: 'fire-orange', name: 'Fire Orange', gradient: ['#FF6F00', '#E65100'] },
+  { id: 'sky-yellow', name: 'Sky Yellow', gradient: ['#E0F2F1', '#FFF9C4'] },
+  { id: 'navy-blue', name: 'Navy Blue', gradient: ['#1565C0', '#0D47A1'] },
+  
+  // Row 4
+  { id: 'slate-purple', name: 'Slate Purple', gradient: ['#546E7A', '#D81B60'] },
+  { id: 'coral-orange', name: 'Coral Orange', gradient: ['#FF7043', '#D84315'] },
+  { id: 'rose-pink', name: 'Rose Pink', gradient: ['#FF8A80', '#FF80AB'] },
+  { id: 'bubblegum', name: 'Bubblegum', gradient: ['#F48FB1', '#F06292'] },
+  { id: 'sunset-purple', name: 'Sunset Purple', gradient: ['#BA68C8', '#FF6E40'] },
+  { id: 'midnight-blue', name: 'Midnight Blue', gradient: ['#283593', '#1A237E'] },
+  { id: 'storm-grey', name: 'Storm Grey', gradient: ['#546E7A', '#37474F'] },
+  { id: 'desert-sand', name: 'Desert Sand', gradient: ['#BCAAA4', '#A1887F'] },
 ];
 
 export default function SettingsPage() {
   const navigate = useNavigate();
   const { manualFadeDuration, autoFadeDuration, setManualFadeDuration, setAutoFadeDuration } = usePlayerStore();
   
-  // Load saved theme or default to cyan-blue
+  // Load saved theme or default to sunset-fire
   const [selectedPalette, setSelectedPalette] = useState(() => {
-    return localStorage.getItem('selectedTheme') || 'cyan-blue';
+    return localStorage.getItem('selectedTheme') || 'sunset-fire';
   });
   
   const [showAllPalettes, setShowAllPalettes] = useState(false);
 
-  const displayedPalettes = showAllPalettes ? colorPalettes : colorPalettes.slice(0, 6);
+  const displayedPalettes = showAllPalettes ? colorPalettes : colorPalettes.slice(0, 8);
 
   // Apply saved theme on mount
   useState(() => {
-    const savedTheme = localStorage.getItem('selectedTheme') || 'cyan-blue';
+    const savedTheme = localStorage.getItem('selectedTheme') || 'sunset-fire';
     const palette = colorPalettes.find(p => p.id === savedTheme);
     if (palette) {
       document.documentElement.style.setProperty('--gradient-from', palette.gradient[0]);

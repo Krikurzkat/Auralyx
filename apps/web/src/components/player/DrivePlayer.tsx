@@ -1,4 +1,4 @@
-import { useMemo, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useMemo, useLayoutEffect, useRef, useState } from 'react';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useLibraryStore } from '../../stores/libraryStore';
 import { formatDuration, getLyricsForTrack } from '../../utils/formatters';
@@ -23,9 +23,10 @@ import {
 
 interface DrivePlayerProps {
   onClose: () => void;
+  isEmbedded?: boolean;
 }
 
-export default function DrivePlayer({ onClose }: DrivePlayerProps) {
+export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayerProps) {
   const {
     currentTrack,
     isPlaying,
@@ -45,10 +46,12 @@ export default function DrivePlayer({ onClose }: DrivePlayerProps) {
 
   // Ref for Drive Mode cover animation
   const largeCoverRef = useRef<HTMLDivElement>(null); // Large cover in compact mode
+  const prevRectsRef = useRef<{ large?: DOMRect; small?: DOMRect }>({});
   const smallCoverRef = useRef<HTMLDivElement>(null); // Small cover in lyrics mode
   const isAnimatingBackRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const hasAnimatedRef = useRef(false);
+  const previousShowFullLyricsRef = useRef<boolean | null>(null); // Track previous state
   
   // State for compact/full lyrics mode
   const [showFullLyrics, setShowFullLyrics] = useState(false);
@@ -71,116 +74,84 @@ export default function DrivePlayer({ onClose }: DrivePlayerProps) {
     ? `http://localhost:3001${currentTrack.coverUrl}`
     : currentTrack?.coverUrl;
 
-  // Intro animation for all elements
+  // Intro animation for all elements - DISABLED for instant appearance
   useLayoutEffect(() => {
     if (hasAnimatedRef.current || !containerRef.current) return;
     hasAnimatedRef.current = true;
 
+    // Skip all intro animations - just make everything visible immediately
     const container = containerRef.current;
-    
-    // Select elements to animate
     const backButton = container.querySelector('.drive-back-button');
     const driveModeLabel = container.querySelector('.drive-mode-label');
     const lyricsContainer = container.querySelector('.drive-lyrics-container');
     const progressBar = container.querySelector('.drive-progress-bar');
     const controls = container.querySelector('.drive-controls');
 
-    // Ensure all elements start visible (in case animation fails)
+    // Set everything to visible immediately
     gsap.set([backButton, driveModeLabel, lyricsContainer, progressBar, controls], {
       opacity: 1,
       clearProps: 'transform',
     });
-
-    // Create timeline for staggered animations
-    const tl = gsap.timeline();
-
-    // Animate background blobs
-    tl.from(container.querySelectorAll('.drive-bg-blob'), {
-      scale: 0.8,
-      opacity: 0,
-      duration: 1.2,
-      ease: 'power4.out',
-      stagger: 0.2,
-    }, 0);
-
-    // Animate back button
-    if (backButton) {
-      tl.from(backButton, {
-        opacity: 0,
-        scale: 0.8,
-        x: -20,
-        duration: 0.4,
-        ease: 'back.out(2)',
-        clearProps: 'all',
-      }, 0.2);
-    }
-
-    // Animate Drive Mode label
-    if (driveModeLabel) {
-      tl.from(driveModeLabel, {
-        opacity: 0,
-        y: -10,
-        duration: 0.35,
-        ease: 'power3.out',
-        clearProps: 'all',
-      }, 0.25);
-    }
-
-    // Note: track info animation removed - it's controlled by showFullLyrics state
-
-    // Animate lyrics container
-    if (lyricsContainer) {
-      tl.from(lyricsContainer, {
-        opacity: 0,
-        scale: 0.95,
-        duration: 0.6,
-        ease: 'power4.out',
-        clearProps: 'all',
-      }, 0.4);
-    }
-
-    // Animate progress bar
-    if (progressBar) {
-      tl.from(progressBar, {
-        opacity: 0,
-        scaleX: 0,
-        duration: 0.5,
-        ease: 'power3.out',
-        transformOrigin: 'left center',
-        clearProps: 'all',
-      }, 0.5);
-    }
-
-    // Animate controls
-    if (controls) {
-      tl.from(controls, {
-        opacity: 0,
-        y: 30,
-        scale: 0.95,
-        duration: 0.5,
-        ease: 'power4.out',
-        clearProps: 'all',
-      }, 0.55);
-    }
   }, []);
+
+  const toggleFullLyrics = useCallback(() => {
+    if (largeCoverRef.current && smallCoverRef.current) {
+      prevRectsRef.current = {
+        large: largeCoverRef.current.getBoundingClientRect(),
+        small: smallCoverRef.current.getBoundingClientRect(),
+      };
+    }
+    setShowFullLyrics((prev) => !prev);
+  }, []);
+
+
+
 
   // Animate large cover from fullscreen position to Drive Mode center position
   useLayoutEffect(() => {
     const largeCover = largeCoverRef.current;
     const fullscreenRect = (window as any).__fullscreenCoverRect;
     
-    if (!largeCover || !fullscreenRect || showFullLyrics) return; // Only animate in compact mode
+    // Only animate if we have fullscreen rect and we're in compact mode
+    if (!largeCover || !fullscreenRect || showFullLyrics) {
+      // Clear the callback if it exists
+      if ((window as any).__clearDriveModeTransition) {
+        (window as any).__clearDriveModeTransition();
+        delete (window as any).__clearDriveModeTransition;
+      }
+      return;
+    }
     
-    // Get Drive Mode large cover final position
-    const driveRect = largeCover.getBoundingClientRect();
-    
+    // Wait for next frame to ensure Drive Mode is rendered
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        // Get Drive Mode large cover final position
+        const driveRect = largeCover.getBoundingClientRect();
+        
+        if (driveRect.width === 0 || driveRect.height === 0) {
+          // Element not ready yet, try again
+          setTimeout(() => {
+            const retryRect = largeCover.getBoundingClientRect();
+            if (retryRect.width > 0) {
+              animateCoverTransition(largeCover, fullscreenRect, retryRect);
+            }
+          }, 50);
+          return;
+        }
+        
+        animateCoverTransition(largeCover, fullscreenRect, driveRect);
+      });
+    });
+  }, [showFullLyrics]); // Re-run when showFullLyrics changes
+  
+  const animateCoverTransition = (largeCover: HTMLDivElement, fullscreenRect: any, driveRect: DOMRect) => {
     // Calculate initial position (from fullscreen)
     const initialX = fullscreenRect.left - driveRect.left;
     const initialY = fullscreenRect.top - driveRect.top;
     const initialScaleX = fullscreenRect.width / driveRect.width;
     const initialScaleY = fullscreenRect.height / driveRect.height;
     
-    // Set initial state
+    // Set initial state at fullscreen position
     gsap.set(largeCover, {
       x: initialX,
       y: initialY,
@@ -190,7 +161,7 @@ export default function DrivePlayer({ onClose }: DrivePlayerProps) {
       zIndex: 100,
     });
     
-    // Animate to final position
+    // Animate to Drive Mode position
     gsap.to(largeCover, {
       x: 0,
       y: 0,
@@ -198,41 +169,47 @@ export default function DrivePlayer({ onClose }: DrivePlayerProps) {
       scaleY: 1,
       duration: 0.6,
       ease: 'expo.out',
-      delay: 0.1,
       onComplete: () => {
-        gsap.set(largeCover, { clearProps: 'zIndex' });
+        gsap.set(largeCover, { clearProps: 'all' });
+        delete (window as any).__fullscreenCoverRect;
+        
+        // Clear the transition flag in parent
+        const parentWindow = window.parent || window;
+        if ((parentWindow as any).__clearDriveModeTransition) {
+          (parentWindow as any).__clearDriveModeTransition();
+          delete (parentWindow as any).__clearDriveModeTransition;
+        }
       }
     });
-    
-    // Clear the stored rect
-    delete (window as any).__fullscreenCoverRect;
-  }, [showFullLyrics]); // Re-run when showFullLyrics changes
+  };
 
-  // Animate transition between compact and full lyrics mode
+  // Fade in Drive Player UI - DISABLED for instant appearance
   useLayoutEffect(() => {
-    if (!lyricsContainerRef.current) return;
-    
-    const container = lyricsContainerRef.current;
-    
-    // Animate in
-    gsap.fromTo(container,
-      {
-        opacity: 0,
-        scale: 0.95,
-        y: 20,
-      },
-      {
-        opacity: 1,
-        scale: 1,
-        y: 0,
-        duration: 0.4,
-        ease: 'power3.out',
-      }
-    );
+    // Skip fade animation - everything appears instantly
+  }, []);
+  // Lyrics container animation - DISABLED for instant appearance
+  useLayoutEffect(() => {
+    // Skip animation - lyrics appear instantly
   }, [showFullLyrics]);
 
   // Animate cover transition: large cover → small cover when switching to lyrics
+  // Only runs when user clicks Compact/Lyrics button, NOT on initial mount
   useLayoutEffect(() => {
+    // Skip animation if this is the first time we're seeing this state
+    // Only animate when there's an actual state CHANGE
+    if (previousShowFullLyricsRef.current === null) {
+      previousShowFullLyricsRef.current = showFullLyrics;
+      return;
+    }
+    
+    // Skip if state hasn't actually changed
+    if (previousShowFullLyricsRef.current === showFullLyrics) {
+      return;
+    }
+    
+    // Update the previous state
+    previousShowFullLyricsRef.current = showFullLyrics;
+    
     const largeCover = largeCoverRef.current;
     const smallCover = smallCoverRef.current;
     
@@ -242,107 +219,105 @@ export default function DrivePlayer({ onClose }: DrivePlayerProps) {
       // Switching to lyrics mode: animate large cover to small cover position
       if (!largeCover || !smallCover) return;
       
-      // Small delay to ensure DOM is ready
-      const timer = setTimeout(() => {
-        const largeRect = largeCover.getBoundingClientRect();
-        const smallRect = smallCover.getBoundingClientRect();
-        
-        // Ensure both elements are visible and have valid dimensions
-        if (largeRect.width === 0 || smallRect.width === 0) return;
-        
-        // Calculate transform values
-        const deltaX = smallRect.left - largeRect.left;
-        const deltaY = smallRect.top - largeRect.top;
-        const scaleX = smallRect.width / largeRect.width;
-        const scaleY = smallRect.height / largeRect.height;
-        
-        // Make large cover visible on top of everything during animation
-        gsap.set(largeCover, { 
-          opacity: 1, 
-          zIndex: 200,
-          position: 'fixed',
-          left: largeRect.left,
-          top: largeRect.top,
-          width: largeRect.width,
-          height: largeRect.height,
-        });
-        
-        // Hide small cover initially
-        gsap.set(smallCover, { opacity: 0 });
-        
-        // Animate large cover to small cover position
-        gsap.to(largeCover, {
-          left: smallRect.left,
-          top: smallRect.top,
-          width: smallRect.width,
-          height: smallRect.height,
-          borderRadius: '16px',
-          duration: 0.6,
-          ease: 'expo.out',
-          onComplete: () => {
-            // Hide large cover and show small cover
-            gsap.set(largeCover, { 
-              opacity: 0,
-              clearProps: 'position,left,top,width,height,zIndex'
-            });
-            gsap.set(smallCover, { opacity: 1 });
-          }
-        });
-      }, 50);
+      gsap.killTweensOf([largeCover, smallCover]);
+      gsap.set([largeCover, smallCover], { clearProps: 'all' });
       
-      return () => clearTimeout(timer);
+      const largeRect = prevRectsRef.current.large || largeCover.getBoundingClientRect();
+      const smallRect = smallCover.getBoundingClientRect();
+      
+      // Ensure both elements are visible and have valid dimensions
+      if (largeRect.width === 0 || smallRect.width === 0) return;
+      
+      // Make large cover visible on top of everything during animation
+      gsap.set(largeCover, { 
+        opacity: 1, 
+        zIndex: 200,
+        position: 'fixed',
+        left: largeRect.left,
+        top: largeRect.top,
+        width: largeRect.width,
+        height: largeRect.height,
+      });
+      
+      // Hide small cover initially
+      gsap.set(smallCover, { opacity: 0 });
+      
+      // Animate large cover to small cover position
+      gsap.to(largeCover, {
+        left: smallRect.left,
+        top: smallRect.top,
+        width: smallRect.width,
+        height: smallRect.height,
+        borderRadius: '16px',
+        duration: 0.6,
+        ease: 'expo.out',
+        onComplete: () => {
+          // Reset and let CSS handle visibility
+          gsap.set(largeCover, { clearProps: 'all' });
+          gsap.set(smallCover, { clearProps: 'all' });
+        }
+      });
     } else {
       // Switching to compact mode: animate small cover to large cover position
       if (!largeCover || !smallCover) return;
       
-      const timer = setTimeout(() => {
-        const largeRect = largeCover.getBoundingClientRect();
-        const smallRect = smallCover.getBoundingClientRect();
-        
-        // Ensure both elements have valid dimensions
-        if (largeRect.width === 0 || smallRect.width === 0) return;
-        
-        // Make large cover visible and position it at small cover location
-        gsap.set(largeCover, {
-          opacity: 1,
-          zIndex: 200,
-          position: 'fixed',
-          left: smallRect.left,
-          top: smallRect.top,
-          width: smallRect.width,
-          height: smallRect.height,
-          borderRadius: '16px',
-        });
-        
-        // Hide small cover
-        gsap.set(smallCover, { opacity: 0 });
-        
-        // Animate large cover back to its original position
-        gsap.to(largeCover, {
-          left: largeRect.left,
-          top: largeRect.top,
-          width: largeRect.width,
-          height: largeRect.height,
-          borderRadius: '24px',
-          duration: 0.6,
-          ease: 'expo.out',
-          onComplete: () => {
-            // Clean up transform properties
-            gsap.set(largeCover, { 
-              clearProps: 'position,left,top,width,height,borderRadius,zIndex'
-            });
-          }
-        });
-      }, 50);
+      gsap.killTweensOf([largeCover, smallCover]);
+      gsap.set([largeCover, smallCover], { clearProps: 'all' });
       
-      return () => clearTimeout(timer);
+      const largeRect = largeCover.getBoundingClientRect();
+      const smallRect = prevRectsRef.current.small || smallCover.getBoundingClientRect();
+      
+      // Ensure both elements have valid dimensions
+      if (largeRect.width === 0 || smallRect.width === 0) return;
+      
+      // Hide track info during animation
+      const trackInfo = largeCover.parentElement?.querySelector('.text-center') as HTMLElement;
+      if (trackInfo) {
+        gsap.set(trackInfo, { opacity: 0 });
+      }
+      
+      // Make large cover visible and position it at small cover location
+      gsap.set(largeCover, {
+        opacity: 1,
+        zIndex: 200,
+        position: 'fixed',
+        left: smallRect.left,
+        top: smallRect.top,
+        width: smallRect.width,
+        height: smallRect.height,
+        borderRadius: '16px',
+      });
+      
+      // Hide small cover
+      gsap.set(smallCover, { opacity: 0 });
+      
+      // Animate large cover back to its original position
+      gsap.to(largeCover, {
+        left: largeRect.left,
+        top: largeRect.top,
+        width: largeRect.width,
+        height: largeRect.height,
+        borderRadius: '24px',
+        duration: 0.6,
+        ease: 'expo.out',
+        onComplete: () => {
+          // Reset and let CSS handle visibility
+          gsap.set(largeCover, { clearProps: 'all' });
+          gsap.set(smallCover, { clearProps: 'all' });
+          
+          // Show track info after animation completes
+          if (trackInfo) {
+            gsap.to(trackInfo, { opacity: 1, duration: 0.3, ease: 'power2.out' });
+          }
+        }
+      });
     }
   }, [showFullLyrics, currentTrack]);
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    const percent = (e.clientX - rect.left) / rect.width;
-    seekTo(percent * duration);
+    const percent = ((e.clientX - rect.left) / rect.width) * 100;
+    seekTo(Math.max(0, Math.min(100, percent)));
   };
 
   const handleBack = () => {
@@ -367,8 +342,21 @@ export default function DrivePlayer({ onClose }: DrivePlayerProps) {
       height: driveRect.height,
     };
     
-    // Close Drive Mode - FullscreenPlayer will handle the animation
-    onClose();
+    // Fade out Drive Player UI before closing
+    const container = containerRef.current;
+    if (container) {
+      const childrenToFade = Array.from(container.children).filter(
+        child => !child.classList.contains('large-cover-container')
+      );
+      gsap.to(childrenToFade, {
+        opacity: 0,
+        duration: 0.3,
+        ease: 'power2.in',
+        onComplete: onClose
+      });
+    } else {
+      onClose();
+    }
   };
 
   if (!currentTrack) {
@@ -390,138 +378,119 @@ export default function DrivePlayer({ onClose }: DrivePlayerProps) {
   };
 
   return (
-    <div ref={containerRef} className="fixed inset-0 z-50 flex h-screen w-screen flex-col overflow-hidden text-white">
+    <div ref={containerRef} className={`${isEmbedded ? 'absolute' : 'fixed h-screen w-screen'} inset-0 z-50 flex flex-col overflow-hidden text-white`}>
       {/* Background Layer - Content to be blurred */}
-      <div className="absolute inset-0 -z-20">
-        {/* Animated gradient blobs */}
-        <div className="drive-bg-blob absolute left-[-20%] top-[-20%] h-[600px] w-[600px] rounded-full opacity-60 animate-pulse-glow" 
-          style={{ 
-            background: `radial-gradient(circle, ${currentTrack.coverGradient?.[0] || '#FF6B35'} 0%, transparent 70%)`,
-            filter: 'blur(80px)'
-          }} 
-        />
-        <div className="drive-bg-blob absolute right-[-15%] top-[30%] h-[500px] w-[500px] rounded-full opacity-50 animate-pulse-glow" 
-          style={{ 
-            background: `radial-gradient(circle, ${currentTrack.coverGradient?.[1] || '#E8470A'} 0%, transparent 70%)`,
-            filter: 'blur(80px)',
-            animationDelay: '2s'
-          }} 
-        />
-        <div className="drive-bg-blob absolute bottom-[-10%] left-[20%] h-[550px] w-[550px] rounded-full opacity-40 animate-pulse-glow" 
-          style={{ 
-            background: 'radial-gradient(circle, #8B5CF6 0%, transparent 70%)',
-            filter: 'blur(80px)',
-            animationDelay: '4s'
-          }} 
-        />
-        
-        {/* Gradient overlay */}
-        <div className="absolute inset-0" style={{
-          background: `linear-gradient(180deg, ${currentTrack.coverGradient?.[0] || '#1E1E22'}40 0%, #0a0a0a 50%, #000000 100%)`
-        }} />
-      </div>
+      {!isEmbedded && (
+        <div className="absolute inset-0 -z-20">
+          {/* Animated gradient blobs */}
+          <div className="drive-bg-blob absolute left-[-20%] top-[-20%] h-[600px] w-[600px] rounded-full opacity-60 animate-pulse-glow" 
+            style={{ 
+              background: `radial-gradient(circle, ${currentTrack.coverGradient?.[0] || '#FF6B35'} 0%, transparent 70%)`,
+              filter: 'blur(80px)'
+            }} 
+          />
+          <div className="drive-bg-blob absolute right-[-15%] top-[30%] h-[500px] w-[500px] rounded-full opacity-50 animate-pulse-glow" 
+            style={{ 
+              background: `radial-gradient(circle, ${currentTrack.coverGradient?.[1] || '#E8470A'} 0%, transparent 70%)`,
+              filter: 'blur(80px)',
+              animationDelay: '2s'
+            }} 
+          />
+          <div className="drive-bg-blob absolute bottom-[-10%] left-[20%] h-[550px] w-[550px] rounded-full opacity-40 animate-pulse-glow" 
+            style={{ 
+              background: 'radial-gradient(circle, #8B5CF6 0%, transparent 70%)',
+              filter: 'blur(80px)',
+              animationDelay: '4s'
+            }} 
+          />
+          
+          {/* Gradient overlay */}
+          <div className="absolute inset-0" style={{
+            background: `linear-gradient(180deg, ${currentTrack.coverGradient?.[0] || '#1E1E22'}40 0%, #0a0a0a 50%, #000000 100%)`
+          }} />
+        </div>
+      )}
       
       {/* Glassmorphism layer with extreme blur */}
-      <div className="absolute inset-0 -z-10" style={{
-        backdropFilter: 'blur(120px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(120px) saturate(180%)',
-        background: 'rgba(13, 13, 13, 0.4)'
-      }} />
+      {!isEmbedded && (
+        <div className="absolute inset-0 -z-10" style={{
+          backdropFilter: 'blur(120px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(120px) saturate(180%)',
+          background: 'rgba(13, 13, 13, 0.4)'
+        }} />
+      )}
       
       {/* Top Header - Compact */}
       <div className="flex items-center justify-between px-2 md:px-4 lg:px-6 pt-2 md:pt-4 pb-1 md:pb-2 shrink-0 relative z-10">
         <button
           onClick={handleBack}
-          className="drive-back-button flex items-center gap-1 md:gap-2 rounded-full border border-white/20 bg-white/10 backdrop-blur-xl px-2 md:px-4 py-1 md:py-2 text-[10px] md:text-sm font-semibold text-white shadow-lg transition hover:bg-white/20 hover:border-white/30 active:scale-95"
+          className="drive-back-button inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 backdrop-blur-xl px-3 py-1.5 text-xs font-semibold text-white shadow-lg transition hover:bg-white/20 hover:border-white/30 active:scale-95"
           aria-label="Back to fullscreen player"
         >
-          <RiArrowLeftLine className="w-3.5 h-3.5 md:w-5 md:h-5" />
-          <span className="hidden xs:inline">Back</span>
+          <RiArrowLeftLine size={18} />
+          <span>Back</span>
         </button>
         
-        <span className="drive-mode-label text-[8px] xs:text-[9px] md:text-xs font-bold uppercase tracking-wider md:tracking-widest text-white/80">
+        <span className="drive-mode-label text-xs font-bold uppercase tracking-widest text-white/80 hidden xs:inline">
           Drive Mode
         </span>
 
         {/* Lyrics Toggle Button */}
         <button
-          onClick={() => setShowFullLyrics(!showFullLyrics)}
-          className={`flex items-center gap-1 md:gap-2 rounded-full border px-2 md:px-4 py-1 md:py-2 text-[10px] md:text-sm font-semibold shadow-lg backdrop-blur-xl transition-all duration-300 ${
+          onClick={toggleFullLyrics}
+          className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold shadow-lg backdrop-blur-xl transition-all duration-300 ${
             showFullLyrics
               ? 'border-accent/50 bg-accent/30 text-accent hover:bg-accent/40'
               : 'border-white/20 bg-white/10 text-white hover:bg-white/20 hover:border-white/30'
           }`}
           aria-label="Toggle lyrics view"
         >
-          {showFullLyrics ? <RiImageLine className="w-3.5 h-3.5 md:w-[18px] md:h-[18px]" /> : <RiMusic2Line className="w-3.5 h-3.5 md:w-[18px] md:h-[18px]" />}
-          <span className="hidden md:inline">{showFullLyrics ? 'Lyrics' : 'Compact'}</span>
+          {showFullLyrics ? <RiImageLine size={18} /> : <RiMusic2Line size={18} />}
+          <span>{showFullLyrics ? 'Compact' : 'Lyrics'}</span>
         </button>
       </div>
 
-      {/* Compact Album Art & Track Info - Only render in lyrics mode */}
-      {showFullLyrics && (
-        <div className="drive-track-info flex items-center gap-1.5 md:gap-3 px-2 md:px-4 lg:px-6 py-1.5 md:py-3 shrink-0 transition-opacity duration-300">
+      {/* Compact Album Art & Track Info - Always render, control visibility */}
+      <div className={`drive-track-info flex items-center gap-1.5 md:gap-3 px-2 md:px-4 lg:px-6 py-1.5 md:py-3 shrink-0 transition-opacity duration-300 ${showFullLyrics ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+        <div className="relative shrink-0">
           <div 
-            className="relative shrink-0"
+            ref={smallCoverRef}
+            id="drive-mode-cover"
+            className="h-10 w-10 xs:h-11 xs:w-11 md:h-14 md:w-14 lg:h-16 lg:w-16 overflow-hidden rounded-lg md:rounded-2xl border border-white/20 shadow-lg"
           >
-            <div 
-              ref={smallCoverRef}
-              id="drive-mode-cover"
-              className="h-10 w-10 xs:h-11 xs:w-11 md:h-14 md:w-14 lg:h-16 lg:w-16 overflow-hidden rounded-lg md:rounded-2xl border border-white/20 shadow-lg"
-            >
-              {coverUrl ? (
-                <img src={coverUrl} alt={currentTrack.title} className="h-full w-full object-cover" />
-              ) : (
-                <div
-                  className="h-full w-full"
-                  style={{
-                    background: `linear-gradient(135deg, ${currentTrack.coverGradient?.[0] || '#333'}, ${currentTrack.coverGradient?.[1] || '#222'})`,
-                  }}
-                />
-              )}
-            </div>
-          </div>
-
-          <div className="flex-1 min-w-0">
-            <h1 className="truncate text-[11px] xs:text-xs md:text-base lg:text-lg font-bold text-white">
-              {currentTrack.title}
-            </h1>
-            <p className="truncate text-[9px] xs:text-[10px] md:text-sm text-white/60">
-              {currentTrack.artist}
-            </p>
-          </div>
-
-          <button
-            onClick={() => toggleLike(currentTrack.id)}
-            className="flex h-7 w-7 xs:h-8 xs:w-8 md:h-10 md:w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 backdrop-blur-xl shadow-lg transition hover:scale-110 hover:bg-white/20 active:scale-95 shrink-0"
-            aria-label={isLiked ? 'Unlike' : 'Like'}
-          >
-            {isLiked ? (
-              <RiHeartFill className="w-3.5 h-3.5 md:w-5 md:h-5 text-accent" />
+            {coverUrl ? (
+              <img src={coverUrl} alt={currentTrack.title} className="h-full w-full object-cover" />
             ) : (
-              <RiHeartLine className="w-3.5 h-3.5 md:w-5 md:h-5 text-white/80" />
+              <div
+                className="h-full w-full"
+                style={{
+                  background: `linear-gradient(135deg, ${currentTrack.coverGradient?.[0] || '#333'}, ${currentTrack.coverGradient?.[1] || '#222'})`,
+                }}
+              />
             )}
-          </button>
+          </div>
         </div>
-      )}
 
-      {/* Hidden small cover for animation reference - always rendered */}
-      <div className="absolute opacity-0 pointer-events-none -z-50">
-        <div 
-          ref={smallCoverRef}
-          className="h-16 w-16 overflow-hidden rounded-2xl"
-        >
-          {coverUrl ? (
-            <img src={coverUrl} alt={currentTrack.title} className="h-full w-full object-cover" />
-          ) : (
-            <div
-              className="h-full w-full"
-              style={{
-                background: `linear-gradient(135deg, ${currentTrack.coverGradient?.[0] || '#333'}, ${currentTrack.coverGradient?.[1] || '#222'})`,
-              }}
-            />
-          )}
+        <div className="flex-1 min-w-0">
+          <h1 className="truncate text-[11px] xs:text-xs md:text-base lg:text-lg font-bold text-white">
+            {currentTrack.title}
+          </h1>
+          <p className="truncate text-[9px] xs:text-[10px] md:text-sm text-white/60">
+            {currentTrack.artist}
+          </p>
         </div>
+
+        <button
+          onClick={() => toggleLike(currentTrack.id)}
+          className="flex h-7 w-7 xs:h-8 xs:w-8 md:h-10 md:w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 backdrop-blur-xl shadow-lg transition hover:scale-110 hover:bg-white/20 active:scale-95 shrink-0"
+          aria-label={isLiked ? 'Unlike' : 'Like'}
+        >
+          {isLiked ? (
+            <RiHeartFill className="w-3.5 h-3.5 md:w-5 md:h-5 text-accent" />
+          ) : (
+            <RiHeartLine className="w-3.5 h-3.5 md:w-5 md:h-5 text-white/80" />
+          )}
+        </button>
       </div>
 
       {/* Content Area - Always render both modes, control visibility */}
@@ -535,13 +504,18 @@ export default function DrivePlayer({ onClose }: DrivePlayerProps) {
                 const relativePosition = actualIndex - lyricFocusPosition;
                 const distance = Math.abs(relativePosition);
                 const direction = relativePosition < 0 ? -1 : 1;
-                const verticalOffset = direction * Math.pow(distance, 1.3) * 130; // Increased for multi-line support
+                const verticalOffset = direction * Math.pow(distance, 1.05) * 48; // Tighter spacing for Drive Mode
                 // Reduced scale values to prevent overlap
                 const scaleValue = 1.1 - Math.min(distance * 0.15, 0.45);
                 const opacityValue = Math.max(0.08, 1 - distance * 0.2);
-                const blurAmount = Math.min(8, Math.pow(distance, 1.3) * 1.1);
                 const glow = Math.max(0, 1 - distance * 0.52);
                 const isCurrent = actualIndex === activeLyricIndex;
+                
+                // Simplify for performance: no blur filter. Transition color from gray to white.
+                // Add a lightweight theme-colored shadow for the active line.
+                // Strictly use grey for non-active lines and white + shadow for active line
+                const textColor = isCurrent ? '#ffffff' : 'rgb(128, 128, 128)';
+                const textShadow = isCurrent ? `0 0 14px var(--accent)` : 'none';
 
                 return (
                   <div
@@ -549,18 +523,16 @@ export default function DrivePlayer({ onClose }: DrivePlayerProps) {
                     className="absolute w-full max-w-3xl left-1/2 -translate-x-1/2 px-8 text-center font-bold"
                     style={{
                       top: '50%',
-                      fontSize: 'clamp(1rem, 4vw, 1.5rem)', // Fluid typography: 16px to 24px based on viewport
-                      lineHeight: '1.3',
+                      fontSize: 'clamp(0.85rem, 3.5vw, 1.35rem)', // Slightly smaller for better spacing
+                      lineHeight: '1.4',
+                      letterSpacing: '0.02em',
                       transform: `translate3d(-50%, calc(-50% + ${verticalOffset.toFixed(2)}px), 0) scale(${scaleValue.toFixed(3)})`,
                       opacity: opacityValue,
-                      filter: `blur(${blurAmount.toFixed(2)}px) saturate(${(0.76 + glow * 0.5).toFixed(2)})`,
-                      color: 'white',
-                      textShadow: isCurrent
-                        ? `0 0 ${Math.round(60 * glow)}px rgba(255,255,255,0.8), 0 0 ${Math.round(30 * glow)}px rgba(255,255,255,0.6), 0 2px 4px rgba(0,0,0,0.3)`
-                        : `0 0 ${Math.round(18 * glow)}px rgba(255,255,255,${0.06 + glow * 0.1})`,
+                      color: textColor,
+                      textShadow,
                       fontWeight: isCurrent ? '900' : '700',
                       zIndex: isCurrent ? 10 : Math.max(1, 10 - Math.round(distance)),
-                      willChange: 'transform, opacity, filter',
+                      willChange: 'transform, opacity, color',
                       wordWrap: 'break-word',
                       overflowWrap: 'break-word',
                       hyphens: 'auto',
@@ -589,12 +561,16 @@ export default function DrivePlayer({ onClose }: DrivePlayerProps) {
         </div>
 
         {/* Compact Mode - Large Album Art */}
-        <div className={`absolute inset-0 flex items-center justify-center ${!showFullLyrics ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+        <div 
+          className={`large-cover-container absolute inset-0 flex items-center justify-center ${
+            showFullLyrics ? 'pointer-events-none' : ''
+          }`}
+        >
           <div className="flex flex-col items-center gap-2 xs:gap-2.5 md:gap-4 lg:gap-6 max-w-md w-full px-3 md:px-6">
             {/* Large Album Art - Much smaller on mobile */}
             <div 
               ref={largeCoverRef}
-              className="relative w-[min(60vw,240px)] xs:w-[min(55vw,260px)] sm:w-[min(50vw,300px)] md:w-[min(45vw,340px)] lg:w-[min(40vw,380px)] aspect-square rounded-xl md:rounded-2xl lg:rounded-3xl overflow-hidden shadow-2xl ring-1 ring-white/10"
+              className={`relative w-[min(60vw,240px)] xs:w-[min(55vw,260px)] sm:w-[min(50vw,300px)] md:w-[min(45vw,340px)] lg:w-[min(40vw,380px)] aspect-square rounded-xl md:rounded-2xl lg:rounded-3xl overflow-hidden shadow-2xl ring-1 ring-white/10 ${showFullLyrics ? 'opacity-0' : 'opacity-100'}`}
             >
               {coverUrl ? (
                 <img src={coverUrl} alt={currentTrack.title} className="h-full w-full object-cover" />
@@ -611,7 +587,7 @@ export default function DrivePlayer({ onClose }: DrivePlayerProps) {
             </div>
             
             {/* Track Info - Smaller text on mobile */}
-            <div className="text-center w-full px-1">
+            <div className={`text-center w-full px-1 transition-opacity duration-300 ${!showFullLyrics ? 'opacity-100' : 'opacity-0'}`}>
               <h2 className="text-base xs:text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-white mb-0.5 md:mb-1 lg:mb-2 truncate leading-tight">{currentTrack.title}</h2>
               <p className="text-xs xs:text-sm sm:text-base md:text-lg lg:text-xl text-white/60 truncate">{currentTrack.artist}</p>
               {currentTrack.album && (

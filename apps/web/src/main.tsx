@@ -33,21 +33,48 @@ gsap.registerPlugin(useGSAP, Flip, ScrollTrigger, CustomEase);
 
 // Initialize theme from localStorage on app start
 const initializeTheme = () => {
-  const savedTheme = localStorage.getItem('selectedTheme') || 'cyan-blue';
+  const savedTheme = localStorage.getItem('selectedTheme') || 'sunset-fire';
   
   const colorPalettes = [
-    { id: 'cyan-blue', gradient: ['#06B6D4', '#3B82F6'] },
-    { id: 'blue-purple', gradient: ['#3B82F6', '#8B5CF6'] },
-    { id: 'cyan-teal', gradient: ['#22D3EE', '#14B8A6'] },
-    { id: 'lime-green', gradient: ['#BEF264', '#4ADE80'] },
-    { id: 'yellow-orange', gradient: ['#FDE047', '#FB923C'] },
-    { id: 'orange-red', gradient: ['#FB923C', '#F87171'] },
-    { id: 'red-rose', gradient: ['#F87171', '#FB7185'] },
-    { id: 'pink-rose', gradient: ['#F472B6', '#FB7185'] },
-    { id: 'purple-pink', gradient: ['#A855F7', '#EC4899'] },
-    { id: 'red-purple', gradient: ['#EF4444', '#8B5CF6'] },
-    { id: 'purple-blue', gradient: ['#8B5CF6', '#3B82F6'] },
-    { id: 'blue-cyan', gradient: ['#0EA5E9', '#06B6D4'] },
+    // Row 1
+    { id: 'sunset-fire', gradient: ['#FF6B35', '#8B1538'] },
+    { id: 'ocean-deep', gradient: ['#1E88E5', '#6A1B9A'] },
+    { id: 'twilight-sky', gradient: ['#90CAF9', '#E1BEE7'] },
+    { id: 'pink-sunrise', gradient: ['#EC407A', '#FDD835'] },
+    { id: 'azure-blue', gradient: ['#1976D2', '#42A5F5'] },
+    { id: 'coral-reef', gradient: ['#26C6DA', '#FF8A65'] },
+    { id: 'golden-hour', gradient: ['#26C6DA', '#FFD54F'] },
+    { id: 'tropical-sunset', gradient: ['#66BB6A', '#FF7043'] },
+    
+    // Row 2
+    { id: 'purple-haze', gradient: ['#7E57C2', '#FF8A65'] },
+    { id: 'lavender-dream', gradient: ['#CE93D8', '#F48FB1'] },
+    { id: 'royal-purple', gradient: ['#5E35B1', '#512DA8'] },
+    { id: 'violet-mist', gradient: ['#9575CD', '#B39DDB'] },
+    { id: 'magenta-pink', gradient: ['#EC407A', '#AB47BC'] },
+    { id: 'electric-blue', gradient: ['#42A5F5', '#5C6BC0'] },
+    { id: 'lime-fresh', gradient: ['#9CCC65', '#26C6DA'] },
+    { id: 'teal-ocean', gradient: ['#26A69A', '#00897B'] },
+    
+    // Row 3
+    { id: 'peach-cream', gradient: ['#FFCCBC', '#FFAB91'] },
+    { id: 'hot-pink', gradient: ['#FF1744', '#F50057'] },
+    { id: 'cotton-candy', gradient: ['#FF80AB', '#FF4081'] },
+    { id: 'mint-lime', gradient: ['#FFD54F', '#66BB6A'] },
+    { id: 'deep-teal', gradient: ['#00695C', '#004D40'] },
+    { id: 'fire-orange', gradient: ['#FF6F00', '#E65100'] },
+    { id: 'sky-yellow', gradient: ['#E0F2F1', '#FFF9C4'] },
+    { id: 'navy-blue', gradient: ['#1565C0', '#0D47A1'] },
+    
+    // Row 4
+    { id: 'slate-purple', gradient: ['#546E7A', '#D81B60'] },
+    { id: 'coral-orange', gradient: ['#FF7043', '#D84315'] },
+    { id: 'rose-pink', gradient: ['#FF8A80', '#FF80AB'] },
+    { id: 'bubblegum', gradient: ['#F48FB1', '#F06292'] },
+    { id: 'sunset-purple', gradient: ['#BA68C8', '#FF6E40'] },
+    { id: 'midnight-blue', gradient: ['#283593', '#1A237E'] },
+    { id: 'storm-grey', gradient: ['#546E7A', '#37474F'] },
+    { id: 'desert-sand', gradient: ['#BCAAA4', '#A1887F'] },
   ];
   
   const palette = colorPalettes.find(p => p.id === savedTheme);
