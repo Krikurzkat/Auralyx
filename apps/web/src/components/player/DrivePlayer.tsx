@@ -429,45 +429,45 @@ export default function DrivePlayer({ onClose }: DrivePlayerProps) {
       }} />
       
       {/* Top Header - Compact */}
-      <div className="flex items-center justify-between px-3 md:px-4 lg:px-6 pt-3 md:pt-4 pb-1.5 md:pb-2 shrink-0 relative z-10">
+      <div className="flex items-center justify-between px-2 md:px-4 lg:px-6 pt-2 md:pt-4 pb-1 md:pb-2 shrink-0 relative z-10">
         <button
           onClick={handleBack}
-          className="drive-back-button flex items-center gap-1.5 md:gap-2 rounded-full border border-white/20 bg-white/10 backdrop-blur-xl px-2.5 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-semibold text-white shadow-lg transition hover:bg-white/20 hover:border-white/30 active:scale-95"
+          className="drive-back-button flex items-center gap-1 md:gap-2 rounded-full border border-white/20 bg-white/10 backdrop-blur-xl px-2 md:px-4 py-1 md:py-2 text-[10px] md:text-sm font-semibold text-white shadow-lg transition hover:bg-white/20 hover:border-white/30 active:scale-95"
           aria-label="Back to fullscreen player"
         >
-          <RiArrowLeftLine className="w-4 h-4 md:w-5 md:h-5" />
+          <RiArrowLeftLine className="w-3.5 h-3.5 md:w-5 md:h-5" />
           <span className="hidden xs:inline">Back</span>
         </button>
         
-        <span className="drive-mode-label text-[9px] xs:text-[10px] md:text-xs font-bold uppercase tracking-wider md:tracking-widest text-white/80">
+        <span className="drive-mode-label text-[8px] xs:text-[9px] md:text-xs font-bold uppercase tracking-wider md:tracking-widest text-white/80">
           Drive Mode
         </span>
 
         {/* Lyrics Toggle Button */}
         <button
           onClick={() => setShowFullLyrics(!showFullLyrics)}
-          className={`flex items-center gap-1.5 md:gap-2 rounded-full border px-2.5 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-semibold shadow-lg backdrop-blur-xl transition-all duration-300 ${
+          className={`flex items-center gap-1 md:gap-2 rounded-full border px-2 md:px-4 py-1 md:py-2 text-[10px] md:text-sm font-semibold shadow-lg backdrop-blur-xl transition-all duration-300 ${
             showFullLyrics
               ? 'border-accent/50 bg-accent/30 text-accent hover:bg-accent/40'
               : 'border-white/20 bg-white/10 text-white hover:bg-white/20 hover:border-white/30'
           }`}
           aria-label="Toggle lyrics view"
         >
-          {showFullLyrics ? <RiImageLine className="w-4 h-4 md:w-[18px] md:h-[18px]" /> : <RiMusic2Line className="w-4 h-4 md:w-[18px] md:h-[18px]" />}
+          {showFullLyrics ? <RiImageLine className="w-3.5 h-3.5 md:w-[18px] md:h-[18px]" /> : <RiMusic2Line className="w-3.5 h-3.5 md:w-[18px] md:h-[18px]" />}
           <span className="hidden md:inline">{showFullLyrics ? 'Lyrics' : 'Compact'}</span>
         </button>
       </div>
 
       {/* Compact Album Art & Track Info - Only render in lyrics mode */}
       {showFullLyrics && (
-        <div className="drive-track-info flex items-center gap-2 md:gap-3 px-3 md:px-4 lg:px-6 py-2 md:py-3 shrink-0 transition-opacity duration-300">
+        <div className="drive-track-info flex items-center gap-1.5 md:gap-3 px-2 md:px-4 lg:px-6 py-1.5 md:py-3 shrink-0 transition-opacity duration-300">
           <div 
             className="relative shrink-0"
           >
             <div 
               ref={smallCoverRef}
               id="drive-mode-cover"
-              className="h-11 w-11 xs:h-12 xs:w-12 md:h-14 md:w-14 lg:h-16 lg:w-16 overflow-hidden rounded-xl md:rounded-2xl border border-white/20 shadow-lg"
+              className="h-10 w-10 xs:h-11 xs:w-11 md:h-14 md:w-14 lg:h-16 lg:w-16 overflow-hidden rounded-lg md:rounded-2xl border border-white/20 shadow-lg"
             >
               {coverUrl ? (
                 <img src={coverUrl} alt={currentTrack.title} className="h-full w-full object-cover" />
@@ -483,23 +483,23 @@ export default function DrivePlayer({ onClose }: DrivePlayerProps) {
           </div>
 
           <div className="flex-1 min-w-0">
-            <h1 className="truncate text-xs xs:text-sm md:text-base lg:text-lg font-bold text-white">
+            <h1 className="truncate text-[11px] xs:text-xs md:text-base lg:text-lg font-bold text-white">
               {currentTrack.title}
             </h1>
-            <p className="truncate text-[10px] xs:text-xs md:text-sm text-white/60">
+            <p className="truncate text-[9px] xs:text-[10px] md:text-sm text-white/60">
               {currentTrack.artist}
             </p>
           </div>
 
           <button
             onClick={() => toggleLike(currentTrack.id)}
-            className="flex h-8 w-8 xs:h-9 xs:w-9 md:h-10 md:w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 backdrop-blur-xl shadow-lg transition hover:scale-110 hover:bg-white/20 active:scale-95 shrink-0"
+            className="flex h-7 w-7 xs:h-8 xs:w-8 md:h-10 md:w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 backdrop-blur-xl shadow-lg transition hover:scale-110 hover:bg-white/20 active:scale-95 shrink-0"
             aria-label={isLiked ? 'Unlike' : 'Like'}
           >
             {isLiked ? (
-              <RiHeartFill className="w-4 h-4 md:w-5 md:h-5 text-accent" />
+              <RiHeartFill className="w-3.5 h-3.5 md:w-5 md:h-5 text-accent" />
             ) : (
-              <RiHeartLine className="w-4 h-4 md:w-5 md:h-5 text-white/80" />
+              <RiHeartLine className="w-3.5 h-3.5 md:w-5 md:h-5 text-white/80" />
             )}
           </button>
         </div>
@@ -590,11 +590,11 @@ export default function DrivePlayer({ onClose }: DrivePlayerProps) {
 
         {/* Compact Mode - Large Album Art */}
         <div className={`absolute inset-0 flex items-center justify-center ${!showFullLyrics ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-          <div className="flex flex-col items-center gap-2 xs:gap-3 md:gap-4 lg:gap-6 max-w-md w-full px-4 md:px-6">
-            {/* Large Album Art - Responsive sizing */}
+          <div className="flex flex-col items-center gap-2 xs:gap-2.5 md:gap-4 lg:gap-6 max-w-md w-full px-3 md:px-6">
+            {/* Large Album Art - Much smaller on mobile */}
             <div 
               ref={largeCoverRef}
-              className="relative w-[min(70vw,280px)] xs:w-[min(65vw,300px)] sm:w-[min(60vw,320px)] md:w-[min(50vw,360px)] lg:w-[min(45vw,400px)] aspect-square rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl ring-2 ring-white/10"
+              className="relative w-[min(60vw,240px)] xs:w-[min(55vw,260px)] sm:w-[min(50vw,300px)] md:w-[min(45vw,340px)] lg:w-[min(40vw,380px)] aspect-square rounded-xl md:rounded-2xl lg:rounded-3xl overflow-hidden shadow-2xl ring-1 ring-white/10"
             >
               {coverUrl ? (
                 <img src={coverUrl} alt={currentTrack.title} className="h-full w-full object-cover" />
@@ -605,17 +605,17 @@ export default function DrivePlayer({ onClose }: DrivePlayerProps) {
                     background: `linear-gradient(135deg, ${currentTrack.coverGradient?.[0] || '#333'}, ${currentTrack.coverGradient?.[1] || '#222'})`,
                   }}
                 >
-                  <div className="text-white/40 text-5xl xs:text-6xl md:text-7xl lg:text-8xl">♪</div>
+                  <div className="text-white/40 text-4xl xs:text-5xl md:text-6xl lg:text-8xl">♪</div>
                 </div>
               )}
             </div>
             
-            {/* Track Info - Responsive text */}
-            <div className="text-center w-full px-2">
-              <h2 className="text-lg xs:text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-1 md:mb-2 truncate leading-tight">{currentTrack.title}</h2>
-              <p className="text-sm xs:text-base sm:text-lg md:text-xl lg:text-2xl text-white/60 truncate">{currentTrack.artist}</p>
+            {/* Track Info - Smaller text on mobile */}
+            <div className="text-center w-full px-1">
+              <h2 className="text-base xs:text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-white mb-0.5 md:mb-1 lg:mb-2 truncate leading-tight">{currentTrack.title}</h2>
+              <p className="text-xs xs:text-sm sm:text-base md:text-lg lg:text-xl text-white/60 truncate">{currentTrack.artist}</p>
               {currentTrack.album && (
-                <p className="text-xs xs:text-sm sm:text-base md:text-lg text-white/40 mt-0.5 md:mt-1 truncate">{currentTrack.album}</p>
+                <p className="text-[10px] xs:text-xs sm:text-sm md:text-base lg:text-lg text-white/40 mt-0.5 md:mt-1 truncate">{currentTrack.album}</p>
               )}
             </div>
           </div>
@@ -623,12 +623,12 @@ export default function DrivePlayer({ onClose }: DrivePlayerProps) {
       </div>
 
       {/* Bottom Controls Section - Compact & Fixed */}
-      <div className="shrink-0 px-3 md:px-4 lg:px-6 pb-3 xs:pb-4 md:pb-5 lg:pb-6 space-y-2 md:space-y-3">
+      <div className="shrink-0 px-2 md:px-4 lg:px-6 pb-2 xs:pb-3 md:pb-5 lg:pb-6 space-y-1.5 md:space-y-3">
         {/* Progress Bar */}
         <div className="drive-progress-bar w-full">
           <div
             onClick={handleSeek}
-            className="group relative h-1 xs:h-1.5 md:h-2 cursor-pointer rounded-full bg-white/20 backdrop-blur-sm transition-all hover:h-2 md:hover:h-2.5"
+            className="group relative h-0.5 xs:h-1 md:h-1.5 lg:h-2 cursor-pointer rounded-full bg-white/20 backdrop-blur-sm transition-all hover:h-1.5 md:hover:h-2.5"
           >
             <div
               className="h-full rounded-full transition-all duration-100 shadow-md pointer-events-none"
@@ -638,58 +638,58 @@ export default function DrivePlayer({ onClose }: DrivePlayerProps) {
               }}
             />
           </div>
-          <div className="mt-1 md:mt-1.5 flex justify-between text-[9px] xs:text-[10px] md:text-xs font-semibold text-white/40">
+          <div className="mt-0.5 md:mt-1.5 flex justify-between text-[8px] xs:text-[9px] md:text-xs font-semibold text-white/40">
             <span>{formatDuration(currentTime)}</span>
             <span>{formatDuration(duration)}</span>
           </div>
         </div>
 
-        {/* Playback Controls Row - Responsive sizing */}
-        <div className="drive-controls flex items-center justify-center gap-1.5 xs:gap-2 sm:gap-3 md:gap-4 lg:gap-5">
+        {/* Playback Controls Row - Much smaller on mobile */}
+        <div className="drive-controls flex items-center justify-center gap-1 xs:gap-1.5 sm:gap-2 md:gap-4 lg:gap-5">
           {/* Shuffle */}
           <button
             onClick={toggleShuffle}
-            className={`flex h-8 w-8 xs:h-9 xs:w-9 sm:h-10 sm:w-10 md:h-11 md:w-11 items-center justify-center rounded-full border backdrop-blur-xl shadow-md transition ${
+            className={`flex h-7 w-7 xs:h-8 xs:w-8 sm:h-9 sm:w-9 md:h-10 md:w-10 lg:h-11 lg:w-11 items-center justify-center rounded-full border backdrop-blur-xl shadow-md transition ${
               shuffle 
                 ? 'bg-accent/30 border-accent/50 text-accent' 
                 : 'bg-white/10 border-white/20 text-white/60 hover:bg-white/20 hover:text-white'
             }`}
             aria-label={shuffle ? 'Shuffle on' : 'Shuffle off'}
           >
-            {shuffle ? <RiShuffleFill className="w-3.5 h-3.5 xs:w-4 xs:h-4 md:w-[18px] md:h-[18px]" /> : <RiShuffleLine className="w-3.5 h-3.5 xs:w-4 xs:h-4 md:w-[18px] md:h-[18px]" />}
+            {shuffle ? <RiShuffleFill className="w-3 h-3 xs:w-3.5 xs:h-3.5 md:w-4 md:h-4 lg:w-[18px] lg:h-[18px]" /> : <RiShuffleLine className="w-3 h-3 xs:w-3.5 xs:h-3.5 md:w-4 md:h-4 lg:w-[18px] lg:h-[18px]" />}
           </button>
 
           {/* Previous */}
           <button
             onClick={prevTrack}
-            className="flex h-10 w-10 xs:h-11 xs:w-11 sm:h-12 sm:w-12 md:h-13 md:w-13 lg:h-14 lg:w-14 items-center justify-center rounded-full bg-white/10 border border-white/20 backdrop-blur-xl text-white shadow-md transition hover:bg-white/20 active:scale-90"
+            className="flex h-9 w-9 xs:h-10 xs:w-10 sm:h-11 sm:w-11 md:h-12 md:w-12 lg:h-14 lg:w-14 items-center justify-center rounded-full bg-white/10 border border-white/20 backdrop-blur-xl text-white shadow-md transition hover:bg-white/20 active:scale-90"
             aria-label="Previous track"
           >
-            <RiSkipBackFill className="w-4.5 h-4.5 xs:w-5 xs:h-5 md:w-6 md:h-6" />
+            <RiSkipBackFill className="w-4 h-4 xs:w-4.5 xs:h-4.5 md:w-5 md:h-5 lg:w-6 lg:h-6" />
           </button>
 
           {/* Play/Pause */}
           <button
             onClick={togglePlay}
-            className="flex h-12 w-12 xs:h-14 xs:w-14 sm:h-16 sm:w-16 md:h-18 md:w-18 lg:h-20 lg:w-20 items-center justify-center rounded-full bg-accent text-white shadow-xl shadow-accent/30 transition hover:scale-105 active:scale-95"
+            className="flex h-11 w-11 xs:h-12 xs:w-12 sm:h-14 sm:w-14 md:h-16 md:w-16 lg:h-20 lg:w-20 items-center justify-center rounded-full bg-accent text-white shadow-xl shadow-accent/30 transition hover:scale-105 active:scale-95"
             aria-label={isPlaying ? 'Pause' : 'Play'}
           >
-            {isPlaying ? <RiPauseFill className="w-6 h-6 xs:w-7 xs:h-7 md:w-8 md:h-8 lg:w-9 lg:h-9" /> : <RiPlayFill className="ml-0.5 xs:ml-1 w-6 h-6 xs:w-7 xs:h-7 md:w-8 md:h-8 lg:w-9 lg:h-9" />}
+            {isPlaying ? <RiPauseFill className="w-5 h-5 xs:w-6 xs:h-6 md:w-7 md:h-7 lg:w-9 lg:h-9" /> : <RiPlayFill className="ml-0.5 w-5 h-5 xs:w-6 xs:h-6 md:w-7 md:h-7 lg:w-9 lg:h-9" />}
           </button>
 
           {/* Next */}
           <button
             onClick={nextTrack}
-            className="flex h-10 w-10 xs:h-11 xs:w-11 sm:h-12 sm:w-12 md:h-13 md:w-13 lg:h-14 lg:w-14 items-center justify-center rounded-full bg-white/10 border border-white/20 backdrop-blur-xl text-white shadow-md transition hover:bg-white/20 active:scale-90"
+            className="flex h-9 w-9 xs:h-10 xs:w-10 sm:h-11 sm:w-11 md:h-12 md:w-12 lg:h-14 lg:w-14 items-center justify-center rounded-full bg-white/10 border border-white/20 backdrop-blur-xl text-white shadow-md transition hover:bg-white/20 active:scale-90"
             aria-label="Next track"
           >
-            <RiSkipForwardFill className="w-4.5 h-4.5 xs:w-5 xs:h-5 md:w-6 md:h-6" />
+            <RiSkipForwardFill className="w-4 h-4 xs:w-4.5 xs:h-4.5 md:w-5 md:h-5 lg:w-6 lg:h-6" />
           </button>
 
           {/* Repeat */}
           <button
             onClick={cycleRepeat}
-            className={`flex h-8 w-8 xs:h-9 xs:w-9 sm:h-10 sm:w-10 md:h-11 md:w-11 items-center justify-center rounded-full border backdrop-blur-xl shadow-md transition ${
+            className={`flex h-7 w-7 xs:h-8 xs:w-8 sm:h-9 sm:w-9 md:h-10 md:w-10 lg:h-11 lg:w-11 items-center justify-center rounded-full border backdrop-blur-xl shadow-md transition ${
               repeat !== 'off'
                 ? 'bg-accent/30 border-accent/50 text-accent' 
                 : 'bg-white/10 border-white/20 text-white/60 hover:bg-white/20 hover:text-white'
