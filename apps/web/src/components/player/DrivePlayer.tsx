@@ -429,45 +429,45 @@ export default function DrivePlayer({ onClose }: DrivePlayerProps) {
       }} />
       
       {/* Top Header - Compact */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0 relative z-10">
+      <div className="flex items-center justify-between px-3 sm:px-4 pt-3 sm:pt-4 pb-1.5 sm:pb-2 shrink-0 relative z-10">
         <button
           onClick={handleBack}
-          className="drive-back-button flex items-center gap-2 rounded-full border border-white/20 bg-white/10 backdrop-blur-xl px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:bg-white/20 hover:border-white/30 active:scale-95"
+          className="drive-back-button flex items-center gap-1.5 sm:gap-2 rounded-full border border-white/20 bg-white/10 backdrop-blur-xl px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold text-white shadow-lg transition hover:bg-white/20 hover:border-white/30 active:scale-95"
           aria-label="Back to fullscreen player"
         >
-          <RiArrowLeftLine size={20} />
+          <RiArrowLeftLine size={18} className="sm:w-5 sm:h-5" />
           <span>Back</span>
         </button>
         
-        <span className="drive-mode-label text-xs font-bold uppercase tracking-widest text-white/80">
+        <span className="drive-mode-label text-[10px] sm:text-xs font-bold uppercase tracking-widest text-white/80">
           Drive Mode
         </span>
 
         {/* Lyrics Toggle Button */}
         <button
           onClick={() => setShowFullLyrics(!showFullLyrics)}
-          className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold shadow-lg backdrop-blur-xl transition-all duration-300 ${
+          className={`flex items-center gap-1.5 sm:gap-2 rounded-full border px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold shadow-lg backdrop-blur-xl transition-all duration-300 ${
             showFullLyrics
               ? 'border-accent/50 bg-accent/30 text-accent hover:bg-accent/40'
               : 'border-white/20 bg-white/10 text-white hover:bg-white/20 hover:border-white/30'
           }`}
           aria-label="Toggle lyrics view"
         >
-          {showFullLyrics ? <RiImageLine size={18} /> : <RiMusic2Line size={18} />}
+          {showFullLyrics ? <RiImageLine size={16} className="sm:w-[18px] sm:h-[18px]" /> : <RiMusic2Line size={16} className="sm:w-[18px] sm:h-[18px]" />}
           <span className="hidden sm:inline">{showFullLyrics ? 'Lyrics' : 'Compact'}</span>
         </button>
       </div>
 
       {/* Compact Album Art & Track Info - Only render in lyrics mode */}
       {showFullLyrics && (
-        <div className="drive-track-info flex items-center gap-3 px-4 py-3 shrink-0 transition-opacity duration-300">
+        <div className="drive-track-info flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-3 shrink-0 transition-opacity duration-300">
           <div 
             className="relative shrink-0"
           >
             <div 
               ref={smallCoverRef}
               id="drive-mode-cover"
-              className="h-16 w-16 overflow-hidden rounded-2xl border border-white/20 shadow-lg"
+              className="h-12 w-12 sm:h-16 sm:w-16 overflow-hidden rounded-xl sm:rounded-2xl border border-white/20 shadow-lg"
             >
               {coverUrl ? (
                 <img src={coverUrl} alt={currentTrack.title} className="h-full w-full object-cover" />
@@ -483,23 +483,23 @@ export default function DrivePlayer({ onClose }: DrivePlayerProps) {
           </div>
 
           <div className="flex-1 min-w-0">
-            <h1 className="truncate text-base font-bold text-white">
+            <h1 className="truncate text-sm sm:text-base font-bold text-white">
               {currentTrack.title}
             </h1>
-            <p className="truncate text-sm text-white/60">
+            <p className="truncate text-xs sm:text-sm text-white/60">
               {currentTrack.artist}
             </p>
           </div>
 
           <button
             onClick={() => toggleLike(currentTrack.id)}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 backdrop-blur-xl shadow-lg transition hover:scale-110 hover:bg-white/20 active:scale-95 shrink-0"
+            className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 backdrop-blur-xl shadow-lg transition hover:scale-110 hover:bg-white/20 active:scale-95 shrink-0"
             aria-label={isLiked ? 'Unlike' : 'Like'}
           >
             {isLiked ? (
-              <RiHeartFill size={20} className="text-accent" />
+              <RiHeartFill size={18} className="sm:w-5 sm:h-5 text-accent" />
             ) : (
-              <RiHeartLine size={20} className="text-white/80" />
+              <RiHeartLine size={18} className="sm:w-5 sm:h-5 text-white/80" />
             )}
           </button>
         </div>
@@ -549,7 +549,7 @@ export default function DrivePlayer({ onClose }: DrivePlayerProps) {
                     className="absolute w-full max-w-3xl left-1/2 -translate-x-1/2 px-8 text-center font-bold"
                     style={{
                       top: '50%',
-                      fontSize: '1.5rem', // Fixed font size - scaling handles size changes
+                      fontSize: '1.25rem', // Smaller for mobile: 1.25rem (20px) instead of 1.5rem (24px)
                       lineHeight: '1.3',
                       transform: `translate3d(-50%, calc(-50% + ${verticalOffset.toFixed(2)}px), 0) scale(${scaleValue.toFixed(3)})`,
                       opacity: opacityValue,
@@ -590,11 +590,11 @@ export default function DrivePlayer({ onClose }: DrivePlayerProps) {
 
         {/* Compact Mode - Large Album Art */}
         <div className={`absolute inset-0 flex items-center justify-center ${!showFullLyrics ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-          <div className="flex flex-col items-center gap-6 max-w-md w-full">
+          <div className="flex flex-col items-center gap-3 sm:gap-6 max-w-md w-full px-4">
             {/* Large Album Art */}
             <div 
               ref={largeCoverRef}
-              className="relative w-full aspect-square max-w-sm rounded-3xl overflow-hidden shadow-2xl ring-2 ring-white/10"
+              className="relative w-full aspect-square max-w-[280px] sm:max-w-sm rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl ring-2 ring-white/10"
             >
               {coverUrl ? (
                 <img src={coverUrl} alt={currentTrack.title} className="h-full w-full object-cover" />
@@ -605,17 +605,17 @@ export default function DrivePlayer({ onClose }: DrivePlayerProps) {
                     background: `linear-gradient(135deg, ${currentTrack.coverGradient?.[0] || '#333'}, ${currentTrack.coverGradient?.[1] || '#222'})`,
                   }}
                 >
-                  <div className="text-white/40 text-8xl">♪</div>
+                  <div className="text-white/40 text-6xl sm:text-8xl">♪</div>
                 </div>
               )}
             </div>
             
             {/* Track Info */}
-            <div className="text-center w-full">
-              <h2 className="text-3xl font-bold text-white mb-2 truncate">{currentTrack.title}</h2>
-              <p className="text-xl text-white/60 truncate">{currentTrack.artist}</p>
+            <div className="text-center w-full px-2">
+              <h2 className="text-xl sm:text-3xl font-bold text-white mb-1 sm:mb-2 truncate">{currentTrack.title}</h2>
+              <p className="text-base sm:text-xl text-white/60 truncate">{currentTrack.artist}</p>
               {currentTrack.album && (
-                <p className="text-base text-white/40 mt-1 truncate">{currentTrack.album}</p>
+                <p className="text-sm sm:text-base text-white/40 mt-0.5 sm:mt-1 truncate">{currentTrack.album}</p>
               )}
             </div>
           </div>
@@ -623,7 +623,7 @@ export default function DrivePlayer({ onClose }: DrivePlayerProps) {
       </div>
 
       {/* Bottom Controls Section - Compact & Fixed */}
-      <div className="shrink-0 px-4 pb-6 space-y-3">
+      <div className="shrink-0 px-3 sm:px-4 pb-4 sm:pb-6 space-y-2 sm:space-y-3">
         {/* Progress Bar */}
         <div className="drive-progress-bar w-full">
           <div
@@ -638,58 +638,58 @@ export default function DrivePlayer({ onClose }: DrivePlayerProps) {
               }}
             />
           </div>
-          <div className="mt-1.5 flex justify-between text-[10px] font-semibold text-white/40">
+          <div className="mt-1 sm:mt-1.5 flex justify-between text-[9px] sm:text-[10px] font-semibold text-white/40">
             <span>{formatDuration(currentTime)}</span>
             <span>{formatDuration(duration)}</span>
           </div>
         </div>
 
         {/* Playback Controls Row */}
-        <div className="drive-controls flex items-center justify-center gap-4">
+        <div className="drive-controls flex items-center justify-center gap-2 sm:gap-4">
           {/* Shuffle */}
           <button
             onClick={toggleShuffle}
-            className={`flex h-10 w-10 items-center justify-center rounded-full border backdrop-blur-xl shadow-md transition ${
+            className={`flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full border backdrop-blur-xl shadow-md transition ${
               shuffle 
                 ? 'bg-accent/30 border-accent/50 text-accent' 
                 : 'bg-white/10 border-white/20 text-white/60 hover:bg-white/20 hover:text-white'
             }`}
             aria-label={shuffle ? 'Shuffle on' : 'Shuffle off'}
           >
-            {shuffle ? <RiShuffleFill size={18} /> : <RiShuffleLine size={18} />}
+            {shuffle ? <RiShuffleFill size={16} className="sm:w-[18px] sm:h-[18px]" /> : <RiShuffleLine size={16} className="sm:w-[18px] sm:h-[18px]" />}
           </button>
 
           {/* Previous */}
           <button
             onClick={prevTrack}
-            className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 border border-white/20 backdrop-blur-xl text-white shadow-md transition hover:bg-white/20 active:scale-90"
+            className="flex h-11 w-11 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-white/10 border border-white/20 backdrop-blur-xl text-white shadow-md transition hover:bg-white/20 active:scale-90"
             aria-label="Previous track"
           >
-            <RiSkipBackFill size={22} />
+            <RiSkipBackFill size={20} className="sm:w-[22px] sm:h-[22px]" />
           </button>
 
           {/* Play/Pause */}
           <button
             onClick={togglePlay}
-            className="flex h-16 w-16 items-center justify-center rounded-full bg-accent text-white shadow-xl shadow-accent/30 transition hover:scale-105 active:scale-95"
+            className="flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-full bg-accent text-white shadow-xl shadow-accent/30 transition hover:scale-105 active:scale-95"
             aria-label={isPlaying ? 'Pause' : 'Play'}
           >
-            {isPlaying ? <RiPauseFill size={32} /> : <RiPlayFill size={32} className="ml-1" />}
+            {isPlaying ? <RiPauseFill size={28} className="sm:w-8 sm:h-8" /> : <RiPlayFill size={28} className="ml-1 sm:w-8 sm:h-8" />}
           </button>
 
           {/* Next */}
           <button
             onClick={nextTrack}
-            className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 border border-white/20 backdrop-blur-xl text-white shadow-md transition hover:bg-white/20 active:scale-90"
+            className="flex h-11 w-11 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-white/10 border border-white/20 backdrop-blur-xl text-white shadow-md transition hover:bg-white/20 active:scale-90"
             aria-label="Next track"
           >
-            <RiSkipForwardFill size={22} />
+            <RiSkipForwardFill size={20} className="sm:w-[22px] sm:h-[22px]" />
           </button>
 
           {/* Repeat */}
           <button
             onClick={cycleRepeat}
-            className={`flex h-10 w-10 items-center justify-center rounded-full border backdrop-blur-xl shadow-md transition ${
+            className={`flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full border backdrop-blur-xl shadow-md transition ${
               repeat !== 'off'
                 ? 'bg-accent/30 border-accent/50 text-accent' 
                 : 'bg-white/10 border-white/20 text-white/60 hover:bg-white/20 hover:text-white'
