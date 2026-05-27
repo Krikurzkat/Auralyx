@@ -134,13 +134,28 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
     WebkitBackfaceVisibility: 'hidden',
     contain: 'paint',
   }), []);
-  const lyricSpacingStep = isWideLyricsViewport ? 96 : 58;
+  const lyricSpacingStep = isWideLyricsViewport ? 160 : 110;
   const lyricFontSize = isWideLyricsViewport
     ? 'clamp(1.2rem, 2.6vw, 1.9rem)'
     : 'clamp(0.85rem, 3.5vw, 1.35rem)';
-  const lyricLineHeight = isWideLyricsViewport ? '1.72' : '1.48';
+  const lyricLineHeight = isWideLyricsViewport ? '2.0' : '1.8';
   const lyricLetterSpacing = isWideLyricsViewport ? '0.045em' : '0.02em';
-  const lyricMaxHeight = isWideLyricsViewport ? '6.2em' : '4.4em';
+  const lyricMaxHeight = isWideLyricsViewport ? '7em' : '5.5em';
+
+  // Auto-adjust: Calculate dynamic spacing based on lyric line count
+  const calculateDynamicSpacing = (text: string, baseSpacing: number) => {
+    if (!text) return baseSpacing;
+    
+    // Estimate line count based on text length and viewport
+    const avgCharsPerLine = isWideLyricsViewport ? 50 : 35;
+    const estimatedLines = Math.ceil(text.length / avgCharsPerLine);
+    
+    // Multiply spacing by line count to prevent overlap
+    // 1 line = 1x, 2 lines = 1.5x, 3+ lines = 2x
+    const multiplier = estimatedLines === 1 ? 1 : estimatedLines === 2 ? 1.5 : 2;
+    
+    return baseSpacing * multiplier;
+  };
 
   // Intro animation for all elements - DISABLED for instant appearance
   useLayoutEffect(() => {
@@ -573,9 +588,13 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
                 const relativePosition = actualIndex - lyricFocusPosition;
                 const distance = Math.abs(relativePosition);
                 const direction = relativePosition < 0 ? -1 : 1;
-                const verticalOffset = direction * Math.pow(distance, 1.05) * lyricSpacingStep;
-                // Reduced scale values to prevent overlap
-                const scaleValue = 1.1 - Math.min(distance * 0.15, 0.45);
+                
+                // Auto-adjust spacing based on lyric length
+                const dynamicSpacing = calculateDynamicSpacing(line.text, lyricSpacingStep);
+                const verticalOffset = direction * Math.pow(distance, 1.25) * dynamicSpacing;
+                
+                // More aggressive scale reduction to prevent overlap
+                const scaleValue = 1.05 - Math.min(distance * 0.2, 0.55);
                 const opacityValue = Math.max(0.08, 1 - distance * 0.2);
                 const isCurrent = actualIndex === activeLyricIndex;
                 
@@ -608,8 +627,10 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      minHeight: '1.3em',
+                      minHeight: '2em',
                       maxHeight: lyricMaxHeight,
+                      paddingTop: '1em',
+                      paddingBottom: '1em',
                     }}
                   >
                     {line.text || '♪'}
