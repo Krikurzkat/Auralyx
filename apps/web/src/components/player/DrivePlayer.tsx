@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useMemo, useLayoutEffect, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { usePlayerStore } from '../../stores/playerStore';
+import { Track } from '../../types';
 import { useLibraryStore } from '../../stores/libraryStore';
 import { formatDuration, getLyricsForTrack } from '../../utils/formatters';
 import { useFluidLyricMotion } from '../../utils/lyricMotion';
@@ -20,6 +21,7 @@ import {
   RiMusic2Line,
   RiImageLine,
 } from 'react-icons/ri';
+import { usePerformance } from '../../hooks/usePerformance';
 
 interface DrivePlayerProps {
   onClose: () => void;
@@ -40,6 +42,8 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
     repeat,
     toggleShuffle,
     cycleRepeat,
+    queue,
+    queueIndex,
   } = usePlayerStore();
 
   const { likedTrackIds, toggleLike } = useLibraryStore();
@@ -52,10 +56,46 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
   const containerRef = useRef<HTMLDivElement>(null);
   const hasAnimatedRef = useRef(false);
   const previousShowFullLyricsRef = useRef<boolean | null>(null); // Track previous state
+  const driveModeTransitionRetryRef = useRef<number | null>(null);
   
   // State for compact/full lyrics mode
   const [showFullLyrics, setShowFullLyrics] = useState(false);
-  const lyricsContainerRef = useRef<HTMLDivElement>(null);
+
+  // State for idle timeout to hide controls
+  const [isIdle, setIsIdle] = useState(false);
+  const idleTimeoutRef = useRef<number | null>(null);
+  const [isWideLyricsViewport, setIsWideLyricsViewport] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 768 : false
+  );
+
+  const resetIdleTimer = useCallback(() => {
+    setIsIdle(false);
+    if (idleTimeoutRef.current !== null) {
+      window.clearTimeout(idleTimeoutRef.current);
+    }
+    idleTimeoutRef.current = window.setTimeout(() => {
+      setIsIdle(true);
+    }, 3000);
+  }, []);
+
+  useEffect(() => {
+    resetIdleTimer();
+    return () => {
+      if (idleTimeoutRef.current !== null) {
+        window.clearTimeout(idleTimeoutRef.current);
+      }
+    };
+  }, [resetIdleTimer]);
+
+  useEffect(() => {
+    const updateViewportFlags = () => {
+      setIsWideLyricsViewport(window.innerWidth >= 768);
+    };
+
+    updateViewportFlags();
+    window.addEventListener('resize', updateViewportFlags);
+    return () => window.removeEventListener('resize', updateViewportFlags);
+  }, []);
 
   const lyrics = useMemo(
     () => (currentTrack ? getLyricsForTrack(currentTrack.id, currentTrack.lyrics) : []),
@@ -73,6 +113,34 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
   const coverUrl = currentTrack?.coverUrl?.startsWith('/')
     ? `http://localhost:3001${currentTrack.coverUrl}`
     : currentTrack?.coverUrl;
+  const backgroundStartColor = currentTrack?.coverGradient?.[0] || '#FF6B35';
+  const backgroundEndColor = currentTrack?.coverGradient?.[1] || '#E8470A';
+  const driveBackgroundStyle = useMemo<CSSProperties>(() => ({
+    background: `
+      radial-gradient(circle at 0% 0%, ${backgroundStartColor}42 0%, transparent 42%),
+      radial-gradient(circle at 100% 34%, ${backgroundEndColor}36 0%, transparent 40%),
+      radial-gradient(circle at 44% 105%, rgba(139, 92, 246, 0.24) 0%, transparent 45%),
+      linear-gradient(180deg, ${backgroundStartColor}30 0%, #0a0a0a 50%, #000000 100%)
+    `,
+    transform: 'translate3d(0,0,0)',
+    backfaceVisibility: 'hidden',
+    WebkitBackfaceVisibility: 'hidden',
+    contain: 'paint',
+  }), [backgroundStartColor, backgroundEndColor]);
+  const driveGlassStyle = useMemo<CSSProperties>(() => ({
+    background: 'rgba(8, 8, 10, 0.62)',
+    transform: 'translate3d(0,0,0)',
+    backfaceVisibility: 'hidden',
+    WebkitBackfaceVisibility: 'hidden',
+    contain: 'paint',
+  }), []);
+  const lyricSpacingStep = isWideLyricsViewport ? 96 : 58;
+  const lyricFontSize = isWideLyricsViewport
+    ? 'clamp(1.2rem, 2.6vw, 1.9rem)'
+    : 'clamp(0.85rem, 3.5vw, 1.35rem)';
+  const lyricLineHeight = isWideLyricsViewport ? '1.72' : '1.48';
+  const lyricLetterSpacing = isWideLyricsViewport ? '0.045em' : '0.02em';
+  const lyricMaxHeight = isWideLyricsViewport ? '6.2em' : '4.4em';
 
   // Intro animation for all elements - DISABLED for instant appearance
   useLayoutEffect(() => {
@@ -111,6 +179,11 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
   useLayoutEffect(() => {
     const largeCover = largeCoverRef.current;
     const fullscreenRect = (window as any).__fullscreenCoverRect;
+
+    if (driveModeTransitionRetryRef.current !== null) {
+      window.clearTimeout(driveModeTransitionRetryRef.current);
+      driveModeTransitionRetryRef.current = null;
+    }
     
     // Only animate if we have fullscreen rect and we're in compact mode
     if (!largeCover || !fullscreenRect || showFullLyrics) {
@@ -121,27 +194,44 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
       }
       return;
     }
-    
-    // Wait for next frame to ensure Drive Mode is rendered
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        // Get Drive Mode large cover final position
-        const driveRect = largeCover.getBoundingClientRect();
-        
-        if (driveRect.width === 0 || driveRect.height === 0) {
-          // Element not ready yet, try again
-          setTimeout(() => {
-            const retryRect = largeCover.getBoundingClientRect();
-            if (retryRect.width > 0) {
-              animateCoverTransition(largeCover, fullscreenRect, retryRect);
-            }
-          }, 50);
+
+    gsap.killTweensOf(largeCover);
+    gsap.set(largeCover, {
+      autoAlpha: 0,
+      willChange: 'transform, opacity',
+    });
+
+    let retryCount = 0;
+    const startTransition = () => {
+      const driveRect = largeCover.getBoundingClientRect();
+      
+      if (driveRect.width === 0 || driveRect.height === 0) {
+        retryCount += 1;
+        if (retryCount > 10) {
+          gsap.set(largeCover, { clearProps: 'all' });
+          delete (window as any).__fullscreenCoverRect;
+          if ((window as any).__clearDriveModeTransition) {
+            (window as any).__clearDriveModeTransition();
+            delete (window as any).__clearDriveModeTransition;
+          }
           return;
         }
-        
-        animateCoverTransition(largeCover, fullscreenRect, driveRect);
-      });
-    });
+        driveModeTransitionRetryRef.current = window.setTimeout(startTransition, 50);
+        return;
+      }
+      
+      animateCoverTransition(largeCover, fullscreenRect, driveRect);
+    };
+
+    startTransition();
+
+    return () => {
+      if (driveModeTransitionRetryRef.current !== null) {
+        window.clearTimeout(driveModeTransitionRetryRef.current);
+        driveModeTransitionRetryRef.current = null;
+      }
+      gsap.killTweensOf(largeCover);
+    };
   }, [showFullLyrics]); // Re-run when showFullLyrics changes
   
   const animateCoverTransition = (largeCover: HTMLDivElement, fullscreenRect: any, driveRect: DOMRect) => {
@@ -159,6 +249,8 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
       scaleY: initialScaleY,
       transformOrigin: 'top left',
       zIndex: 100,
+      autoAlpha: 1,
+      willChange: 'transform, opacity',
     });
     
     // Animate to Drive Mode position
@@ -171,6 +263,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
       ease: 'expo.out',
       onComplete: () => {
         gsap.set(largeCover, { clearProps: 'all' });
+        driveModeTransitionRetryRef.current = null;
         delete (window as any).__fullscreenCoverRect;
         
         // Clear the transition flag in parent
@@ -378,50 +471,26 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
   };
 
   return (
-    <div ref={containerRef} className={`${isEmbedded ? 'absolute' : 'fixed h-screen w-screen'} inset-0 z-50 flex flex-col overflow-hidden text-white`}>
-      {/* Background Layer - Content to be blurred */}
+    <div 
+      ref={containerRef} 
+      className={`${isEmbedded ? 'absolute' : 'fixed h-screen w-screen'} inset-0 z-50 flex flex-col overflow-hidden text-white`}
+      onMouseMove={resetIdleTimer}
+      onTouchStart={resetIdleTimer}
+      onClick={resetIdleTimer}
+      style={{ cursor: isIdle ? 'none' : 'default' }}
+    >
+      {/* Background Layer - stable gradients avoid flicker from huge blurred blobs */}
       {!isEmbedded && (
-        <div className="absolute inset-0 -z-20">
-          {/* Animated gradient blobs */}
-          <div className="drive-bg-blob absolute left-[-20%] top-[-20%] h-[600px] w-[600px] rounded-full opacity-60 animate-pulse-glow" 
-            style={{ 
-              background: `radial-gradient(circle, ${currentTrack.coverGradient?.[0] || '#FF6B35'} 0%, transparent 70%)`,
-              filter: 'blur(80px)'
-            }} 
-          />
-          <div className="drive-bg-blob absolute right-[-15%] top-[30%] h-[500px] w-[500px] rounded-full opacity-50 animate-pulse-glow" 
-            style={{ 
-              background: `radial-gradient(circle, ${currentTrack.coverGradient?.[1] || '#E8470A'} 0%, transparent 70%)`,
-              filter: 'blur(80px)',
-              animationDelay: '2s'
-            }} 
-          />
-          <div className="drive-bg-blob absolute bottom-[-10%] left-[20%] h-[550px] w-[550px] rounded-full opacity-40 animate-pulse-glow" 
-            style={{ 
-              background: 'radial-gradient(circle, #8B5CF6 0%, transparent 70%)',
-              filter: 'blur(80px)',
-              animationDelay: '4s'
-            }} 
-          />
-          
-          {/* Gradient overlay */}
-          <div className="absolute inset-0" style={{
-            background: `linear-gradient(180deg, ${currentTrack.coverGradient?.[0] || '#1E1E22'}40 0%, #0a0a0a 50%, #000000 100%)`
-          }} />
-        </div>
+        <div className="absolute inset-0 -z-20" style={driveBackgroundStyle} />
       )}
       
-      {/* Glassmorphism layer with extreme blur */}
+      {/* Glassmorphism layer kept lightweight to avoid repaint flicker */}
       {!isEmbedded && (
-        <div className="absolute inset-0 -z-10" style={{
-          backdropFilter: 'blur(120px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(120px) saturate(180%)',
-          background: 'rgba(13, 13, 13, 0.4)'
-        }} />
+        <div className="absolute inset-0 -z-10" style={driveGlassStyle} />
       )}
       
       {/* Top Header - Compact */}
-      <div className="flex items-center justify-between px-2 md:px-4 lg:px-6 pt-2 md:pt-4 pb-1 md:pb-2 shrink-0 relative z-10">
+      <div className={`flex items-center justify-between px-2 md:px-4 lg:px-6 pt-2 md:pt-4 pb-1 md:pb-2 shrink-0 relative z-10 transition-opacity duration-500 ${isIdle ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
         <button
           onClick={handleBack}
           className="drive-back-button inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 backdrop-blur-xl px-3 py-1.5 text-xs font-semibold text-white shadow-lg transition hover:bg-white/20 hover:border-white/30 active:scale-95"
@@ -482,7 +551,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
 
         <button
           onClick={() => toggleLike(currentTrack.id)}
-          className="flex h-7 w-7 xs:h-8 xs:w-8 md:h-10 md:w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 backdrop-blur-xl shadow-lg transition hover:scale-110 hover:bg-white/20 active:scale-95 shrink-0"
+          className={`flex h-7 w-7 xs:h-8 xs:w-8 md:h-10 md:w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 backdrop-blur-xl shadow-lg transition hover:scale-110 hover:bg-white/20 active:scale-95 shrink-0 transition-opacity duration-500 ${isIdle ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
           aria-label={isLiked ? 'Unlike' : 'Like'}
         >
           {isLiked ? (
@@ -504,11 +573,10 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
                 const relativePosition = actualIndex - lyricFocusPosition;
                 const distance = Math.abs(relativePosition);
                 const direction = relativePosition < 0 ? -1 : 1;
-                const verticalOffset = direction * Math.pow(distance, 1.05) * 48; // Tighter spacing for Drive Mode
+                const verticalOffset = direction * Math.pow(distance, 1.05) * lyricSpacingStep;
                 // Reduced scale values to prevent overlap
                 const scaleValue = 1.1 - Math.min(distance * 0.15, 0.45);
                 const opacityValue = Math.max(0.08, 1 - distance * 0.2);
-                const glow = Math.max(0, 1 - distance * 0.52);
                 const isCurrent = actualIndex === activeLyricIndex;
                 
                 // Simplify for performance: no blur filter. Transition color from gray to white.
@@ -520,12 +588,12 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
                 return (
                   <div
                     key={`${line.time}-${actualIndex}`}
-                    className="absolute w-full max-w-3xl left-1/2 -translate-x-1/2 px-8 text-center font-bold"
+                    className="absolute left-1/2 w-full max-w-4xl -translate-x-1/2 px-8 text-center font-bold md:px-12 lg:px-16"
                     style={{
                       top: '50%',
-                      fontSize: 'clamp(0.85rem, 3.5vw, 1.35rem)', // Slightly smaller for better spacing
-                      lineHeight: '1.4',
-                      letterSpacing: '0.02em',
+                      fontSize: lyricFontSize,
+                      lineHeight: lyricLineHeight,
+                      letterSpacing: lyricLetterSpacing,
                       transform: `translate3d(-50%, calc(-50% + ${verticalOffset.toFixed(2)}px), 0) scale(${scaleValue.toFixed(3)})`,
                       opacity: opacityValue,
                       color: textColor,
@@ -541,7 +609,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
                       alignItems: 'center',
                       justifyContent: 'center',
                       minHeight: '1.3em',
-                      maxHeight: '3.9em', // Allow up to 3 lines (1.3em × 3)
+                      maxHeight: lyricMaxHeight,
                     }}
                   >
                     {line.text || '♪'}
@@ -570,7 +638,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
             {/* Large Album Art - Much smaller on mobile */}
             <div 
               ref={largeCoverRef}
-              className={`relative w-[min(60vw,240px)] xs:w-[min(55vw,260px)] sm:w-[min(50vw,300px)] md:w-[min(45vw,340px)] lg:w-[min(40vw,380px)] aspect-square rounded-xl md:rounded-2xl lg:rounded-3xl overflow-hidden shadow-2xl ring-1 ring-white/10 ${showFullLyrics ? 'opacity-0' : 'opacity-100'}`}
+              className={`relative w-[min(60vw,240px,44dvh)] xs:w-[min(55vw,260px,44dvh)] sm:w-[min(50vw,300px,44dvh)] md:w-[min(45vw,340px,44dvh)] lg:w-[min(40vw,380px,44dvh)] aspect-square rounded-xl md:rounded-2xl lg:rounded-3xl overflow-hidden shadow-2xl ring-1 ring-white/10 ${showFullLyrics ? 'opacity-0' : 'opacity-100'}`}
             >
               {coverUrl ? (
                 <img src={coverUrl} alt={currentTrack.title} className="h-full w-full object-cover" />
@@ -599,7 +667,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
       </div>
 
       {/* Bottom Controls Section - Compact & Fixed */}
-      <div className="shrink-0 px-2 md:px-4 lg:px-6 pb-2 xs:pb-3 md:pb-5 lg:pb-6 space-y-1.5 md:space-y-3">
+      <div className={`shrink-0 px-2 md:px-4 lg:px-6 pb-2 xs:pb-3 md:pb-5 lg:pb-6 space-y-1.5 md:space-y-3 transition-opacity duration-500 ${isIdle ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
         {/* Progress Bar */}
         <div className="drive-progress-bar w-full">
           <div
@@ -674,6 +742,60 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
           >
             {getRepeatIcon()}
           </button>
+        </div>
+
+        {/* Up Next dynamic popup */}
+        <UpNextPopup 
+          track={queue[queueIndex + 1] || (repeat === 'all' ? queue[0] : null)}
+          visible={progressPercent >= 75 && progressPercent <= 80}
+          isDriveMode={true}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ─── Up Next Dynamic Popup Component ─── */
+interface UpNextPopupProps {
+  track: Track | null;
+  visible: boolean;
+  isDriveMode?: boolean;
+}
+
+function UpNextPopup({ track, visible, isDriveMode = false }: UpNextPopupProps) {
+  if (!track) return null;
+  const coverGradient = track.coverGradient || ['#3b82f6', '#1e3a8a'];
+
+  return (
+    <div className={`upnext-popup-card ${isDriveMode ? 'drive-mode' : ''} ${visible ? 'visible' : 'hidden'}`}>
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-accent flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
+          Up Next
+        </span>
+        <div className="upnext-soundwave">
+          <div className="upnext-bar" style={{ height: '40%' }}></div>
+          <div className="upnext-bar" style={{ height: '70%' }}></div>
+          <div className="upnext-bar" style={{ height: '100%' }}></div>
+          <div className="upnext-bar" style={{ height: '50%' }}></div>
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        {track.coverUrl ? (
+          <img
+            src={track.coverUrl}
+            alt={track.title}
+            className="h-12 w-12 rounded-xl object-cover shadow-md border border-white/10"
+          />
+        ) : (
+          <div
+            className="h-12 w-12 rounded-xl border border-white/10 shadow-md animate-gradient"
+            style={{ background: `linear-gradient(135deg, ${coverGradient[0]}, ${coverGradient[1]})` }}
+          />
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-bold text-white truncate text-left">{track.title}</div>
+          <div className="text-[11px] text-softText truncate text-left">{track.artist}</div>
         </div>
       </div>
     </div>

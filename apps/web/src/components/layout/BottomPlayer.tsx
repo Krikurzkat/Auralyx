@@ -1,10 +1,11 @@
 import { usePlayerStore } from '../../stores/playerStore';
-import { useLibraryStore } from '../../stores/libraryStore';
 import { useLocalLibraryStore } from '../../stores/localLibraryStore';
 import { formatDuration } from '../../utils/formatters';
-import { RiShuffleLine, RiSkipBackFill, RiPlayFill, RiPauseFill, RiSkipForwardFill, RiRepeatLine, RiRepeat2Line, RiRepeatOneLine, RiVolumeUpLine, RiVolumeMuteLine, RiHeartLine, RiHeartFill, RiPlayList2Line, RiMusic2Line, RiFullscreenLine, RiComputerLine } from 'react-icons/ri';
-import { useEffect, useRef, useState, useLayoutEffect } from 'react';
+import { RiShuffleLine, RiSkipBackFill, RiPlayFill, RiPauseFill, RiSkipForwardFill, RiRepeatLine, RiRepeat2Line, RiRepeatOneLine, RiVolumeUpLine, RiVolumeMuteLine, RiPlayList2Line, RiMusic2Line, RiFullscreenLine, RiComputerLine, RiHeartLine, RiHeartFill } from 'react-icons/ri';
+import { useEffect, useRef, useState, useLayoutEffect, useCallback, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useGalaxyS8PlusLayout } from '../../hooks/useGalaxyS8PlusLayout';
+import { usePerformance } from '../../hooks/usePerformance';
 
 export const bottomPlayerCoverRef: { current: HTMLElement | null } = { current: null };
 
@@ -16,6 +17,8 @@ export default function BottomPlayer() {
   const navigate = useNavigate();
   const primaryAudioRef = useRef<HTMLAudioElement>(null);
   const secondaryAudioRef = useRef<HTMLAudioElement>(null);
+  const performanceSettings = usePerformance();
+  
   const {
     currentTrack, isPlaying, progress, currentTime, duration, volume, isMuted,
     shuffle, repeat, showLyrics, showQueue,
@@ -23,11 +26,15 @@ export default function BottomPlayer() {
     toggleShuffle, cycleRepeat, toggleLyrics, toggleQueue, setFullscreenOpen,
     setProgress, setCurrentTime, setDuration, handleTrackEnded, maybeStartAutoCrossfade,
   } = usePlayerStore();
-  const { likedTrackIds, toggleLike } = useLibraryStore();
 
   const titleContainerRef = useRef<HTMLDivElement>(null);
   const titleTextRef = useRef<HTMLSpanElement>(null);
   const [isTitleOverflowing, setIsTitleOverflowing] = useState(false);
+  const isGalaxyS8PlusLayout = useGalaxyS8PlusLayout();
+  const [isHoveringProgress, setIsHoveringProgress] = useState(false);
+  const progressBarRef = useRef<HTMLDivElement>(null);
+  const [isDraggingProgress, setIsDraggingProgress] = useState(false);
+  const [isLiked, setIsLiked] = useState(false);
 
   useLayoutEffect(() => {
     const checkOverflow = () => {
@@ -41,14 +48,15 @@ export default function BottomPlayer() {
     return () => window.removeEventListener('resize', checkOverflow);
   }, [currentTrack?.title]);
 
-  // Set audio ref on mount
+  // Register audio refs once. Volume changes are handled by playerStore.setVolume,
+  // because the active slot can switch between the two audio elements during crossfade.
   useEffect(() => {
     if (primaryAudioRef.current && secondaryAudioRef.current) {
       setAudioRefs(primaryAudioRef.current, secondaryAudioRef.current);
-      primaryAudioRef.current.volume = volume / 100;
+      primaryAudioRef.current.volume = usePlayerStore.getState().volume / 100;
       secondaryAudioRef.current.volume = 0;
     }
-  }, [setAudioRefs, volume]);
+  }, [setAudioRefs]);
 
   // Audio event handlers
   useEffect(() => {
@@ -166,10 +174,9 @@ export default function BottomPlayer() {
     };
   }, [handleTrackEnded, maybeStartAutoCrossfade, setProgress, setCurrentTime, setDuration]);
 
-  const isLiked = currentTrack ? likedTrackIds.has(currentTrack.id) : false;
-
   const repeatIcon = repeat === 'one' ? RiRepeatOneLine : repeat === 'all' ? RiRepeat2Line : RiRepeatLine;
   const RepeatIcon = repeatIcon;
+
   const openFullscreenPlayer = () => {
     if (!currentTrack) return;
     
@@ -194,149 +201,463 @@ export default function BottomPlayer() {
     setFullscreenOpen(true);
   };
 
+  // Interactive progress bar drag handler
+  const handleProgressInteraction = useCallback((clientX: number) => {
+    if (!progressBarRef.current) return;
+    const rect = progressBarRef.current.getBoundingClientRect();
+    const percent = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+    seekTo(percent);
+  }, [seekTo]);
+
+  const handleProgressMouseDown = useCallback((e: React.MouseEvent) => {
+    setIsDraggingProgress(true);
+    handleProgressInteraction(e.clientX);
+  }, [handleProgressInteraction]);
+
+  useEffect(() => {
+    if (!isDraggingProgress) return;
+    const handleMouseMove = (e: MouseEvent) => handleProgressInteraction(e.clientX);
+    const handleMouseUp = () => setIsDraggingProgress(false);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingProgress, handleProgressInteraction]);
+
+  // Gradient colors from the current track for ambient glow
+  const gradientColor1 = currentTrack?.coverGradient?.[0] || 'var(--gradient-from)';
+  const gradientColor2 = currentTrack?.coverGradient?.[1] || 'var(--gradient-to)';
+
   return (
     <>
       <audio ref={primaryAudioRef} preload="auto" />
       <audio ref={secondaryAudioRef} preload="auto" />
-      <footer className="glass-heavy fixed bottom-0 left-0 right-0 z-40 border-t border-white/5 px-3 py-2.5 md:px-5">
-        <div className="flex items-center gap-3 lg:gap-6">
-          {/* Left: Now playing */}
-          <div className="flex min-w-0 flex-1 items-center gap-3 lg:max-w-[280px]">
-            {currentTrack ? (
-              <>
-                {currentTrack.coverUrl ? (
-                  <img
-                    ref={(node) => {
-                      bottomPlayerCoverRef.current = node;
-                    }}
-                    src={currentTrack.coverUrl.startsWith('/') ? `http://localhost:3001${currentTrack.coverUrl}` : currentTrack.coverUrl}
-                    alt={currentTrack.title}
-                    className="bottom-player-cover h-12 w-12 flex-shrink-0 rounded-xl shadow-lg cursor-pointer object-cover transition hover:shadow-glow-sm"
-                    onClick={openFullscreenPlayer}
-                  />
-                ) : (
-                  <div
-                    ref={(node) => {
-                      bottomPlayerCoverRef.current = node;
-                    }}
-                    className="bottom-player-cover h-12 w-12 flex-shrink-0 rounded-xl shadow-lg cursor-pointer transition hover:shadow-glow-sm"
-                    style={{ background: `linear-gradient(135deg, ${currentTrack.coverGradient?.[0] || '#333'}, ${currentTrack.coverGradient?.[1] || '#222'})` }}
-                    onClick={openFullscreenPlayer}
-                  />
-                )}
-                <div className="flex-1 min-w-0 flex flex-col justify-center overflow-hidden" ref={titleContainerRef}>
-                  <button
-                    onClick={openFullscreenPlayer}
-                    className="block text-left text-sm font-medium transition hover:text-white w-full overflow-hidden"
-                  >
-                    <div className={`whitespace-nowrap ${isTitleOverflowing ? 'animate-marquee inline-block' : 'truncate'}`}>
-                      <span ref={titleTextRef} className={isTitleOverflowing ? 'pr-8' : ''}>{currentTrack.title}</span>
-                      {isTitleOverflowing && (
-                        <span className="pr-8" aria-hidden="true">{currentTrack.title}</span>
+      <footer
+        className={`mini-player-root fixed bottom-0 left-0 right-0 z-40 ${isGalaxyS8PlusLayout ? 'layout-galaxy-s8' : ''}`}
+      >
+        {/* Main floating card */}
+        <div
+          className={`mini-player-card relative overflow-hidden ${isGalaxyS8PlusLayout ? 'layout-galaxy-s8' : ''}`}
+        >
+          {/* Ambient glow behind card */}
+          {currentTrack && (
+            <div
+              className="absolute -inset-2 -z-10 opacity-30 blur-3xl"
+              style={{
+                background: `radial-gradient(ellipse at 30% 50%, ${gradientColor1}40, transparent 60%),
+                             radial-gradient(ellipse at 70% 50%, ${gradientColor2}30, transparent 60%)`,
+                pointerEvents: 'none',
+              }}
+            />
+          )}
+
+          {/* ─── Interactive Progress Bar (top edge) ─── */}
+          <div
+            ref={progressBarRef}
+            className="mini-player-progress-track md:hidden"
+            onMouseDown={handleProgressMouseDown}
+            onMouseEnter={() => setIsHoveringProgress(true)}
+            onMouseLeave={() => !isDraggingProgress && setIsHoveringProgress(false)}
+            onTouchStart={(e) => {
+              setIsDraggingProgress(true);
+              handleProgressInteraction(e.touches[0].clientX);
+            }}
+            onTouchMove={(e) => {
+              if (isDraggingProgress) handleProgressInteraction(e.touches[0].clientX);
+            }}
+            onTouchEnd={() => setIsDraggingProgress(false)}
+            style={{
+              position: 'relative',
+              width: '100%',
+              height: isHoveringProgress || isDraggingProgress ? '5px' : '3px',
+              cursor: 'pointer',
+              transition: 'height 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              background: 'rgba(255, 255, 255, 0.06)',
+              borderRadius: '3px 3px 0 0',
+            }}
+          >
+            {/* Progress fill */}
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                height: '100%',
+                width: `${progress}%`,
+                background: `linear-gradient(90deg, ${gradientColor1}, ${gradientColor2})`,
+                borderRadius: 'inherit',
+                transition: isDraggingProgress ? 'none' : 'width 0.15s linear',
+              }}
+            />
+            {/* Glow on the progress tip */}
+            <div
+              style={{
+                position: 'absolute',
+                top: '-3px',
+                left: `${progress}%`,
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                background: gradientColor1,
+                boxShadow: `0 0 10px ${gradientColor1}`,
+                transform: 'translateX(-50%)',
+                opacity: isHoveringProgress || isDraggingProgress ? 1 : 0,
+                transition: 'opacity 0.2s ease',
+                pointerEvents: 'none',
+              }}
+            />
+          </div>
+
+          {/* ─── Player Content ─── */}
+          <div
+            className="flex items-center justify-between w-full"
+            style={{
+              padding: isGalaxyS8PlusLayout ? '6px 10px 6px 10px' : '8px 12px 8px 12px',
+              gap: isGalaxyS8PlusLayout ? '10px' : '12px',
+            }}
+          >
+            {/* ─── Left: Album Art + Track Info ─── */}
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              {currentTrack ? (
+                <>
+                  {/* Album Cover with ambient glow */}
+                  <div className="relative shrink-0 group/cover">
+                    {/* Subtle glow behind cover */}
+                    <div
+                      className="absolute -inset-1 rounded-2xl opacity-40 blur-md transition-opacity duration-500 group-hover/cover:opacity-60"
+                      style={{
+                        background: `linear-gradient(135deg, ${gradientColor1}, ${gradientColor2})`,
+                        pointerEvents: 'none',
+                      }}
+                    />
+                    {currentTrack.coverUrl ? (
+                      <img
+                        ref={(node) => { bottomPlayerCoverRef.current = node; }}
+                        src={currentTrack.coverUrl.startsWith('/') ? `http://localhost:3001${currentTrack.coverUrl}` : currentTrack.coverUrl}
+                        alt={currentTrack.title}
+                        className="relative cursor-pointer object-cover transition-all duration-300 group-hover/cover:scale-105"
+                        style={{
+                          width: isGalaxyS8PlusLayout ? '40px' : '48px',
+                          height: isGalaxyS8PlusLayout ? '40px' : '48px',
+                          borderRadius: '12px',
+                          boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+                        }}
+                        onClick={openFullscreenPlayer}
+                      />
+                    ) : (
+                      <div
+                        ref={(node) => { bottomPlayerCoverRef.current = node; }}
+                        className="relative flex items-center justify-center cursor-pointer transition-all duration-300 group-hover/cover:scale-105"
+                        style={{
+                          width: isGalaxyS8PlusLayout ? '40px' : '48px',
+                          height: isGalaxyS8PlusLayout ? '40px' : '48px',
+                          borderRadius: '12px',
+                          background: `linear-gradient(135deg, ${gradientColor1}, ${gradientColor2})`,
+                          boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+                        }}
+                        onClick={openFullscreenPlayer}
+                      >
+                        <RiMusic2Line size={20} className="text-white/70" />
+                      </div>
+                    )}
+
+                    {/* Cover art is kept completely clean */}
+                  </div>
+
+                  {/* Track Info */}
+                  <div className="flex-1 min-w-0 flex flex-col justify-center overflow-hidden" ref={titleContainerRef}>
+                    <div className="flex items-center gap-2 min-w-0 max-w-full">
+                      <button
+                        onClick={openFullscreenPlayer}
+                        className={`block min-w-0 shrink overflow-hidden text-left transition hover:text-white ${isTitleOverflowing ? 'marquee-container-mask' : ''}`}
+                        style={{
+                          fontSize: isGalaxyS8PlusLayout ? '13px' : '14px',
+                          fontWeight: 600,
+                          lineHeight: '1.3',
+                          letterSpacing: '-0.01em',
+                        }}
+                      >
+                        <div className={`whitespace-nowrap ${isTitleOverflowing ? 'animate-marquee inline-block' : 'truncate'}`}>
+                          <span ref={titleTextRef} className={isTitleOverflowing ? 'pr-8' : ''}>{currentTrack.title}</span>
+                          {isTitleOverflowing && (
+                            <span className="pr-8" aria-hidden="true">{currentTrack.title}</span>
+                          )}
+                        </div>
+                      </button>
+
+                      {/* Dynamic Equalizer next to the title when playing */}
+                      {isPlaying && (
+                        <div className="shrink-0 flex items-end gap-[2px] h-3.5 mb-[2px] pointer-events-none" aria-hidden="true">
+                          <span className="w-[2px] bg-accent rounded-full animate-equalizer-1" style={{ animationDuration: '0.8s' }} />
+                          <span className="w-[2px] bg-accent rounded-full animate-equalizer-2" style={{ animationDuration: '0.6s' }} />
+                          <span className="w-[2px] bg-accent rounded-full animate-equalizer-3" style={{ animationDuration: '0.9s' }} />
+                        </div>
                       )}
                     </div>
-                  </button>
-                  <button onClick={() => navigate(`/artist/${currentTrack.artistId}`)} className="truncate text-xs text-softText hover:text-white hover:underline block w-full text-left">
-                    {currentTrack.artist}
-                  </button>
-                </div>
-                <button onClick={() => toggleLike(currentTrack.id)} className="flex-shrink-0 transition hover:scale-110">
-                  {isLiked ? <RiHeartFill size={18} className="text-accent" /> : <RiHeartLine size={18} className="text-softText hover:text-white" />}
-                </button>
-              </>
-            ) : (
-              <>
-                <div className="h-12 w-12 flex-shrink-0 rounded-xl bg-glass-card backdrop-blur-xl" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm text-softText">No track playing</div>
-                  <div className="text-xs text-dimText">Select a song to start</div>
-                </div>
-              </>
-            )}
-          </div>
+                    <button
+                      onClick={() => navigate(`/artist/${currentTrack.artistId}`)}
+                      className="block w-full truncate text-left hover:underline"
+                      style={{
+                        fontSize: isGalaxyS8PlusLayout ? '11px' : '12px',
+                        color: 'rgba(255,255,255,0.5)',
+                        lineHeight: '1.3',
+                        marginTop: '1px',
+                      }}
+                    >
+                      {currentTrack.artist}
+                    </button>
+                  </div>
 
-          {/* Center: Controls + progress */}
-          <div className="hidden flex-1 flex-col items-center md:flex">
-            <div className="mb-1.5 flex items-center gap-3">
+                  {/* Like button - visible on mobile */}
+                  <button
+                    onClick={() => setIsLiked(!isLiked)}
+                    className="shrink-0 md:hidden flex items-center justify-center rounded-full transition-all duration-200 active:scale-90"
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                    }}
+                    aria-label={isLiked ? 'Unlike' : 'Like'}
+                  >
+                    {isLiked ? (
+                      <RiHeartFill size={18} className="text-accent" />
+                    ) : (
+                      <RiHeartLine size={18} style={{ color: 'rgba(255,255,255,0.45)' }} />
+                    )}
+                  </button>
+                </>
+              ) : (
+                <>
+                  {/* Empty state */}
+                  <div
+                    className="shrink-0 flex items-center justify-center"
+                    style={{
+                      width: isGalaxyS8PlusLayout ? '40px' : '48px',
+                      height: isGalaxyS8PlusLayout ? '40px' : '48px',
+                      borderRadius: '12px',
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.06)',
+                    }}
+                  >
+                    <RiMusic2Line size={18} style={{ color: 'rgba(255,255,255,0.2)' }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>No track playing</div>
+                    <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.2)' }}>Select a song to start</div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* ─── Center: Desktop Transport Controls ─── */}
+            <div className="hidden flex-col items-center md:flex lg:w-[520px] lg:shrink-0 flex-1 max-w-[520px]">
+              {/* Controls */}
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={toggleShuffle}
+                  className="mini-ctrl-btn relative rounded-full p-2 transition-all duration-200 hover:bg-white/[0.06] active:scale-90 flex flex-col items-center justify-center"
+                  style={{ color: shuffle ? 'var(--accent)' : 'rgba(255,255,255,0.5)' }}
+                  aria-label="Toggle shuffle"
+                >
+                  <RiShuffleLine size={16} />
+                  {shuffle && (
+                    <span className="absolute bottom-1.5 w-1 h-1 rounded-full bg-accent shadow-[0_0_4px_rgba(var(--gradient-from-rgb,6,182,212),0.6)]" />
+                  )}
+                </button>
+                <button
+                  onClick={prevTrack}
+                  className="mini-ctrl-btn rounded-full p-2 transition-all duration-200 hover:bg-white/[0.06] active:scale-90"
+                  style={{ color: 'rgba(255,255,255,0.7)' }}
+                  aria-label="Previous track"
+                >
+                  <RiSkipBackFill size={20} />
+                </button>
+
+                {/* Play/Pause - hero button */}
+                <button
+                  onClick={togglePlay}
+                  className="mini-play-btn flex items-center justify-center rounded-full transition-all duration-200 hover:scale-105 active:scale-95"
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    background: 'rgba(255, 255, 255, 0.95)',
+                    color: '#0a0a0a',
+                    boxShadow: '0 4px 14px rgba(255,255,255,0.2)',
+                    margin: '0 4px',
+                  }}
+                  aria-label={isPlaying ? 'Pause' : 'Play'}
+                >
+                  {isPlaying ? <RiPauseFill size={20} /> : <RiPlayFill size={20} className="ml-[2px]" />}
+                </button>
+
+                <button
+                  onClick={nextTrack}
+                  className="mini-ctrl-btn rounded-full p-2 transition-all duration-200 hover:bg-white/[0.06] active:scale-90"
+                  style={{ color: 'rgba(255,255,255,0.7)' }}
+                  aria-label="Next track"
+                >
+                  <RiSkipForwardFill size={20} />
+                </button>
+                <button
+                  onClick={cycleRepeat}
+                  className="mini-ctrl-btn relative rounded-full p-2 transition-all duration-200 hover:bg-white/[0.06] active:scale-90 flex flex-col items-center justify-center"
+                  style={{ color: repeat !== 'off' ? 'var(--accent)' : 'rgba(255,255,255,0.5)' }}
+                  aria-label="Toggle repeat"
+                >
+                  <RepeatIcon size={16} />
+                  {repeat !== 'off' && (
+                    <span className="absolute bottom-1.5 w-1 h-1 rounded-full bg-accent shadow-[0_0_4px_rgba(var(--gradient-from-rgb,6,182,212),0.6)]" />
+                  )}
+                </button>
+              </div>
+
+              {/* Time + Progress */}
+              <div className="flex w-full items-center gap-2.5 mt-1" style={{ maxWidth: '480px' }}>
+                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', fontVariantNumeric: 'tabular-nums', minWidth: '36px', textAlign: 'right', lineHeight: '1' }}>
+                  {formatDuration(Math.floor(currentTime))}
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={progress}
+                  onChange={e => seekTo(Number(e.target.value))}
+                  className="accent-track h-1 flex-1 m-0 cursor-pointer block"
+                  style={{ 
+                    '--progress': `${progress}%`,
+                    background: `linear-gradient(90deg, ${gradientColor1} 0%, ${gradientColor2} ${progress}%, rgba(255,255,255,0.12) ${progress}%)`
+                  } as React.CSSProperties}
+                />
+                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', fontVariantNumeric: 'tabular-nums', minWidth: '36px', lineHeight: '1' }}>
+                  {formatDuration(Math.floor(duration))}
+                </span>
+              </div>
+            </div>
+
+            {/* ─── Mobile: Compact Controls ─── */}
+            <div className="flex items-center md:hidden" style={{ gap: isGalaxyS8PlusLayout ? '0' : '2px' }}>
               <button
-                onClick={toggleShuffle}
-                className={`rounded-full p-2 transition hover:bg-white/5 ${shuffle ? 'text-accent' : 'text-softText hover:text-white'}`}
+                onClick={prevTrack}
+                className="rounded-full flex items-center justify-center transition-all duration-200 active:scale-90"
+                style={{
+                  width: isGalaxyS8PlusLayout ? '36px' : '38px',
+                  height: isGalaxyS8PlusLayout ? '36px' : '38px',
+                  color: 'rgba(255,255,255,0.65)',
+                }}
+                aria-label="Previous track"
               >
-                <RiShuffleLine size={18} />
+                <RiSkipBackFill size={isGalaxyS8PlusLayout ? 18 : 20} />
               </button>
-              <button onClick={prevTrack} className="rounded-full p-2 text-softText transition hover:bg-white/5 hover:text-white">
-                <RiSkipBackFill size={20} />
-              </button>
+
+              {/* Mobile play/pause hero button */}
               <button
                 onClick={togglePlay}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-surface transition hover:scale-105 hover:shadow-lg"
+                className="flex items-center justify-center rounded-full transition-all duration-200 active:scale-90"
+                style={{
+                  width: isGalaxyS8PlusLayout ? '42px' : '44px',
+                  height: isGalaxyS8PlusLayout ? '42px' : '44px',
+                  background: 'rgba(255, 255, 255, 0.95)',
+                  color: '#0a0a0a',
+                  boxShadow: '0 2px 12px rgba(255,255,255,0.1)',
+                  margin: '0 2px',
+                }}
+                aria-label={isPlaying ? 'Pause playback' : 'Play track'}
               >
-                {isPlaying ? <RiPauseFill size={20} /> : <RiPlayFill size={20} className="ml-0.5" />}
+                {isPlaying ? (
+                  <RiPauseFill size={isGalaxyS8PlusLayout ? 20 : 22} />
+                ) : (
+                  <RiPlayFill size={isGalaxyS8PlusLayout ? 20 : 22} className="ml-[2px]" />
+                )}
               </button>
-              <button onClick={nextTrack} className="rounded-full p-2 text-softText transition hover:bg-white/5 hover:text-white">
-                <RiSkipForwardFill size={20} />
+
+              <button
+                onClick={nextTrack}
+                className="rounded-full flex items-center justify-center transition-all duration-200 active:scale-90"
+                style={{
+                  width: isGalaxyS8PlusLayout ? '36px' : '38px',
+                  height: isGalaxyS8PlusLayout ? '36px' : '38px',
+                  color: 'rgba(255,255,255,0.65)',
+                }}
+                aria-label="Next track"
+              >
+                <RiSkipForwardFill size={isGalaxyS8PlusLayout ? 18 : 20} />
+              </button>
+            </div>
+
+            {/* ─── Right: Desktop extras ─── */}
+            <div className="hidden flex-1 items-center justify-end gap-2.5 lg:flex">
+              <button
+                onClick={() => setIsLiked(!isLiked)}
+                className="rounded-full p-2 transition-all duration-200 hover:bg-white/[0.06] active:scale-90"
+                style={{ color: isLiked ? 'var(--accent)' : 'rgba(255,255,255,0.45)' }}
+                aria-label={isLiked ? 'Unlike' : 'Like'}
+              >
+                {isLiked ? <RiHeartFill size={16} /> : <RiHeartLine size={16} />}
               </button>
               <button
-                onClick={cycleRepeat}
-                className={`rounded-full p-2 transition hover:bg-white/5 ${repeat !== 'off' ? 'text-accent' : 'text-softText hover:text-white'}`}
+                onClick={toggleQueue}
+                className="mini-ctrl-btn relative rounded-full p-2 transition-all duration-200 hover:bg-white/[0.06] active:scale-90 flex flex-col items-center justify-center"
+                style={{ color: showQueue ? 'var(--accent)' : 'rgba(255,255,255,0.45)' }}
+                aria-label="Toggle queue"
               >
-                <RepeatIcon size={18} />
+                <RiPlayList2Line size={16} />
+                {showQueue && (
+                  <span className="absolute bottom-1.5 w-1 h-1 rounded-full bg-accent shadow-[0_0_4px_rgba(var(--gradient-from-rgb,6,182,212),0.6)]" />
+                )}
+              </button>
+              <button
+                onClick={toggleLyrics}
+                className="mini-ctrl-btn relative rounded-full p-2 transition-all duration-200 hover:bg-white/[0.06] active:scale-90 flex flex-col items-center justify-center"
+                style={{ color: showLyrics ? 'var(--accent)' : 'rgba(255,255,255,0.45)' }}
+                aria-label="Toggle lyrics"
+              >
+                <RiMusic2Line size={16} />
+                {showLyrics && (
+                  <span className="absolute bottom-1.5 w-1 h-1 rounded-full bg-accent shadow-[0_0_4px_rgba(var(--gradient-from-rgb,6,182,212),0.6)]" />
+                )}
+              </button>
+              <button
+                className="rounded-full p-2 transition-all duration-200 hover:bg-white/[0.06]"
+                style={{ color: 'rgba(255,255,255,0.45)' }}
+                aria-label="Devices"
+              >
+                <RiComputerLine size={16} />
+              </button>
+
+              {/* Volume cluster */}
+              <div className="flex items-center gap-1 ml-1">
+                <button
+                  onClick={toggleMute}
+                  className="rounded-full p-1.5 transition-all duration-200 hover:bg-white/[0.06] active:scale-90"
+                  style={{ color: 'rgba(255,255,255,0.5)' }}
+                  aria-label={isMuted ? 'Unmute' : 'Mute'}
+                >
+                  {isMuted || volume === 0 ? <RiVolumeMuteLine size={16} /> : <RiVolumeUpLine size={16} />}
+                </button>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={isMuted ? 0 : volume}
+                  onChange={e => setVolume(Number(e.target.value))}
+                  className="accent-alt-track h-1"
+                  style={{
+                    '--progress': `${isMuted ? 0 : volume}%`,
+                    width: '88px',
+                  } as React.CSSProperties}
+                />
+              </div>
+
+              <button
+                onClick={openFullscreenPlayer}
+                className="rounded-full p-2 transition-all duration-200 hover:bg-white/[0.06] hover:text-white active:scale-90"
+                style={{ color: 'rgba(255,255,255,0.45)' }}
+                aria-label="Fullscreen"
+              >
+                <RiFullscreenLine size={16} />
               </button>
             </div>
-            <div className="flex w-full max-w-lg items-center gap-2 text-[11px] text-dimText">
-              <span className="w-10 text-right">{formatDuration(Math.floor(currentTime))}</span>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={progress}
-                onChange={e => seekTo(Number(e.target.value))}
-                className="accent-track h-1 flex-1"
-                style={{ '--progress': `${progress}%` } as React.CSSProperties}
-              />
-              <span className="w-10">{formatDuration(Math.floor(duration))}</span>
-            </div>
-          </div>
-
-          {/* Mobile: simple play/pause */}
-          <div className="flex items-center gap-2 md:hidden">
-            <button onClick={prevTrack} className="p-2 text-softText">
-              <RiSkipBackFill size={20} />
-            </button>
-            <button onClick={togglePlay} className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-surface">
-              {isPlaying ? <RiPauseFill size={18} /> : <RiPlayFill size={18} className="ml-0.5" />}
-            </button>
-            <button onClick={nextTrack} className="p-2 text-softText">
-              <RiSkipForwardFill size={20} />
-            </button>
-          </div>
-
-          {/* Right: volume + extras */}
-          <div className="hidden flex-1 items-center justify-end gap-2 lg:flex lg:max-w-[280px]">
-            <button onClick={toggleQueue} className={`rounded-full p-2 transition hover:bg-white/5 ${showQueue ? 'text-accent' : 'text-softText hover:text-white'}`}>
-              <RiPlayList2Line size={18} />
-            </button>
-            <button onClick={toggleLyrics} className={`rounded-full p-2 transition hover:bg-white/5 ${showLyrics ? 'text-accent' : 'text-softText hover:text-white'}`}>
-              <RiMusic2Line size={18} />
-            </button>
-            <button className="rounded-full p-2 text-softText transition hover:bg-white/5 hover:text-white">
-              <RiComputerLine size={18} />
-            </button>
-            <button onClick={toggleMute} className="rounded-full p-1.5 text-softText transition hover:text-white">
-              {isMuted || volume === 0 ? <RiVolumeMuteLine size={18} /> : <RiVolumeUpLine size={18} />}
-            </button>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={isMuted ? 0 : volume}
-              onChange={e => setVolume(Number(e.target.value))}
-              className="accent-alt-track h-1 w-24"
-              style={{ '--progress': `${isMuted ? 0 : volume}%` } as React.CSSProperties}
-            />
-            <button onClick={openFullscreenPlayer} className="rounded-full p-2 text-softText transition hover:bg-white/5 hover:text-white">
-              <RiFullscreenLine size={18} />
-            </button>
           </div>
         </div>
       </footer>

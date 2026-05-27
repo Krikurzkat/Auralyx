@@ -11,6 +11,7 @@
   /* Primary accent uses gradient start */
   --color-accent: var(--gradient-from);
   --color-accent-hover: #0891B2;
+  --accent-alt: var(--gradient-to);
   
   /* Legacy support */
   --accent: var(--color-accent);
@@ -98,6 +99,9 @@ input[type="range"] {
   background: rgba(255,255,255,0.12);
   cursor: pointer;
   transition: all 0.15s;
+  margin: 0;
+  padding: 0;
+  display: block;
 }
 
 input[type="range"]:hover {
@@ -193,8 +197,8 @@ input[type="range"].accent-alt-track {
 }
 
 .line-clamp-1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 
 /* ─── Equalizer Bars ─── */
 .eq-bar {
@@ -203,6 +207,33 @@ input[type="range"].accent-alt-track {
   background: var(--accent);
   display: inline-block;
   vertical-align: bottom;
+}
+
+/* Optimized equalizer animation */
+@keyframes equalizer-1 {
+  0%, 100% { height: 4px; }
+  50% { height: 12px; }
+}
+@keyframes equalizer-2 {
+  0%, 100% { height: 8px; }
+  50% { height: 14px; }
+}
+@keyframes equalizer-3 {
+  0%, 100% { height: 6px; }
+  50% { height: 10px; }
+}
+
+.animate-equalizer-1 {
+  animation: equalizer-1 0.8s ease-in-out infinite;
+  will-change: height;
+}
+.animate-equalizer-2 {
+  animation: equalizer-2 0.6s ease-in-out infinite;
+  will-change: height;
+}
+.animate-equalizer-3 {
+  animation: equalizer-3 0.9s ease-in-out infinite;
+  will-change: height;
 }
 
 /* ─── Page Transitions ─── */
@@ -294,4 +325,437 @@ input[type="range"].accent-alt-track {
 
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background: rgba(255,255,255,0.25);
+}
+
+/* ─── Performance Optimizations ─── */
+
+/* Reduce motion for better performance */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Mobile & Tablet Performance Optimizations */
+@media (max-width: 1024px) {
+  /* Remove heavy blur on mobile/tablet, use mostly solid backgrounds */
+  .glass, .glass-heavy, .glass-light, .glass-card {
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+  }
+  
+  .glass { 
+    background: rgba(26, 26, 26, 0.95) !important; 
+  }
+  .glass-heavy { 
+    background: rgba(13, 13, 13, 0.98) !important; 
+  }
+  .glass-light { 
+    background: rgba(34, 34, 34, 0.95) !important; 
+  }
+  .glass-card { 
+    background: rgba(34, 34, 34, 0.95) !important; 
+  }
+
+  /* Reduce shadow blur radiuses on mobile/tablet */
+  .shadow-glow-sm { 
+    box-shadow: 0 2px 8px rgba(var(--gradient-from-rgb, 6, 182, 212), 0.2) !important; 
+  }
+  .shadow-glow { 
+    box-shadow: 0 3px 12px rgba(var(--gradient-from-rgb, 6, 182, 212), 0.25) !important; 
+  }
+  .shadow-glow-lg { 
+    box-shadow: 0 4px 16px rgba(var(--gradient-from-rgb, 6, 182, 212), 0.3) !important; 
+  }
+
+  /* Disable expensive animations on mobile/tablet */
+  .animate-pulse-glow,
+  .animate-aurora-1,
+  .animate-aurora-2,
+  .animate-aurora-3,
+  .animate-meteor {
+    animation: none !important;
+  }
+
+  /* Reduce blur effects */
+  [class*="blur-"] {
+    filter: blur(8px) !important;
+  }
+}
+
+/* Phone-specific optimizations */
+@media (max-width: 768px) {
+  /* Remove all backdrop blur on phones */
+  .glass, .glass-heavy, .glass-light, .glass-card {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  /* Minimal shadows on phones */
+  .shadow-glow-sm { 
+    box-shadow: 0 1px 4px rgba(var(--gradient-from-rgb, 6, 182, 212), 0.15) !important; 
+  }
+  .shadow-glow { 
+    box-shadow: 0 2px 8px rgba(var(--gradient-from-rgb, 6, 182, 212), 0.2) !important; 
+  }
+  .shadow-glow-lg { 
+    box-shadow: 0 3px 12px rgba(var(--gradient-from-rgb, 6, 182, 212), 0.25) !important; 
+  }
+
+  /* Disable blur completely on phones */
+  [class*="blur-"] {
+    filter: none !important;
+  }
+}
+
+/* Hardware Acceleration Utility */
+.hardware-accelerate {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Optimize animations for performance */
+.optimize-animation {
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Disable will-change by default, only use during animations */
+* {
+  will-change: auto;
+}
+
+/* ─── Mini Player Premium Styles ─── */
+.mini-player-root {
+  padding: 0 8px max(6px, env(safe-area-inset-bottom, 6px));
+  pointer-events: none;
+}
+
+.mini-player-root.layout-galaxy-s8 {
+  padding: 0 6px 4px !important;
+}
+
+@media (max-width: 768px) {
+  .mini-player-root {
+    padding: 0 4px max(4px, env(safe-area-inset-bottom, 4px));
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  .mini-player-root {
+    padding: 0 12px 8px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .mini-player-root {
+    padding: 0 24px 12px;
+  }
+}
+
+.mini-player-card {
+  pointer-events: auto;
+  transform: translateZ(0);
+  will-change: transform;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(22, 22, 22, 0.88) 0%, rgba(12, 12, 12, 0.82) 100%) !important;
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 16px 36px -12px rgba(0, 0, 0, 0.65), 
+              inset 0 1px 0 0 rgba(255, 255, 255, 0.1), 
+              inset 0 0 0 1px rgba(255, 255, 255, 0.04) !important;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.3s ease,
+              border-color 0.3s ease;
+}
+
+.mini-player-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 24px 48px -8px rgba(0, 0, 0, 0.75), 
+              inset 0 1px 0 0 rgba(255, 255, 255, 0.15), 
+              inset 0 0 0 1px rgba(255, 255, 255, 0.06) !important;
+}
+
+.mini-player-card.layout-galaxy-s8 {
+  border-radius: 14px !important;
+}
+
+/* Mini player progress bar smooth fill */
+.mini-player-progress-track {
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Mobile-specific mini player tweaks */
+@media (max-width: 768px) {
+  .mini-player-card {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(16, 16, 16, 0.95) !important;
+  }
+  
+  /* Disable expensive hover effects on mobile */
+  .mini-player-card:hover {
+    transform: none !important;
+  }
+}
+
+/* Tablet optimizations */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .mini-player-card {
+    backdrop-filter: blur(16px) saturate(160%) !important;
+    -webkit-backdrop-filter: blur(16px) saturate(160%) !important;
+  }
+}
+
+/* Large desktop refinements */
+@media (min-width: 1280px) {
+  .mini-player-card {
+    border-radius: 20px !important;
+  }
+}
+
+/* Smooth fade edges for overflowing track title */
+.marquee-container-mask {
+  mask-image: linear-gradient(to right, transparent 0%, #000 6px, #000 94%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 6px, #000 94%, transparent 100%);
+}
+
+/* Custom interactive ranges styling */
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+input[type="range"]:hover::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.24), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+/* ─── Right Panel Tab Transitions ─── */
+.rp-tab-panel {
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 0.35s ease;
+  will-change: transform, opacity;
+}
+
+.rp-tab-enter-active {
+  transform: translateX(0) translateZ(0);
+  opacity: 1;
+}
+
+.rp-tab-enter-from-right {
+  transform: translateX(24px) translateZ(0);
+  opacity: 0;
+}
+
+.rp-tab-enter-from-left {
+  transform: translateX(-24px) translateZ(0);
+  opacity: 0;
+}
+
+/* ─── Right Panel Queue Item Stagger Animation ─── */
+.rp-queue-item {
+  opacity: 0;
+  transform: translateY(12px) scale(0.98) translateZ(0);
+  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: calc(var(--queue-stagger, 0) * 40ms);
+}
+
+.rp-queue-item-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1) translateZ(0);
+}
+
+/* Disable stagger animation on mobile for better performance */
+@media (max-width: 1024px) {
+  .rp-queue-item {
+    transition-delay: 0ms !important;
+    transition-duration: 0.2s !important;
+  }
+}
+
+/* ─── Right Panel Lyric Line ─── */
+.rp-lyric-line {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Optimize lyric animations on mobile */
+@media (max-width: 1024px) {
+  .rp-lyric-line {
+    will-change: auto !important;
+  }
+}
+
+/* ─── Right Panel Lyric Glow Bar Pulse ─── */
+@keyframes rp-glow-bar-pulse {
+  0%, 100% {
+    opacity: 0.8;
+    box-shadow: 0 0 8px var(--accent), 0 0 16px var(--accent);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 14px var(--accent), 0 0 28px var(--accent);
+  }
+}
+
+.rp-lyric-glow-bar {
+  animation: rp-glow-bar-pulse 2s ease-in-out infinite;
+}
+
+/* ─── Up Next Premium Dynamic Popup ─── */
+.upnext-popup-card {
+  position: absolute;
+  bottom: 120px;
+  right: 24px;
+  width: 320px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(22, 22, 22, 0.7);
+  backdrop-filter: blur(24px) saturate(1.8);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 16px rgba(168, 85, 247, 0.15);
+  padding: 16px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity;
+}
+
+.upnext-popup-card.drive-mode {
+  bottom: 130px;
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 440px;
+  background: rgba(13, 13, 13, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.upnext-popup-card.visible {
+  opacity: 1;
+  transform: translateY(0) translateZ(0);
+}
+
+.upnext-popup-card.hidden {
+  opacity: 0;
+  transform: translateY(24px) translateZ(0);
+  pointer-events: none;
+}
+
+.upnext-popup-card.drive-mode.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0) translateZ(0);
+}
+
+.upnext-popup-card.drive-mode.hidden {
+  opacity: 0;
+  transform: translateX(-50%) translateY(32px) translateZ(0);
+  pointer-events: none;
+}
+
+/* Soundwave micro-animation */
+.upnext-soundwave {
+  display: flex;
+  align-items: flex-end;
+  gap: 2.5px;
+  height: 12px;
+}
+
+.upnext-bar {
+  width: 2px;
+  background-color: var(--accent);
+  border-radius: 1px;
+  animation: upnext-wave 0.8s ease-in-out infinite alternate;
+}
+
+.upnext-bar:nth-child(2) {
+  animation-delay: 0.15s;
+  height: 60%;
+}
+.upnext-bar:nth-child(3) {
+  animation-delay: 0.3s;
+  height: 90%;
+}
+.upnext-bar:nth-child(4) {
+  animation-delay: 0.45s;
+  height: 40%;
+}
+
+@keyframes upnext-wave {
+  0% {
+    height: 25%;
+  }
+  100% {
+    height: 100%;
+  }
+}
+
+
+/* --- Aurora Animations --- */
+@keyframes aurora-1 {
+  0%, 100% { transform: translateY(0) scale(1) translateZ(0); }
+  50% { transform: translateY(-50px) scale(1.1) translateZ(0); }
+}
+@keyframes aurora-2 {
+  0%, 100% { transform: translate(0, 0) scale(1) translateZ(0); }
+  33% { transform: translate(-30px, 50px) scale(1.05) translateZ(0); }
+  66% { transform: translate(30px, -50px) scale(0.95) translateZ(0); }
+}
+@keyframes aurora-3 {
+  0%, 100% { transform: translate(0, 0) scale(1) translateZ(0); }
+  50% { transform: translate(50px, 30px) scale(1.1) translateZ(0); }
+}
+
+.animate-aurora-1 {
+  animation: aurora-1 15s ease-in-out infinite;
+}
+.animate-aurora-2 {
+  animation: aurora-2 20s ease-in-out infinite;
+}
+.animate-aurora-3 {
+  animation: aurora-3 25s ease-in-out infinite;
+}
+
+/* Optimize pulse-glow animation */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; transform: scale(1) translateZ(0); }
+  50% { opacity: 0.8; transform: scale(1.05) translateZ(0); }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+/* --- Meteor Animations --- */
+@keyframes meteor {
+  0% { transform: rotate(215deg) translateX(0); opacity: 0; }
+  10% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { transform: rotate(215deg) translateX(-1500px); opacity: 0; }
+}
+.animate-meteor {
+  animation: meteor 5s linear infinite;
 }

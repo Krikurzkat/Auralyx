@@ -3,7 +3,7 @@ import { useLibraryStore } from '../../stores/libraryStore';
 import type { Track } from '../../types';
 import { formatDuration, getLyricsForTrack } from '../../utils/formatters';
 import { useFluidLyricMotion } from '../../utils/lyricMotion';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback, type CSSProperties } from 'react';
 import {
   RiArrowLeftLine,
   RiShuffleLine,
@@ -23,18 +23,40 @@ import {
 import { gsap } from 'gsap';
 import { bottomPlayerCoverRef } from '../layout/BottomPlayer';
 import DrivePlayer from './DrivePlayer';
+import FloatingOrbs from '../ui/FloatingOrbs';
+import { usePerformance } from '../../hooks/usePerformance';
 
-type TransitionState = 'closed' | 'opening' | 'settling' | 'open' | 'closing';
 
 // Shared ref for tracking clicked track covers
 export const clickedTrackCoverRef: { current: HTMLElement | null } = { current: null };
+
+type TransitionState = 'closed' | 'opening' | 'open' | 'closing';
+type FullscreenLayoutProfile = 'desktop' | 'tablet' | 'android' | 'iphone';
 
 function getTrackCoverUrl(track: Track | null) {
   if (!track?.coverUrl) return null;
   return track.coverUrl.startsWith('/') ? `http://localhost:3001${track.coverUrl}` : track.coverUrl;
 }
 
+function getFullscreenLayoutProfile(): FullscreenLayoutProfile {
+  if (typeof window === 'undefined') return 'desktop';
+
+  const width = window.innerWidth;
+  const userAgent = window.navigator.userAgent || '';
+  const isiPhone = /iPhone|iPod/i.test(userAgent);
+  const isAndroid = /Android/i.test(userAgent);
+  const isIPad = /iPad/i.test(userAgent)
+    || (window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1);
+
+  if (isiPhone && width < 768) return 'iphone';
+  if (isAndroid && width < 768) return 'android';
+  if (isIPad || (width >= 768 && width < 1280)) return 'tablet';
+  return 'desktop';
+}
+
 export default function FullscreenPlayer() {
+  const performanceSettings = usePerformance();
+  
   const {
     currentTrack,
     isPlaying,
@@ -69,6 +91,8 @@ export default function FullscreenPlayer() {
   const [isDriveMode, setIsDriveMode] = useState(false);
   const [isDriveModeTransitioning, setIsDriveModeTransitioning] = useState(false);
   const [isTitleOverflowing, setIsTitleOverflowing] = useState(false);
+  const [isDesktopLyricLayout, setIsDesktopLyricLayout] = useState(false);
+  const [layoutProfile, setLayoutProfile] = useState<FullscreenLayoutProfile>(() => getFullscreenLayoutProfile());
 
   const shellRef = useRef<HTMLDivElement>(null);
   const coverWrapperRef = useRef<HTMLDivElement>(null);
@@ -111,9 +135,46 @@ export default function FullscreenPlayer() {
   const shellShouldBeVisible = !!visualTrack && (isFullscreenOpen || transitionState !== 'closed');
   const RepeatIcon = repeat === 'one' ? RiRepeatOneLine : repeat === 'all' ? RiRepeat2Line : RiRepeatLine;
   const startColor = visualTrack?.coverGradient?.[0] || '#333333';
+  const endColor = visualTrack?.coverGradient?.[1] || '#E8470A';
+  const fullscreenBackgroundStyle = useMemo<CSSProperties>(() => ({
+    background: `
+      radial-gradient(circle at 0% 0%, ${startColor}42 0%, transparent 42%),
+      radial-gradient(circle at 100% 34%, ${endColor}36 0%, transparent 40%),
+      radial-gradient(circle at 44% 105%, rgba(139, 92, 246, 0.24) 0%, transparent 45%),
+      linear-gradient(180deg, ${startColor}30 0%, #0a0a0a 50%, #000000 100%)
+    `,
+    transform: 'translate3d(0,0,0)',
+    backfaceVisibility: 'hidden',
+    WebkitBackfaceVisibility: 'hidden',
+    contain: 'paint',
+  }), [startColor, endColor]);
+  const fullscreenGlassStyle = useMemo<CSSProperties>(() => ({
+    background: 'linear-gradient(180deg, rgba(4, 4, 6, 0.78) 0%, rgba(6, 6, 8, 0.84) 45%, rgba(0, 0, 0, 0.9) 100%)',
+    willChange: 'opacity',
+    transform: 'translate3d(0,0,0)',
+    backfaceVisibility: 'hidden',
+    WebkitBackfaceVisibility: 'hidden',
+    contain: 'paint',
+  }), []);
   const currentQueuePosition = queueIndex >= 0 ? queueIndex + 1 : 1;
   const isLyricsPanelActive = showLyrics || !showQueue;
   const isLiked = visualTrack ? likedTrackIds.has(visualTrack.id) : false;
+  const lyricLineGap = isDesktopLyricLayout ? 72 : 56;
+  const lyricLineHeight = isDesktopLyricLayout ? '1.42' : '1.3';
+  const fullscreenTabsTopOffset = useMemo(() => {
+    switch (layoutProfile) {
+      case 'desktop':
+        return 32;
+      case 'tablet':
+        return 18;
+      case 'android':
+        return 6;
+      case 'iphone':
+        return 2;
+      default:
+        return 0;
+    }
+  }, [layoutProfile]);
 
   const animateModeToggle = (button: HTMLButtonElement | null, hovered: boolean, active: boolean) => {
     if (!button) return;
@@ -168,6 +229,16 @@ export default function FullscreenPlayer() {
   useEffect(() => {
     animateModeToggle(driveModeButtonRef.current, false, isDriveMode);
   }, [isDriveMode]);
+
+  useEffect(() => {
+    const updateLayoutProfile = () => {
+      setLayoutProfile(getFullscreenLayoutProfile());
+    };
+
+    updateLayoutProfile();
+    window.addEventListener('resize', updateLayoutProfile);
+    return () => window.removeEventListener('resize', updateLayoutProfile);
+  }, []);
 
   const clearCloseCanvasTimeout = () => {
     if (closeCanvasTimeoutRef.current !== null) {
@@ -245,7 +316,7 @@ export default function FullscreenPlayer() {
     gsapSetIfPresent(selectWithinShell('.queue-item'), {
       clearProps: 'transform,opacity,willChange',
     });
-    gsap.set(coverWrapper, { clearProps: 'x,y,scaleX,scaleY,transformOrigin,willChange' });
+    gsap.set(coverWrapper, { clearProps: 'x,y,scaleX,scaleY,opacity,transformOrigin,willChange' });
   };
 
   const killActiveTransition = () => {
@@ -347,6 +418,15 @@ export default function FullscreenPlayer() {
     window.addEventListener('resize', checkOverflow);
     return () => window.removeEventListener('resize', checkOverflow);
   }, [visualTrack?.title]);
+
+  useEffect(() => {
+    const desktopQuery = window.matchMedia('(min-width: 1024px)');
+    const updateLyricLayout = () => setIsDesktopLyricLayout(desktopQuery.matches);
+
+    updateLyricLayout();
+    desktopQuery.addEventListener('change', updateLyricLayout);
+    return () => desktopQuery.removeEventListener('change', updateLyricLayout);
+  }, []);
 
   useLayoutEffect(() => {
     const wasOpen = previousOpenRef.current;
@@ -765,17 +845,6 @@ export default function FullscreenPlayer() {
       }
     }
 
-    // ── Atmospheric glow shift ──
-    const glowLayers = selectWithinShell('.fullscreen-glow-layer');
-    if (glowLayers.length > 0) {
-      tl.to(glowLayers, {
-        scale: toLyrics ? 1 : 1.06,
-        opacity: toLyrics ? 0.6 : 0.45,
-        duration: 0.8,
-        ease: 'power2.out',
-        stagger: 0.1,
-      }, 0);
-    }
   }, [killTabTransition, animateTabPill, selectWithinShell]);
 
   const handleShowLyrics = useCallback(() => {
@@ -923,6 +992,9 @@ export default function FullscreenPlayer() {
         driveModeTransitionRef.current.kill();
       }
 
+      // Mount DrivePlayer immediately so mobile taps do not depend on the fade callback.
+      setIsDriveMode(true);
+
       // Fade out fullscreen UI (but keep cover visible for animation)
       const tl = gsap.timeline();
       driveModeTransitionRef.current = tl;
@@ -932,10 +1004,6 @@ export default function FullscreenPlayer() {
         opacity: 0,
         duration: 0.25,
         ease: 'power2.in',
-        onComplete: () => {
-          // Switch to Drive Mode - DrivePlayer will animate the cover
-          setIsDriveMode(true);
-        }
       }, 0);
       
     } else {
@@ -1012,51 +1080,13 @@ export default function FullscreenPlayer() {
         transform: 'translateZ(0)',
       }}
     >
-      {/* Background Layer - Content to be blurred */}
-      <div className="absolute inset-0 -z-30" style={{ willChange: 'auto' }}>
-        {/* Animated gradient blobs - optimized for performance */}
-        <div className="fullscreen-glow-layer absolute left-[-20%] top-[-20%] h-[600px] w-[600px] rounded-full opacity-60" 
-          style={{ 
-            background: `radial-gradient(circle, ${visualTrack?.coverGradient?.[0] || '#FF6B35'} 0%, transparent 70%)`,
-            filter: 'blur(80px)',
-            willChange: 'auto',
-            transform: 'translateZ(0)',
-          }} 
-        />
-        <div className="fullscreen-glow-layer absolute right-[-15%] top-[30%] h-[500px] w-[500px] rounded-full opacity-50" 
-          style={{ 
-            background: `radial-gradient(circle, ${visualTrack?.coverGradient?.[1] || '#E8470A'} 0%, transparent 70%)`,
-            filter: 'blur(80px)',
-            willChange: 'auto',
-            transform: 'translateZ(0)',
-          }} 
-        />
-        <div className="fullscreen-glow-layer absolute bottom-[-10%] left-[20%] h-[550px] w-[550px] rounded-full opacity-40" 
-          style={{ 
-            background: 'radial-gradient(circle, #8B5CF6 0%, transparent 70%)',
-            filter: 'blur(80px)',
-            willChange: 'auto',
-            transform: 'translateZ(0)',
-          }} 
-        />
-        
-        {/* Gradient overlay */}
-        <div className="absolute inset-0" style={{
-          background: `linear-gradient(180deg, ${startColor}40 0%, #0a0a0a 50%, #000000 100%)`,
-          willChange: 'auto',
-        }} />
-      </div>
+      {/* Background Layer - stable gradients avoid flicker from huge blurred blobs */}
+      <div className="absolute inset-0 -z-30" style={fullscreenBackgroundStyle} />
 
-      {/* Glassmorphism layer with extreme blur */}
+      {/* Glassmorphism layer kept lightweight to avoid repaint flicker */}
       <div
         className="fullscreen-overlay-bg absolute inset-0 -z-20"
-        style={{
-          backdropFilter: 'blur(120px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(120px) saturate(180%)',
-          background: 'rgba(13, 13, 13, 0.4)',
-          willChange: 'opacity',
-          transform: 'translateZ(0)',
-        }}
+        style={fullscreenGlassStyle}
         onClick={(e) => {
           e.stopPropagation();
           startCloseTransition();
@@ -1064,6 +1094,14 @@ export default function FullscreenPlayer() {
         onMouseDown={(e) => e.stopPropagation()}
         onTouchStart={(e) => e.stopPropagation()}
       />
+
+      {/* Bottom-to-top black gradient fade */}
+      <div className="absolute inset-0 -z-10 pointer-events-none" style={{ background: 'linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 25%, rgba(0,0,0,0.4) 50%, transparent 75%)' }} />
+
+      {/* Floating Orbs - rising ember particles */}
+      <div className="absolute inset-0 -z-[5] pointer-events-none">
+        <FloatingOrbs />
+      </div>
 
       {visualTrack ? (
         <div 
@@ -1081,7 +1119,7 @@ export default function FullscreenPlayer() {
           onMouseDown={(e) => e.stopPropagation()}
           onTouchStart={(e) => e.stopPropagation()}
         >
-          <div className="fullscreen-close-btn mb-3 flex w-full justify-between items-center">
+          <div className="fullscreen-close-btn relative z-20 mb-3 flex w-full items-center justify-between">
             <button
               onClick={startCloseTransition}
               className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 backdrop-blur-xl px-3 py-1.5 text-xs font-semibold text-white shadow-lg transition hover:bg-white/20 hover:border-white/30"
@@ -1091,7 +1129,7 @@ export default function FullscreenPlayer() {
               <span>Back</span>
             </button>
             
-            <div className="flex items-center gap-3">
+            <div className="pointer-events-auto flex items-center gap-3">
               <button
                 ref={driveModeButtonRef}
                 data-gsap-ignore
@@ -1100,7 +1138,7 @@ export default function FullscreenPlayer() {
                 onPointerDown={() => pressModeToggle(driveModeButtonRef.current)}
                 onPointerUp={() => animateModeToggle(driveModeButtonRef.current, true, isDriveMode)}
                 onClick={toggleDriveMode}
-                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold shadow-lg backdrop-blur-xl transition ${
+                className={`pointer-events-auto inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold shadow-lg backdrop-blur-xl transition ${
                   isDriveMode 
                     ? 'border-accent/50 bg-accent/30 text-accent hover:bg-accent/40' 
                     : 'border-white/20 bg-white/10 text-white hover:bg-white/20 hover:border-white/30'
@@ -1113,15 +1151,16 @@ export default function FullscreenPlayer() {
             </div>
           </div>
 
-          <div className="m-auto h-full w-full max-w-5xl overflow-hidden pt-0 pb-4 flex flex-col landscape:grid landscape:grid-cols-[280px_1fr] landscape:gap-x-8 landscape:items-center lg:grid lg:grid-cols-[360px_1fr] lg:gap-x-12 lg:items-center lg:justify-center">
+          <div className="m-auto h-full w-full max-w-6xl overflow-hidden pt-0 pb-4 flex flex-col landscape:grid landscape:grid-cols-[minmax(360px,448px)_minmax(0,1fr)] landscape:gap-x-12 landscape:items-center landscape:overflow-visible lg:grid lg:grid-cols-[448px_minmax(0,1fr)] lg:gap-x-12 lg:items-center lg:justify-center relative">
             
-            <div className="portrait:contents landscape:flex landscape:flex-col landscape:justify-center landscape:h-full landscape:col-start-1 landscape:row-start-1 lg:flex lg:flex-col lg:justify-center lg:h-full lg:col-start-1 lg:row-start-1">
-              <div className="order-1 flex justify-center w-full">
+            <div className="portrait:contents landscape:flex landscape:flex-col landscape:justify-center landscape:h-full landscape:col-start-1 landscape:row-start-1 landscape:min-w-0 lg:flex lg:flex-col lg:justify-center lg:h-full lg:col-start-1 lg:row-start-1">
+              <div className="order-1 flex w-full justify-center">
                 <div
                   ref={coverWrapperRef}
                   className="fullscreen-cover-wrapper relative flex h-[44vw] w-[44vw] max-h-[220px] max-w-[220px] flex-shrink-0 items-center justify-center overflow-hidden rounded-[28px] shadow-2xl sm:h-[240px] sm:w-[240px] md:h-[280px] md:w-[280px] lg:h-[360px] lg:w-[360px]"
                   style={{
                     willChange: transitionState === 'opening' || transitionState === 'closing' || isDriveModeTransitioning ? 'transform, opacity' : 'auto',
+                    opacity: isDriveMode ? 0 : undefined,
                     position: 'relative',
                     transform: 'translateZ(0)',
                   }}
@@ -1149,7 +1188,41 @@ export default function FullscreenPlayer() {
                 </div>
               </div>
 
-              <div className="order-4 mt-4 flex w-full flex-col items-center gap-2 lg:mt-8">
+              <div className="order-2 mt-4 flex flex-col items-center landscape:mt-6 lg:mt-8 w-full">
+                <div className="flex w-full max-w-2xl flex-col items-center text-center">
+                  <div ref={titleContainerRef} className="overflow-hidden w-full px-6 md:px-8 lg:px-0">
+                    <h1 
+                      ref={titleTextRef}
+                      className={`fullscreen-track-title text-2xl font-bold leading-tight md:text-3xl ${
+                        isTitleOverflowing ? 'animate-marquee inline-block whitespace-nowrap' : 'truncate'
+                      }`}
+                    >
+                      <span className={isTitleOverflowing ? 'pr-8' : ''}>{visualTrack.title}</span>
+                      {isTitleOverflowing && (
+                        <span className="pr-8" aria-hidden="true">{visualTrack.title}</span>
+                      )}
+                    </h1>
+                  </div>
+                  <p className="fullscreen-artist mt-1 text-base text-white/70 md:text-lg truncate w-full">
+                    {visualTrack.artist}
+                  </p>
+                  <div className="fullscreen-track-badges mt-2 flex flex-wrap items-center justify-center gap-2">
+                    <span className="rounded-full border border-white/20 bg-white/10 backdrop-blur-xl px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/80 shadow-md">
+                      Queue {currentQueuePosition}/{Math.max(queue.length, 1)}
+                    </span>
+                    <span className="rounded-full border border-white/20 bg-white/10 backdrop-blur-xl px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/80 shadow-md">
+                      {visualTrack.isLocal ? 'Local Track' : 'Streaming'}
+                    </span>
+                    {repeat !== 'off' ? (
+                      <span className="rounded-full border border-accent/40 bg-accent/20 backdrop-blur-xl px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-accent shadow-md">
+                        {repeat === 'one' ? 'Repeat One' : 'Repeat All'}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+
+              <div className="order-4 mt-4 flex w-full flex-col items-center justify-center gap-2 lg:mt-6">
                 <div className="fullscreen-progress-bar mt-2 mb-2 shrink-0 self-stretch px-1 md:w-full md:max-w-md md:self-auto md:px-0">
                   <input
                     type="range"
@@ -1166,71 +1239,43 @@ export default function FullscreenPlayer() {
                   </div>
                 </div>
 
-                <div className="fullscreen-controls shrink-0 w-full max-w-md">
-                  <div className="flex items-center justify-center gap-1 sm:gap-3 w-full">
-                    <button onClick={toggleShuffle} className={`p-1.5 sm:p-2 transition ${shuffle ? 'text-accent' : 'text-white/50 hover:text-white'}`}>
-                      <RiShuffleLine size={22} />
+                <div className="fullscreen-controls shrink-0 w-full max-w-md flex justify-center landscape:max-w-full lg:max-w-md">
+                  <div className="flex items-center justify-between sm:justify-center gap-1 sm:gap-4 w-full px-2 xs:px-4 sm:px-0">
+                    <button onClick={toggleShuffle} className={`p-1 sm:p-2 transition ${shuffle ? 'text-accent' : 'text-white/50 hover:text-white'}`}>
+                      <RiShuffleLine size={24} />
                     </button>
-                    <button onClick={() => toggleLike(visualTrack.id)} className="p-1.5 sm:p-2 transition hover:scale-110">
-                      {isLiked ? <RiHeartFill size={22} className="text-accent" /> : <RiHeartLine size={22} className="text-white/50 hover:text-white" />}
+                    <button onClick={() => toggleLike(visualTrack.id)} className="p-1 sm:p-2 transition hover:scale-110">
+                      {isLiked ? <RiHeartFill size={24} className="text-accent" /> : <RiHeartLine size={24} className="text-white/50 hover:text-white" />}
                     </button>
-                    <button onClick={prevTrack} className="p-1.5 sm:p-2 text-white/70 transition hover:text-white">
-                      <RiSkipBackFill size={28} />
+                    <button onClick={prevTrack} className="p-1 sm:p-2 text-white/70 transition hover:text-white">
+                      <RiSkipBackFill size={32} />
                     </button>
-                    <button onClick={togglePlay} className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-white text-surface transition hover:scale-105 shrink-0">
-                      {isPlaying ? <RiPauseFill size={26} /> : <RiPlayFill size={26} className="ml-1" />}
+                    <button onClick={togglePlay} className="flex h-[60px] w-[60px] sm:h-16 sm:w-16 items-center justify-center rounded-full bg-white text-surface transition hover:scale-105 shrink-0 mx-2 sm:mx-0">
+                      {isPlaying ? <RiPauseFill size={32} /> : <RiPlayFill size={32} className="ml-1" />}
                     </button>
-                    <button onClick={nextTrack} className="p-1.5 sm:p-2 text-white/70 transition hover:text-white">
-                      <RiSkipForwardFill size={28} />
+                    <button onClick={nextTrack} className="p-1 sm:p-2 text-white/70 transition hover:text-white">
+                      <RiSkipForwardFill size={32} />
                     </button>
-                    <button onClick={toggleMute} className="p-1.5 sm:p-2 text-white/50 transition hover:text-white">
-                      {isMuted || volume === 0 ? <RiVolumeMuteLine size={20} /> : <RiVolumeUpLine size={20} />}
+                    <button onClick={toggleMute} className="p-1 sm:p-2 text-white/50 transition hover:text-white">
+                      {isMuted || volume === 0 ? <RiVolumeMuteLine size={22} /> : <RiVolumeUpLine size={22} />}
                     </button>
-                    <button onClick={cycleRepeat} className={`p-1.5 sm:p-2 transition ${repeat !== 'off' ? 'text-accent' : 'text-white/50 hover:text-white'}`}>
-                      <RepeatIcon size={22} />
+                    <button onClick={cycleRepeat} className={`p-1 sm:p-2 transition ${repeat !== 'off' ? 'text-accent' : 'text-white/50 hover:text-white'}`}>
+                      <RepeatIcon size={24} />
                     </button>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="portrait:contents landscape:flex landscape:flex-col landscape:justify-center landscape:h-full landscape:col-start-2 landscape:row-start-1 landscape:min-w-0 lg:flex lg:flex-col lg:justify-center lg:col-start-2 lg:row-start-1 lg:min-w-0">
-              <div className="order-2 mt-4 flex flex-col items-center landscape:mt-0 landscape:items-start lg:mt-0 lg:items-start w-full">
-                <div className="text-center landscape:text-left lg:text-left max-w-2xl w-full">
-                  <div ref={titleContainerRef} className="overflow-hidden">
-                    <h1 
-                      ref={titleTextRef}
-                      className={`fullscreen-track-title text-2xl font-bold leading-tight md:text-3xl ${
-                        isTitleOverflowing ? 'animate-marquee inline-block whitespace-nowrap' : 'truncate'
-                      }`}
-                    >
-                      <span className={isTitleOverflowing ? 'pr-8' : ''}>{visualTrack.title}</span>
-                      {isTitleOverflowing && (
-                        <span className="pr-8" aria-hidden="true">{visualTrack.title}</span>
-                      )}
-                    </h1>
-                  </div>
-                  <p className="fullscreen-artist mt-1 text-base text-white/70 md:text-lg truncate">
-                    {visualTrack.artist}
-                  </p>
-                  <div className="fullscreen-track-badges mt-2 flex flex-wrap items-center justify-center gap-2 landscape:justify-start lg:justify-start">
-                    <span className="rounded-full border border-white/20 bg-white/10 backdrop-blur-xl px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/80 shadow-md">
-                      Queue {currentQueuePosition}/{Math.max(queue.length, 1)}
-                    </span>
-                    <span className="rounded-full border border-white/20 bg-white/10 backdrop-blur-xl px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/80 shadow-md">
-                      {visualTrack.isLocal ? 'Local Track' : 'Streaming'}
-                    </span>
-                    {repeat !== 'off' ? (
-                      <span className="rounded-full border border-accent/40 bg-accent/20 backdrop-blur-xl px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-accent shadow-md">
-                        {repeat === 'one' ? 'Repeat One' : 'Repeat All'}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-
-              <div className="order-3 mt-4 flex w-full flex-1 flex-col items-center gap-2.5 overflow-hidden min-h-0 landscape:mt-4 landscape:items-start lg:mt-6 lg:items-start">
-                <div className="fullscreen-tabs relative flex w-full max-w-md items-center justify-between gap-3 rounded-2xl border border-white/20 bg-white/10 backdrop-blur-xl p-1.5 shadow-lg" style={{ transform: 'translateZ(0)' }}>
+            <div className="portrait:contents landscape:flex landscape:flex-col landscape:justify-center landscape:h-full landscape:col-start-2 landscape:row-start-1 landscape:min-w-0 landscape:pl-2 lg:flex lg:flex-col lg:justify-center lg:col-start-2 lg:row-start-1 lg:min-w-0 lg:pl-0">
+              <div className="order-3 mt-6 lg:mt-8 flex w-full flex-1 flex-col items-center gap-6 min-h-0 landscape:mt-0">
+                <div
+                  className="fullscreen-tabs relative z-10 flex w-full max-w-md items-center justify-between gap-3 rounded-2xl border border-white/20 bg-white/10 backdrop-blur-xl p-1.5 shadow-lg"
+                  style={{
+                    top: `${fullscreenTabsTopOffset}px`,
+                    transform: 'translateZ(0)',
+                  }}
+                >
                   <div
                     ref={tabPillRef}
                     className="absolute top-1.5 bottom-1.5 left-1.5 rounded-xl bg-white shadow-md z-0 pointer-events-none"
@@ -1258,18 +1303,18 @@ export default function FullscreenPlayer() {
                   </button>
                 </div>
 
-                <div className="fullscreen-lyrics-panel relative flex flex-col flex-1 w-full min-h-0 overflow-hidden lg:items-start lg:self-start">
+                <div className="fullscreen-lyrics-panel relative flex flex-col flex-1 w-full min-h-0 lg:items-center mt-2 -mb-12">
                   
                   {/* Lyrics Container */}
                   <div
                     ref={lyricsContainerRef}
-                    className="absolute inset-0 flex flex-col items-center lg:items-start w-full h-full"
+                    className="absolute inset-0 flex flex-col items-center w-full h-full"
                     style={{ 
                       willChange: tabTransitionTlRef.current ? 'transform, opacity, filter' : 'auto',
                       transform: 'translateZ(0)',
                     }}
                   >
-                    <div className="relative w-full overflow-hidden flex-1 max-w-3xl mx-auto lg:mx-0">
+                    <div className="relative w-full flex-1 max-w-3xl mx-auto" style={{ maskImage: 'linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%)' }}>
                       {lyrics.length > 0 ? (
                         <div className="absolute inset-0">
                           {visibleLyrics.map((line, index) => {
@@ -1277,7 +1322,7 @@ export default function FullscreenPlayer() {
                             const relativePosition = actualIndex - lyricFocusPosition;
                             const distance = Math.abs(relativePosition);
                             const direction = relativePosition < 0 ? -1 : 1;
-                            const verticalOffset = direction * Math.pow(distance, 1.05) * 48; // Tighter spacing to match Drive Mode
+                            const verticalOffset = direction * Math.pow(distance, 1.05) * lyricLineGap;
                             
                             // Scale down less aggressively to keep them readable when tighter
                             const focusFactor = Math.max(0, 1 - distance);
@@ -1296,11 +1341,11 @@ export default function FullscreenPlayer() {
                               <div
                                 key={`${line.time}-${actualIndex}`}
                                 data-lyric-line
-                                className="fullscreen-lyric-line-wrapper absolute w-full max-w-3xl left-1/2 -translate-x-1/2 px-8 text-center lg:text-left font-bold"
+                                className="fullscreen-lyric-line-wrapper absolute w-full max-w-3xl left-1/2 -translate-x-1/2 px-8 text-center font-bold"
                                 style={{
                                   top: '50%',
-                                  fontSize: 'clamp(0.9rem, 3.5vw, 1.5rem)',
-                                  lineHeight: '1.3',
+                                  fontSize: 'clamp(1.1rem, 4.5vw, 1.5rem)',
+                                  lineHeight: lyricLineHeight,
                                   transform: `translate3d(-50%, calc(-50% + ${verticalOffset.toFixed(2)}px), 0) scale(${scaleValue.toFixed(3)})`,
                                   opacity: opacityValue,
                                   color: textColor,
@@ -1339,10 +1384,12 @@ export default function FullscreenPlayer() {
                   {/* Queue Container */}
                   <div
                     ref={queueContainerRef}
-                    className="absolute inset-0 flex flex-col max-w-3xl mx-auto lg:mx-0 w-full h-full overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 [webkit-overflow-scrolling:touch] pb-8"
+                    className="absolute inset-0 flex flex-col max-w-3xl mx-auto w-full h-full overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 [webkit-overflow-scrolling:touch] pb-12"
                     style={{ 
                       willChange: tabTransitionTlRef.current ? 'transform, opacity, filter' : 'auto',
                       transform: 'translateZ(0)',
+                      maskImage: 'linear-gradient(to bottom, transparent 0%, black 5%, black 95%, transparent 100%)',
+                      WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 5%, black 95%, transparent 100%)'
                     }}
                   >
                     <div className="queue-metadata mb-2 flex items-center justify-between shrink-0 px-2 pt-1">
@@ -1406,6 +1453,14 @@ export default function FullscreenPlayer() {
         </div>
       ) : null}
 
+      {/* Dynamic Up Next Popup (Only active when not in Drive mode) */}
+      {!isDriveMode && (
+        <UpNextPopup 
+          track={queue[queueIndex + 1] || (repeat === 'all' ? queue[0] : null)}
+          visible={progress >= 75 && progress <= 80 && isFullscreenOpen}
+        />
+      )}
+
       {/* Embedded Drive Player for background sharing */}
       {isDriveMode && visualTrack && (
         <div 
@@ -1427,3 +1482,51 @@ export default function FullscreenPlayer() {
     </div>
   );
 }
+
+/* ─── Up Next Dynamic Popup Component ─── */
+interface UpNextPopupProps {
+  track: Track | null;
+  visible: boolean;
+  isDriveMode?: boolean;
+}
+
+function UpNextPopup({ track, visible, isDriveMode = false }: UpNextPopupProps) {
+  if (!track) return null;
+  const coverGradient = track.coverGradient || ['#3b82f6', '#1e3a8a'];
+
+  return (
+    <div className={`upnext-popup-card ${isDriveMode ? 'drive-mode' : ''} ${visible ? 'visible' : 'hidden'}`}>
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-accent flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
+          Up Next
+        </span>
+        <div className="upnext-soundwave">
+          <div className="upnext-bar" style={{ height: '40%' }}></div>
+          <div className="upnext-bar" style={{ height: '70%' }}></div>
+          <div className="upnext-bar" style={{ height: '100%' }}></div>
+          <div className="upnext-bar" style={{ height: '50%' }}></div>
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        {track.coverUrl ? (
+          <img
+            src={track.coverUrl}
+            alt={track.title}
+            className="h-12 w-12 rounded-xl object-cover shadow-md border border-white/10"
+          />
+        ) : (
+          <div
+            className="h-12 w-12 rounded-xl border border-white/10 shadow-md animate-gradient"
+            style={{ background: `linear-gradient(135deg, ${coverGradient[0]}, ${coverGradient[1]})` }}
+          />
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-bold text-white truncate text-left">{track.title}</div>
+          <div className="text-[11px] text-softText truncate text-left">{track.artist}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
