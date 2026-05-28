@@ -10,20 +10,6 @@ const configuredRedirectUri = import.meta.env.VITE_SPOTIFY_REDIRECT_URI;
 const scopes = [
   "user-read-private",
   "user-read-email",
-  "playlist-read-private",
-  "playlist-read-collaborative",
-  "user-library-read",
-  "user-library-modify",
-  "user-read-playback-state",
-  "user-modify-playback-state",
-  "user-read-currently-playing",
-  "user-read-recently-played",
-  "streaming",
-  "playlist-modify-public",
-  "playlist-modify-private",
-  "user-follow-read",
-  "user-follow-modify",
-  "user-top-read",
 ];
 
 function getRedirectUri(): string {
