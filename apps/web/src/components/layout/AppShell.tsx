@@ -6,12 +6,14 @@ import RightPanel from './RightPanel';
 import FullscreenPlayer from '../player/FullscreenPlayer';
 import { useUIStore } from '../../stores/uiStore';
 import { useGalaxyS8PlusLayout } from '../../hooks/useGalaxyS8PlusLayout';
+import { useListeningStatusSync } from '../../hooks/useListeningStatusSync';
 import AlbumArtGlow from '../ui/AlbumArtGlow';
 import BlinkingStars from '../ui/BlinkingStars';
 
 export default function AppShell() {
   const { contextMenu, closeContextMenu, modalContent, closeModal } = useUIStore();
   const isGalaxyS8PlusLayout = useGalaxyS8PlusLayout();
+  useListeningStatusSync();
 
   return (
     <div className="relative flex h-[100dvh] bg-glass backdrop-blur-2xl text-white overflow-hidden">

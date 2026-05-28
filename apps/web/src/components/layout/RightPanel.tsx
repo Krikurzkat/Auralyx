@@ -6,11 +6,33 @@ import { useMemo, useEffect, useRef, useState } from 'react';
 import { useFluidLyricMotion } from '../../utils/lyricMotion';
 import RightPanelParticles from '../ui/RightPanelParticles';
 import { usePerformance } from '../../hooks/usePerformance';
+import { useAuthStore } from '../../stores/authStore';
+import {
+  getFriendListeningActivity,
+  subscribeToFriendActivity,
+  type FriendListeningActivity,
+} from '../../services/socialActivity';
+import { isSupabaseConfigured } from '../../services/supabase';
+
+function ActivityEmptyState({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-5 text-center">
+      <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-sm font-bold text-softText">
+        --
+      </div>
+      <h3 className="text-sm font-semibold text-white/85">{title}</h3>
+      <p className="mt-1 text-xs leading-relaxed text-dimText">{body}</p>
+    </div>
+  );
+}
 
 export default function RightPanel() {
   const { currentTrack, queue, queueIndex, isPlaying, currentTime, progress, showQueue, showLyrics, removeFromQueue, playTrack } = usePlayerStore();
   const { rightPanelView, setRightPanel, reduceMotion, toggleReduceMotion } = useUIStore();
+  const user = useAuthStore((state) => state.user);
   const performanceSettings = usePerformance();
+  const [friendActivity, setFriendActivity] = useState<FriendListeningActivity[]>([]);
+  const [isActivityLoading, setIsActivityLoading] = useState(false);
 
   const lyricsContainerRef = useRef<HTMLDivElement>(null);
   const queueContainerRef = useRef<HTMLDivElement>(null);
@@ -99,13 +121,35 @@ export default function RightPanel() {
     }
   }, [rightPanelView]);
 
-  // Friend activity mock data
-  const friendActivity = [
-    { name: 'Ava', track: 'Sunset Replay', artist: 'Amber Sky', time: '2m ago', gradient: ['#EC4899', '#F43F5E'] },
-    { name: 'Marcus', track: 'Midnight Chrome', artist: 'Scarlet Avenue', time: '5m ago', gradient: ['#8B5CF6', '#6366F1'] },
-    { name: 'Lia', track: 'Focus Flow', artist: 'Circuit Dawn', time: '12m ago', gradient: ['#10B981', '#06B6D4'] },
-    { name: 'James', track: 'Crystal Rain', artist: 'Velvet Haze', time: '18m ago', gradient: ['#F59E0B', '#EF4444'] },
-  ];
+  useEffect(() => {
+    if (rightPanelView !== 'activity' || !isSupabaseConfigured || !user) {
+      setFriendActivity([]);
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadActivity = async () => {
+      setIsActivityLoading(true);
+      try {
+        const activity = await getFriendListeningActivity(user.id);
+        if (isMounted) setFriendActivity(activity);
+      } catch (error) {
+        console.warn('Failed to load friend activity:', error);
+        if (isMounted) setFriendActivity([]);
+      } finally {
+        if (isMounted) setIsActivityLoading(false);
+      }
+    };
+
+    loadActivity();
+    const unsubscribe = subscribeToFriendActivity(user.id, loadActivity);
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, [rightPanelView, user]);
 
   if (!showQueue && !showLyrics) return null;
 
@@ -601,19 +645,32 @@ export default function RightPanel() {
         {rightPanelView === 'activity' && (
           <div className={`rp-tab-panel ${tabTransitionClass} space-y-3`}>
             <div className="text-xs font-semibold uppercase tracking-wider text-dimText">Friend Activity</div>
-            {friendActivity.map((friend, i) => (
+            {!isSupabaseConfigured ? (
+              <ActivityEmptyState title="Supabase is not connected" body="Add your Supabase URL and publishable key to enable friend activity." />
+            ) : !user ? (
+              <ActivityEmptyState title="Log in to see friends" body="Friend listening status appears after you sign in." />
+            ) : friendActivity.length === 0 ? (
+              <ActivityEmptyState
+                title={isActivityLoading ? 'Loading activity' : 'No friend activity yet'}
+                body={isActivityLoading ? 'Checking what your friends are listening to...' : 'Listening status will appear here after friends are added.'}
+              />
+            ) : friendActivity.map((friend, i) => (
               <div
-                key={i}
+                key={friend.userId}
                 className={`flex items-start gap-3 rounded-xl p-3 transition hover:bg-white/5 rp-queue-item ${queueMounted ? 'rp-queue-item-visible' : ''}`}
                 style={{ '--queue-stagger': i } as React.CSSProperties}
               >
-                <div className="h-9 w-9 flex-shrink-0 rounded-full" style={{ background: `linear-gradient(135deg, ${friend.gradient[0]}, ${friend.gradient[1]})` }}>
-                  <div className="flex h-full w-full items-center justify-center text-xs font-bold">{friend.name[0]}</div>
-                </div>
+                {friend.avatarUrl ? (
+                  <img src={friend.avatarUrl} alt={friend.displayName} className="h-9 w-9 flex-shrink-0 rounded-full object-cover" />
+                ) : (
+                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-accent/20 text-xs font-bold text-accent">
+                    {friend.displayName[0]?.toUpperCase() || 'A'}
+                  </div>
+                )}
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium">{friend.name}</div>
-                  <div className="truncate text-xs text-softText">{friend.track} · {friend.artist}</div>
-                  <div className="text-[11px] text-dimText">{friend.time}</div>
+                  <div className="text-sm font-medium">{friend.displayName}</div>
+                  <div className="truncate text-xs text-softText">Listening to {friend.trackTitle} by {friend.artist}</div>
+                  <div className="text-[11px] text-dimText">{friend.isPlaying ? 'Playing now' : 'Paused'}</div>
                 </div>
               </div>
             ))}
