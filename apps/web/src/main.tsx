@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
 import AppShell from './components/layout/AppShell';
 import HomePage from './pages/HomePage';
 import SearchPage from './pages/SearchPage';
@@ -15,6 +16,7 @@ import LikedSongsPage from './pages/LikedSongsPage';
 import LoginPage from './pages/LoginPage';
 import SignUpPage from './pages/SignUpPage';
 import AdminPage from './pages/AdminPage';
+import SpotifyCallback from './pages/SpotifyCallback';
 import LocalLibraryPage from './pages/LocalLibraryPage';
 import RecentlyPlayedPage from './pages/RecentlyPlayedPage';
 import ListeningHistoryPage from './pages/ListeningHistoryPage';
@@ -104,10 +106,22 @@ function AdminRoute() {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
+      <Toaster
+        position="top-center"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: '#141414',
+            border: '1px solid rgba(255,255,255,0.1)',
+            color: '#ffffff',
+          },
+        }}
+      />
       <GlobalInteractionEffects>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignUpPage />} />
+          <Route path="/callback" element={<SpotifyCallback />} />
           <Route element={<AppShell />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/search" element={<SearchPage />} />

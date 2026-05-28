@@ -3,6 +3,7 @@ import { RiArrowLeftLine, RiPaletteLine, RiEqualizerLine, RiCheckLine } from 're
 import { useNavigate } from 'react-router-dom';
 import { usePlayerStore } from '../stores/playerStore';
 import toast from 'react-hot-toast';
+import SpotifyConnect from '../components/SpotifyConnect';
 
 interface ColorPalette {
   id: string;
@@ -161,6 +162,9 @@ export default function SettingsPage() {
           </button>
         )}
       </div>
+
+      {/* Spotify Integration */}
+      <SpotifyConnect />
 
       {/* Playback Settings */}
       <div className="rounded-2xl border border-white/5 bg-glass-card backdrop-blur-xl p-6">
