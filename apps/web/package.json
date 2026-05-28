@@ -18,7 +18,11 @@
     "@react-three/fiber": "^9.6.1",
     "@splinetool/react-spline": "^4.1.0",
     "@splinetool/runtime": "^1.12.95",
+    "@tsparticles/react": "^4.0.5",
+    "@tsparticles/slim": "^4.0.5",
+    "bootstrap": "^5.3.8",
     "buffer": "^6.0.3",
+    "framer-motion": "^12.40.0",
     "gsap": "^3.15.0",
     "music-metadata-browser": "^2.5.11",
     "react": "^18.3.1",
@@ -27,6 +31,7 @@
     "react-icons": "^5.3.0",
     "react-router-dom": "^6.28.0",
     "three": "^0.184.0",
+    "web-audio-beat-detector": "^8.2.0",
     "zustand": "^4.5.5"
   },
   "devDependencies": {
