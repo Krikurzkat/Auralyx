@@ -10,9 +10,11 @@
     "ios": {
       "icon": "./assets/expo.icon",
       "infoPlist": {
-        "UIBackgroundModes": ["audio"],
-        "NSAppleMusicUsageDescription": "Go-Music needs access to your Apple Music library to play local songs.",
-        "NSPhotoLibraryUsageDescription": "Go-Music needs access to your media library to find local music."
+        "UIBackgroundModes": [
+          "audio"
+        ],
+        "NSAppleMusicUsageDescription": "Auralyx needs access to your Apple Music library to play local songs.",
+        "NSPhotoLibraryUsageDescription": "Auralyx needs access to your media library to find local music."
       }
     },
     "android": {
@@ -27,8 +29,14 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_AUDIO",
         "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
-      ]
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.ACCESS_MEDIA_LOCATION",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO"
+      ],
+      "package": "com.johndogmoc.mobile"
     },
     "web": {
       "output": "static",
@@ -49,7 +57,7 @@
       [
         "expo-media-library",
         {
-          "photosPermission": "Allow Go-Music to access your photos and media to discover local music.",
+          "photosPermission": "Allow Auralyx to access your photos and media to discover local music.",
           "savePhotosPermission": "Allow Go-Music to save photos.",
           "isAccessMediaLocationEnabled": true
         }
@@ -58,6 +66,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "2e4a7c66-520e-483f-9c33-5bc4ae8021aa"
+      }
     }
   }
 }

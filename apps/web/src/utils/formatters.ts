@@ -21,7 +21,7 @@ export function formatListeners(n: number): string {
   return n.toString();
 }
 
-export function getLyricsForTrack(trackId: string, lrcContent?: string): LyricLine[] {
+export function getLyricsForTrack(_trackId: string, lrcContent?: string): LyricLine[] {
   // If LRC content is provided, parse it
   if (lrcContent) {
     try {

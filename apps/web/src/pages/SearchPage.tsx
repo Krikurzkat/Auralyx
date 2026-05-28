@@ -8,7 +8,7 @@ import { RiSearchLine } from 'react-icons/ri';
 type SearchTab = 'all' | 'songs' | 'artists' | 'albums' | 'playlists';
 
 export default function SearchPage() {
-  const { searchQuery, setSearchQuery } = useUIStore();
+  const { searchQuery } = useUIStore();
   const { localPlaylists, searchTracks, getMostPlayed } = useLocalLibraryStore();
   const [activeTab, setActiveTab] = useState<SearchTab>('all');
 
@@ -18,8 +18,6 @@ export default function SearchPage() {
   // Browse data (when no query)
   const browseTracks = useMemo(() => getMostPlayed(10), [getMostPlayed]);
   const browsePlaylists = useMemo(() => localPlaylists.slice(0, 10), [localPlaylists]);
-
-  const trending = useMemo(() => browseTracks.slice(0, 6).map(t => t.title), [browseTracks]);
 
   // Derived Search results
   const results = useMemo(() => {
@@ -77,17 +75,17 @@ export default function SearchPage() {
   }, [results]);
 
   return (
-    <div className="page-enter space-y-8 pb-8">
+    <div className="page-enter space-y-5 sm:space-y-8 pb-8">
       {/* No search yet — show browse */}
       {!hasQuery && (
         <>
           {/* Most listened songs - Enhanced */}
           <section>
-            <div className="mb-5 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/15">
-                <RiSearchLine size={20} className="text-accent" />
+            <div className="mb-3 sm:mb-5 flex items-center gap-2 sm:gap-3">
+              <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg sm:rounded-xl bg-accent/15">
+                <RiSearchLine size={18} className="text-accent" />
               </div>
-              <h2 className="text-2xl font-bold">Most listened songs</h2>
+              <h2 className="text-lg sm:text-2xl font-bold">Most listened songs</h2>
             </div>
             <div className="rounded-2xl border border-white/5 bg-gradient-to-br from-card/80 to-surface/60 p-2 backdrop-blur-sm">
               <div className="space-y-1">
@@ -107,8 +105,8 @@ export default function SearchPage() {
           </section>
 
           <section>
-            <h2 className="mb-5 text-2xl font-bold">Your folders</h2>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+            <h2 className="mb-3 sm:mb-5 text-lg sm:text-2xl font-bold">Your folders</h2>
+            <div className="grid grid-cols-2 gap-2 sm:gap-4 sm:grid-cols-3 lg:grid-cols-5">
               {browsePlaylists.map((playlist) => (
                 <ContentCard
                   key={playlist.id}
@@ -143,7 +141,7 @@ export default function SearchPage() {
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`flex-shrink-0 rounded-full px-5 py-2.5 text-sm font-semibold transition-all ${
+                className={`flex-shrink-0 rounded-full px-3.5 py-2 sm:px-5 sm:py-2.5 text-xs sm:text-sm font-semibold transition-all ${
                   activeTab === tab.key
                     ? 'bg-theme-gradient text-white shadow-glow-sm scale-105'
                     : 'bg-glass-card backdrop-blur-xl/80 text-softText hover:bg-glass-card backdrop-blur-xl hover:text-white border border-white/5 hover:border-white/10'
@@ -160,17 +158,17 @@ export default function SearchPage() {
             <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
               {/* Top result - Enhanced */}
               {activeTab === 'all' && results.artists.length > 0 && (
-                <div className="group rounded-3xl bg-gradient-to-br from-card via-surface to-card p-8 transition-all hover:scale-[1.02] border border-white/10 hover:border-white/20 shadow-xl hover:shadow-2xl backdrop-blur-sm">
-                  <div className="text-xs font-bold uppercase tracking-[0.2em] text-accent mb-6">Top result</div>
+                <div className="group rounded-2xl sm:rounded-3xl bg-gradient-to-br from-card via-surface to-card p-5 sm:p-8 transition-all hover:scale-[1.02] border border-white/10 hover:border-white/20 shadow-xl hover:shadow-2xl backdrop-blur-sm">
+                  <div className="text-xs font-bold uppercase tracking-[0.2em] text-accent mb-4 sm:mb-6">Top result</div>
                   <div
-                    className="mx-auto h-32 w-32 rounded-full shadow-2xl mb-6 group-hover:shadow-glow transition-shadow"
+                    className="mx-auto h-24 w-24 sm:h-32 sm:w-32 rounded-full shadow-2xl mb-4 sm:mb-6 group-hover:shadow-glow transition-shadow"
                     style={{ background: `linear-gradient(135deg, ${results.artists[0].avatarGradient?.[0] || '#333'}, ${results.artists[0].avatarGradient?.[1] || '#222'})` }}
                   >
-                    <div className="flex h-full w-full items-center justify-center rounded-full text-5xl font-black text-white/40">
+                    <div className="flex h-full w-full items-center justify-center rounded-full text-3xl font-black text-white/40">
                       {results.artists[0].name[0]}
                     </div>
                   </div>
-                  <div className="text-3xl font-black mb-2 group-hover:text-accent transition-colors">{results.artists[0].name}</div>
+                  <div className="text-xl sm:text-3xl font-black mb-2 group-hover:text-accent transition-colors">{results.artists[0].name}</div>
                   <div className="text-sm text-softText">
                     Artist · {results.artists[0].trackCount} tracks
                   </div>
@@ -179,7 +177,7 @@ export default function SearchPage() {
 
               {/* Songs list - Enhanced */}
               <div>
-                <h3 className="mb-4 text-xl font-bold">Songs</h3>
+                <h3 className="mb-3 sm:mb-4 text-base sm:text-xl font-bold">Songs</h3>
                 <div className="rounded-2xl border border-white/5 bg-gradient-to-br from-card/80 to-surface/60 p-2 backdrop-blur-sm">
                   <div className="space-y-1">
                     {results.tracks.slice(0, activeTab === 'songs' ? 50 : 5).map((track, i) => (
@@ -194,8 +192,8 @@ export default function SearchPage() {
           {/* Artists - Enhanced */}
           {(activeTab === 'all' || activeTab === 'artists') && results.artists.length > 0 && (
             <section>
-              <h3 className="mb-5 text-xl font-bold">Artists</h3>
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+              <h3 className="mb-3 sm:mb-5 text-base sm:text-xl font-bold">Artists</h3>
+              <div className="grid grid-cols-2 gap-2 sm:gap-4 sm:grid-cols-3 lg:grid-cols-5">
                 {results.artists.slice(0, activeTab === 'artists' ? 20 : 5).map(a => (
                   <ContentCard key={a.id} id={a.id} title={a.name} subtitle={`${a.trackCount} tracks`} gradient={a.avatarGradient} type="artist" round />
                 ))}
@@ -206,8 +204,8 @@ export default function SearchPage() {
           {/* Albums - Enhanced */}
           {(activeTab === 'all' || activeTab === 'albums') && results.albums.length > 0 && (
             <section>
-              <h3 className="mb-5 text-xl font-bold">Albums</h3>
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+              <h3 className="mb-3 sm:mb-5 text-base sm:text-xl font-bold">Albums</h3>
+              <div className="grid grid-cols-2 gap-2 sm:gap-4 sm:grid-cols-3 lg:grid-cols-5">
                 {results.albums.slice(0, activeTab === 'albums' ? 20 : 5).map(a => (
                   <ContentCard key={a.id} id={a.id} title={a.title} subtitle={`${a.artist}`} gradient={a.coverGradient} coverUrl={a.coverUrl} type="album" />
                 ))}
@@ -218,8 +216,8 @@ export default function SearchPage() {
           {/* Playlists - Enhanced */}
           {(activeTab === 'all' || activeTab === 'playlists') && results.playlists.length > 0 && (
             <section>
-              <h3 className="mb-5 text-xl font-bold">Playlists</h3>
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+              <h3 className="mb-3 sm:mb-5 text-base sm:text-xl font-bold">Playlists</h3>
+              <div className="grid grid-cols-2 gap-2 sm:gap-4 sm:grid-cols-3 lg:grid-cols-5">
                 {results.playlists.slice(0, activeTab === 'playlists' ? 20 : 5).map(p => (
                   <ContentCard key={p.id} id={p.id} title={p.title} subtitle={`${p.trackIds.length} tracks`} gradient={p.coverGradient} coverUrl={p.coverUrl} type="playlist" />
                 ))}
@@ -233,7 +231,7 @@ export default function SearchPage() {
               <div className="inline-flex h-24 w-24 items-center justify-center rounded-3xl bg-gradient-to-br from-accent/20 to-gradient-to/20 mb-6 shadow-xl">
                 <RiSearchLine size={48} className="text-accent" />
               </div>
-              <h3 className="text-2xl font-bold mb-3">No results found for "{searchQuery}"</h3>
+              <h3 className="text-lg sm:text-2xl font-bold mb-3">No results found for "{searchQuery}"</h3>
               <p className="text-softText text-base">Try different keywords or check your spelling</p>
             </div>
           )}

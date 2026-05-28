@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import toast from 'react-hot-toast';
 import { apiUrl, getNetworkErrorMessage } from '../services/api';
-import { loginWithSpotify } from '../services/spotifyAuth';
+import { loginWithSpotifyAuth } from '../services/spotifyAuthLogin';
 import StarParticles from '../components/ui/StarParticles';
 import AuroraBackground from '../components/ui/AuroraBackground';
 import Meteors from '../components/ui/Meteors';
@@ -59,6 +59,15 @@ export default function SignUpPage() {
       toast.error(message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSpotifySignup = async () => {
+    try {
+      await loginWithSpotifyAuth('signup');
+    } catch (err) {
+      console.error('Spotify signup error:', err);
+      toast.error('Failed to initiate Spotify signup');
     }
   };
 
@@ -149,21 +158,19 @@ export default function SignUpPage() {
         </form>
 
         {/* Divider */}
-        <div className="relative my-6">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-white/10"></div>
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-glass-heavy px-2 text-dimText">Or continue with</span>
-          </div>
+        <div className="my-6 flex items-center gap-3">
+          <div className="h-px flex-1 bg-white/10"></div>
+          <span className="text-xs text-dimText">OR</span>
+          <div className="h-px flex-1 bg-white/10"></div>
         </div>
 
-        {/* Spotify Sign Up */}
+        {/* Spotify Signup Button */}
         <button
-          onClick={() => loginWithSpotify()}
-          className="flex w-full items-center justify-center gap-3 rounded-xl border border-white/10 bg-[#1DB954] px-4 py-3.5 font-bold text-white transition hover:bg-[#1ed760] hover:shadow-lg"
+          onClick={handleSpotifySignup}
+          disabled={loading}
+          className="flex w-full items-center justify-center gap-3 rounded-xl border border-white/10 bg-[#1DB954] px-4 py-3.5 font-bold text-white transition hover:bg-[#1ed760] disabled:opacity-75"
         >
-          <svg className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor">
+          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
           </svg>
           Continue with Spotify

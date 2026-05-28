@@ -2,10 +2,9 @@ import { usePlayerStore } from '../../stores/playerStore';
 import { useLocalLibraryStore } from '../../stores/localLibraryStore';
 import { formatDuration } from '../../utils/formatters';
 import { RiShuffleLine, RiSkipBackFill, RiPlayFill, RiPauseFill, RiSkipForwardFill, RiRepeatLine, RiRepeat2Line, RiRepeatOneLine, RiVolumeUpLine, RiVolumeMuteLine, RiPlayList2Line, RiMusic2Line, RiFullscreenLine, RiComputerLine, RiHeartLine, RiHeartFill } from 'react-icons/ri';
-import { useEffect, useRef, useState, useLayoutEffect, useCallback, memo } from 'react';
+import { useEffect, useRef, useState, useLayoutEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGalaxyS8PlusLayout } from '../../hooks/useGalaxyS8PlusLayout';
-import { usePerformance } from '../../hooks/usePerformance';
 
 export const bottomPlayerCoverRef: { current: HTMLElement | null } = { current: null };
 
@@ -17,7 +16,6 @@ export default function BottomPlayer() {
   const navigate = useNavigate();
   const primaryAudioRef = useRef<HTMLAudioElement>(null);
   const secondaryAudioRef = useRef<HTMLAudioElement>(null);
-  const performanceSettings = usePerformance();
   
   const {
     currentTrack, isPlaying, progress, currentTime, duration, volume, isMuted,

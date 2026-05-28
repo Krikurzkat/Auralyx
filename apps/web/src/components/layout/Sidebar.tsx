@@ -6,11 +6,8 @@ import {
   RiMusic2Line, RiMusic2Fill,
   RiHeartLine, RiHeartFill,
   RiTimeLine,
-  RiDownloadLine,
   RiListUnordered,
   RiPlayList2Line,
-  RiMicLine,
-  RiUserFollowLine,
   RiPlayListFill,
   RiAddLine,
   RiArrowDownSLine,
@@ -22,6 +19,7 @@ import {
 import { useLibraryStore } from '../../stores/libraryStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useLocalLibraryStore } from '../../stores/localLibraryStore';
+import SidebarParticles from '../ui/SidebarParticles';
 
 const navItems = [
   { path: '/', label: 'Home', icon: RiHome5Line, iconActive: RiHome5Fill },
@@ -35,7 +33,7 @@ export default function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { likedTrackIds } = useLibraryStore();
-  const { mobileSidebarOpen, toggleMobileSidebar } = useUIStore();
+  const { mobileSidebarOpen, toggleMobileSidebar, reduceMotion } = useUIStore();
   const { localTracks, localPlaylists, isLoaded, loadLibrary } = useLocalLibraryStore();
 
   useEffect(() => {
@@ -70,11 +68,19 @@ export default function Sidebar() {
     <div className="flex h-full flex-col">
       {/* ─── TOP SECTION: Branding + Core Nav ─── */}
       <div className="mb-5 flex items-center gap-3 px-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-theme-gradient text-lg font-bold shadow-glow-sm">
-          G
+        <div className="relative h-12 w-12 flex-shrink-0 overflow-visible">
+          {!reduceMotion && (
+            <SidebarParticles variant="logo" className="absolute -inset-2" />
+          )}
+          <div className="absolute inset-1 rounded-2xl bg-accent/10 blur-md" />
+          <img 
+            src="/logo.png" 
+            alt="Auralyx Logo" 
+            className="relative z-10 h-10 w-10 object-contain"
+          />
         </div>
         <div>
-          <div className="text-base font-bold tracking-tight">Go-Music</div>
+          <div className="text-base font-bold tracking-tight">Auralyx</div>
           <div className="text-[10px] font-semibold uppercase tracking-widest text-accent">Premium</div>
         </div>
         {/* Close button on mobile */}
@@ -97,14 +103,20 @@ export default function Sidebar() {
               key={item.path}
               to={item.path}
               onClick={() => mobileSidebarOpen && toggleMobileSidebar()}
-              className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
+              className={`group relative overflow-hidden flex items-center gap-3 rounded-xl px-3 py-1.5 text-xs font-medium transition-all ${
                 isActive
                   ? 'border-l-[3px] border-accent bg-[#2A2A2A] text-white'
                   : 'border-l-[3px] border-transparent text-softText hover:border-accent hover:bg-[#2A2A2A] hover:text-white'
               }`}
             >
-              <Icon size={20} />
-              <span>{item.label}</span>
+              {isActive && !reduceMotion && (
+                <SidebarParticles variant="active" className="absolute inset-y-0 left-0 w-24" />
+              )}
+              {isActive && (
+                <span className="pointer-events-none absolute inset-y-0 left-0 w-16 bg-gradient-to-r from-accent/20 to-transparent" />
+              )}
+              <Icon size={18} className="relative z-10" />
+              <span className="relative z-10">{item.label}</span>
             </NavLink>
           );
         })}
@@ -116,17 +128,23 @@ export default function Sidebar() {
           to="/local"
           onClick={() => mobileSidebarOpen && toggleMobileSidebar()}
           className={({ isActive }) =>
-            `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all border-l-[3px] ${
+            `group relative overflow-hidden flex items-center gap-3 rounded-xl px-3 py-1.5 text-xs font-medium transition-all border-l-[3px] ${
               isActive
                 ? 'border-accent bg-[#2A2A2A] text-white'
                 : 'border-transparent text-softText hover:border-accent hover:bg-[#2A2A2A] hover:text-white'
             }`
           }
         >
-          <RiHardDriveLine size={20} />
-          <span className="flex-1">Music</span>
+          {location.pathname === '/local' && !reduceMotion && (
+            <SidebarParticles variant="active" className="absolute inset-y-0 left-0 w-24" />
+          )}
+          {location.pathname === '/local' && (
+            <span className="pointer-events-none absolute inset-y-0 left-0 w-16 bg-gradient-to-r from-accent/20 to-transparent" />
+          )}
+          <RiHardDriveLine size={18} className="relative z-10" />
+          <span className="relative z-10 flex-1">Music</span>
           {localTracks.length > 0 && (
-            <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-bold text-accent">
+            <span className="relative z-10 rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-bold text-accent">
               {localTracks.length}
             </span>
           )}
@@ -145,6 +163,7 @@ export default function Sidebar() {
           iconActive={RiHeartFill}
           badge={likedCount > 0 ? likedCount : undefined}
           currentPath={location.pathname}
+          reduceMotion={reduceMotion}
           onNavigate={() => mobileSidebarOpen && toggleMobileSidebar()}
         />
         <SidebarLink
@@ -152,6 +171,7 @@ export default function Sidebar() {
           label="Recently Played"
           icon={RiTimeLine}
           currentPath={location.pathname}
+          reduceMotion={reduceMotion}
           onNavigate={() => mobileSidebarOpen && toggleMobileSidebar()}
         />
         <SidebarLink
@@ -159,6 +179,7 @@ export default function Sidebar() {
           label="Listening History"
           icon={RiListUnordered}
           currentPath={location.pathname}
+          reduceMotion={reduceMotion}
           onNavigate={() => mobileSidebarOpen && toggleMobileSidebar()}
         />
         <SidebarLink
@@ -166,6 +187,7 @@ export default function Sidebar() {
           label="Queue"
           icon={RiPlayList2Line}
           currentPath={location.pathname}
+          reduceMotion={reduceMotion}
           onNavigate={() => mobileSidebarOpen && toggleMobileSidebar()}
         />
       </nav>
@@ -204,10 +226,10 @@ export default function Sidebar() {
                       navigate(`/artist/${artist.id}`);
                       if (mobileSidebarOpen) toggleMobileSidebar();
                     }}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm transition-all border-l-[3px] border-transparent hover:border-accent hover:bg-[#2A2A2A]"
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-1.5 text-xs transition-all border-l-[3px] border-transparent hover:border-accent hover:bg-[#2A2A2A]"
                   >
                     <div
-                      className="h-8 w-8 flex-shrink-0 rounded-full"
+                      className="h-7 w-7 flex-shrink-0 rounded-full"
                       style={{ background: `linear-gradient(135deg, ${avatarGradient[0]}, ${avatarGradient[1]})` }}
                     />
                     <span className="flex-1 truncate text-left text-white">{artist.name}</span>
@@ -232,9 +254,9 @@ export default function Sidebar() {
                   navigate('/search');
                   if (mobileSidebarOpen) toggleMobileSidebar();
                 }}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-softText transition hover:bg-[#2A2A2A] hover:text-white"
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-1.5 text-xs text-softText transition hover:bg-[#2A2A2A] hover:text-white"
               >
-                <div className="flex h-8 w-8 items-center justify-center rounded-full border border-dashed border-[#444]">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-[#444]">
                   <RiUserAddLine size={14} />
                 </div>
                 <span>Follow More</span>
@@ -272,7 +294,7 @@ export default function Sidebar() {
                     to={`/playlist/${pl.id}`}
                     onClick={() => mobileSidebarOpen && toggleMobileSidebar()}
                     className={({ isActive }) =>
-                      `flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-all border-l-[3px] ${
+                      `flex items-center gap-3 rounded-xl px-3 py-1.5 text-xs transition-all border-l-[3px] ${
                         isActive
                           ? 'border-accent bg-[#2A2A2A] text-white'
                           : 'border-transparent text-softText hover:border-accent hover:bg-[#2A2A2A] hover:text-white'
@@ -283,11 +305,11 @@ export default function Sidebar() {
                       <img
                         src={pl.coverUrl}
                         alt={pl.title}
-                        className="h-8 w-8 flex-shrink-0 rounded-lg object-cover"
+                        className="h-7 w-7 flex-shrink-0 rounded-lg object-cover"
                       />
                     ) : (
                       <div
-                        className="h-8 w-8 flex-shrink-0 rounded-lg"
+                        className="h-7 w-7 flex-shrink-0 rounded-lg"
                         style={{ background: `linear-gradient(135deg, ${coverGradient[0]}, ${coverGradient[1]})` }}
                       />
                     )}
@@ -334,10 +356,11 @@ interface SidebarLinkProps {
   iconActive?: React.ComponentType<{ size?: number; className?: string }>;
   badge?: number;
   currentPath: string;
+  reduceMotion: boolean;
   onNavigate: () => void;
 }
 
-function SidebarLink({ path, label, icon: Icon, iconActive: IconActive, badge, currentPath, onNavigate }: SidebarLinkProps) {
+function SidebarLink({ path, label, icon: Icon, iconActive: IconActive, badge, currentPath, reduceMotion, onNavigate }: SidebarLinkProps) {
   const isActive = currentPath === path;
   const ResolvedIcon = isActive && IconActive ? IconActive : Icon;
 
@@ -345,18 +368,24 @@ function SidebarLink({ path, label, icon: Icon, iconActive: IconActive, badge, c
     <NavLink
       to={path}
       onClick={onNavigate}
-      className={`group flex items-center justify-between rounded-xl px-3 py-2 text-sm transition-all border-l-[3px] ${
+      className={`group relative overflow-hidden flex items-center justify-between rounded-xl px-3 py-1.5 text-xs transition-all border-l-[3px] ${
         isActive
           ? 'border-accent bg-[#2A2A2A] text-white'
           : 'border-transparent text-softText hover:border-accent hover:bg-[#2A2A2A] hover:text-white'
       }`}
     >
-      <span className="flex items-center gap-3">
-        <ResolvedIcon size={20} />
+      {isActive && !reduceMotion && (
+        <SidebarParticles variant="active" className="absolute inset-y-0 left-0 w-24" />
+      )}
+      {isActive && (
+        <span className="pointer-events-none absolute inset-y-0 left-0 w-16 bg-gradient-to-r from-accent/20 to-transparent" />
+      )}
+      <span className="relative z-10 flex items-center gap-3">
+        <ResolvedIcon size={18} />
         <span>{label}</span>
       </span>
       {badge !== undefined && badge > 0 && (
-        <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold text-white">
+        <span className="relative z-10 rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold text-white">
           {badge}
         </span>
       )}

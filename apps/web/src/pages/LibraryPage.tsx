@@ -59,19 +59,19 @@ export default function LibraryPage() {
   ];
 
   return (
-    <div className="page-enter space-y-8">
+    <div className="page-enter space-y-5 sm:space-y-8">
       {/* Header - Enhanced */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-black tracking-tight">Your Library</h1>
-          <p className="mt-2 text-sm text-softText">Manage your music collection</p>
+          <h1 className="text-2xl sm:text-4xl font-black tracking-tight">Your Library</h1>
+          <p className="mt-1 sm:mt-2 text-xs sm:text-sm text-softText">Manage your music collection</p>
         </div>
         <button
           onClick={() => {
             const name = prompt('Enter playlist name:');
             if (name) createPlaylist(name);
           }}
-          className="flex items-center gap-2 rounded-full bg-theme-gradient px-6 py-3 text-sm font-bold text-white transition-all hover:scale-105 hover:shadow-glow-sm active:scale-95"
+          className="flex items-center gap-1.5 sm:gap-2 rounded-full bg-theme-gradient px-4 py-2.5 sm:px-6 sm:py-3 text-xs sm:text-sm font-bold text-white transition-all hover:scale-105 hover:shadow-glow-sm active:scale-95"
         >
           <RiAddLine size={18} /> Create playlist
         </button>
@@ -80,14 +80,15 @@ export default function LibraryPage() {
       {/* Liked songs banner - Enhanced */}
       <button
         onClick={() => navigate('/liked')}
-        className="group flex w-full items-center gap-5 rounded-3xl bg-gradient-to-br from-gradient-from/20 via-accent/10 to-gradient-to/10 p-6 text-left transition-all hover:from-accent/30 hover:via-accent/15 hover:to-gradient-to/15 hover:scale-[1.01] border border-accent/20 hover:border-accent/30 shadow-xl hover:shadow-2xl backdrop-blur-sm"
+        className="group flex w-full items-center gap-3 sm:gap-5 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-gradient-from/20 via-accent/10 to-gradient-to/10 p-4 sm:p-6 text-left transition-all hover:from-accent/30 hover:via-accent/15 hover:to-gradient-to/15 hover:scale-[1.01] border border-accent/20 hover:border-accent/30 shadow-xl hover:shadow-2xl backdrop-blur-sm"
       >
-        <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-theme-gradient shadow-glow group-hover:scale-110 transition-transform">
-          <RiHeartFill size={36} />
+        <div className="flex h-14 w-14 sm:h-20 sm:w-20 items-center justify-center rounded-xl sm:rounded-2xl bg-theme-gradient shadow-glow group-hover:scale-110 transition-transform">
+          <RiHeartFill size={28} className="sm:hidden" />
+          <RiHeartFill size={36} className="hidden sm:block" />
         </div>
         <div>
-          <div className="text-2xl font-black">Liked Songs</div>
-          <div className="mt-1 text-base text-white/80">{likedTrackIds.size} songs</div>
+          <div className="text-lg sm:text-2xl font-black">Liked Songs</div>
+          <div className="mt-0.5 sm:mt-1 text-sm sm:text-base text-white/80">{likedTrackIds.size} songs</div>
         </div>
       </button>
 
@@ -98,7 +99,7 @@ export default function LibraryPage() {
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`group flex flex-shrink-0 items-center gap-2.5 rounded-full px-5 py-3 text-sm font-semibold transition-all ${
+              className={`group flex flex-shrink-0 items-center gap-1.5 sm:gap-2.5 rounded-full px-3.5 py-2 sm:px-5 sm:py-3 text-xs sm:text-sm font-semibold transition-all ${
                 tab === t.key 
                   ? 'bg-theme-gradient text-white shadow-glow-sm scale-105' 
                   : 'bg-glass-card backdrop-blur-xl/80 text-softText hover:bg-glass-card backdrop-blur-xl hover:text-white border border-white/5 hover:border-white/10'
@@ -132,7 +133,7 @@ export default function LibraryPage() {
 
       {/* Content */}
       <div className={viewMode === 'grid'
-        ? 'grid grid-cols-5 gap-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12'
+        ? 'grid grid-cols-3 gap-2 sm:grid-cols-5 sm:gap-2 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12'
         : 'space-y-1'
       }>
         {tab === 'playlists' && libraryPlaylists.map(p => {

@@ -14,6 +14,13 @@ function smootherstep(progress: number) {
   return t * t * t * (t * (t * 6 - 15) + 10);
 }
 
+function softenLyricProgress(progress: number, gap: number) {
+  const easedProgress = smootherstep(progress);
+  const easeWeight = gap < 1 ? 0.35 : gap > 3.5 ? 0.48 : 0.58;
+
+  return mix(progress, easedProgress, easeWeight);
+}
+
 function getContinuousLyricFocus(lyrics: LyricLine[], currentTime: number) {
   if (lyrics.length === 0) return -1;
   if (lyrics.length === 1) return 0;
@@ -32,7 +39,7 @@ function getContinuousLyricFocus(lyrics: LyricLine[], currentTime: number) {
   const nextLine = lyrics[currentIndex + 1];
   const gap = Math.max(0.001, nextLine.time - currentLine.time);
   const rawProgress = clamp((currentTime - currentLine.time) / gap, 0, 1);
-  const easedProgress = smootherstep(rawProgress);
+  const easedProgress = softenLyricProgress(rawProgress, gap);
 
   return currentIndex + easedProgress;
 }
@@ -48,15 +55,17 @@ export function useFluidPlaybackTime(currentTime: number, isPlaying: boolean) {
 
   useEffect(() => {
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const distance = currentTime - motionRef.current.value;
+
     motionRef.current.reportedTime = currentTime;
     motionRef.current.reportedAt = now;
 
-    if (!Number.isFinite(motionRef.current.value)) {
+    if (!isPlaying || Math.abs(distance) > 0.9 || !Number.isFinite(motionRef.current.value)) {
       motionRef.current.value = currentTime;
       motionRef.current.velocity = 0;
       setDisplayTime(currentTime);
     }
-  }, [currentTime]);
+  }, [currentTime, isPlaying]);
 
   useEffect(() => {
     let frameId = 0;
@@ -72,7 +81,8 @@ export function useFluidPlaybackTime(currentTime: number, isPlaying: boolean) {
         : state.reportedTime;
       const distance = extrapolatedTime - state.value;
 
-      if (Math.abs(distance) > 0.9) {
+      // Instantly snap to the target time if paused or if the distance is too large (seeking)
+      if (!isPlaying || Math.abs(distance) > 0.9) {
         state.value = extrapolatedTime;
         state.velocity = 0;
       } else {
@@ -84,14 +94,12 @@ export function useFluidPlaybackTime(currentTime: number, isPlaying: boolean) {
         state.velocity *= Math.exp(-deltaSeconds * 1.25);
         state.value += state.velocity * deltaSeconds;
 
-        if (!isPlaying && Math.abs(distance) < 0.0005 && Math.abs(state.velocity) < 0.0005) {
-          state.value = extrapolatedTime;
-          state.velocity = 0;
-        }
       }
 
       setDisplayTime(state.value);
-      frameId = window.requestAnimationFrame(step);
+      if (isPlaying) {
+        frameId = window.requestAnimationFrame(step);
+      }
     };
 
     frameId = window.requestAnimationFrame(step);
@@ -107,12 +115,18 @@ export function useMomentumValue(
     stiffness?: number;
     damping?: number;
     precision?: number;
+    immediate?: boolean;
+    maxVelocity?: number;
+    snapThreshold?: number;
   } = {}
 ) {
   const {
     stiffness = 34,
     damping = 13,
     precision = 0.0005,
+    immediate = false,
+    maxVelocity = Number.POSITIVE_INFINITY,
+    snapThreshold = Number.POSITIVE_INFINITY,
   } = options;
   const [value, setValue] = useState(targetValue);
   const motionRef = useRef({
@@ -123,13 +137,14 @@ export function useMomentumValue(
 
   useEffect(() => {
     motionRef.current.target = targetValue;
+    const shouldSnap = Math.abs(targetValue - motionRef.current.value) > snapThreshold;
 
-    if (!Number.isFinite(motionRef.current.value)) {
+    if (immediate || shouldSnap || !Number.isFinite(motionRef.current.value)) {
       motionRef.current.value = targetValue;
       motionRef.current.velocity = 0;
       setValue(targetValue);
     }
-  }, [targetValue]);
+  }, [immediate, snapThreshold, targetValue]);
 
   useEffect(() => {
     let frameId = 0;
@@ -137,14 +152,23 @@ export function useMomentumValue(
 
     const step = (frameAt: number) => {
       const state = motionRef.current;
+      
+      if (immediate) {
+        state.value = state.target;
+        state.velocity = 0;
+        setValue(state.value);
+        return;
+      }
+
       const deltaSeconds = clamp((frameAt - lastFrameAt) / 1000, 0.001, 0.032);
       lastFrameAt = frameAt;
 
       const distance = state.target - state.value;
-      const adaptiveDamping = damping + Math.min(Math.abs(distance) * 10, damping * 1.2);
+      const adaptiveDamping = damping + Math.min(Math.abs(distance) * 8, damping * 0.9);
       const acceleration = distance * stiffness - state.velocity * adaptiveDamping;
 
       state.velocity += acceleration * deltaSeconds;
+      state.velocity = clamp(state.velocity, -maxVelocity, maxVelocity);
       state.velocity *= Math.exp(-deltaSeconds * 1.1);
       state.value += state.velocity * deltaSeconds;
 
@@ -154,23 +178,39 @@ export function useMomentumValue(
       }
 
       setValue(state.value);
-      frameId = window.requestAnimationFrame(step);
+      if (!immediate) {
+        frameId = window.requestAnimationFrame(step);
+      }
     };
 
     frameId = window.requestAnimationFrame(step);
     return () => window.cancelAnimationFrame(frameId);
-  }, [damping, precision, stiffness]);
+  }, [damping, immediate, maxVelocity, precision, stiffness]);
 
   return value;
 }
 
-export function useFluidLyricMotion(lyrics: LyricLine[], currentTime: number, isPlaying: boolean) {
+export function useFluidLyricMotion(
+  lyrics: LyricLine[],
+  currentTime: number,
+  isPlaying: boolean,
+  options: {
+    stiffness?: number;
+    damping?: number;
+    precision?: number;
+    maxVelocity?: number;
+    snapThreshold?: number;
+  } = {}
+) {
   const fluidTime = useFluidPlaybackTime(currentTime, isPlaying);
   const targetFocus = useMemo(() => getContinuousLyricFocus(lyrics, fluidTime), [lyrics, fluidTime]);
   const focusPosition = useMomentumValue(targetFocus, {
-    stiffness: 38,
-    damping: 14,
-    precision: 0.0004,
+    stiffness: options.stiffness ?? 42,
+    damping: options.damping ?? 17,
+    precision: options.precision ?? 0.0004,
+    maxVelocity: options.maxVelocity ?? 4.5,
+    snapThreshold: options.snapThreshold ?? 4,
+    immediate: !isPlaying,
   });
 
   const activeLyricIndex = useMemo(() => getCurrentLyricIndex(lyrics, fluidTime), [lyrics, fluidTime]);
@@ -181,4 +221,3 @@ export function useFluidLyricMotion(lyrics: LyricLine[], currentTime: number, is
     activeLyricIndex,
   };
 }
-

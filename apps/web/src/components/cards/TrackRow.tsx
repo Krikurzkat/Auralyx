@@ -14,7 +14,7 @@ interface TrackRowProps {
   compact?: boolean;
 }
 
-export default function TrackRow({ track, index, showAlbum = true, showDateAdded = false, context, compact = false }: TrackRowProps) {
+export default function TrackRow({ track, showAlbum = true, showDateAdded = false, context, compact = false }: TrackRowProps) {
   const navigate = useNavigate();
   const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayerStore();
   const { likedTrackIds, toggleLike } = useLibraryStore();
@@ -44,7 +44,7 @@ export default function TrackRow({ track, index, showAlbum = true, showDateAdded
               <span className="eq-bar animate-equalizer-2" style={{ height: '8px' }} />
               <span className="eq-bar animate-equalizer-3" style={{ height: '6px' }} />
             </span>
-          ) : index !== undefined ? index + 1 : '·'}
+          ) : ''}
         </span>
         <button onClick={(e) => { e.stopPropagation(); handlePlay(); }} className="hidden group-hover:block">
           {isCurrent && isPlaying ? <RiPauseFill size={16} /> : <RiPlayFill size={16} />}

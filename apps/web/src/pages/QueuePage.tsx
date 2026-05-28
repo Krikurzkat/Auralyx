@@ -5,22 +5,22 @@ export default function QueuePage() {
   const { queue, queueIndex, currentTrack, playTrack, removeFromQueue, clearQueue } = usePlayerStore();
 
   return (
-    <div className="page-enter space-y-6 pb-8">
+    <div className="page-enter space-y-4 sm:space-y-6 pb-8">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500">
-            <RiPlayList2Line size={24} className="text-white" />
+          <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-lg sm:rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500">
+            <RiPlayList2Line size={20} className="text-white" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold">Queue</h1>
-            <p className="text-sm text-softText">{queue.length} tracks in queue</p>
+            <h1 className="text-xl sm:text-3xl font-bold">Queue</h1>
+            <p className="text-xs sm:text-sm text-softText">{queue.length} tracks in queue</p>
           </div>
         </div>
         {queue.length > 0 && (
           <button
             onClick={clearQueue}
-            className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+            className="flex items-center gap-1.5 sm:gap-2 rounded-full bg-white/10 px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold text-white transition hover:bg-white/20"
           >
             <RiDeleteBinLine size={16} />
             Clear Queue
@@ -37,17 +37,17 @@ export default function QueuePage() {
               <img
                 src={currentTrack.coverUrl}
                 alt={currentTrack.title}
-                className="h-16 w-16 flex-shrink-0 rounded-lg object-cover"
+                className="h-12 w-12 sm:h-16 sm:w-16 flex-shrink-0 rounded-lg object-cover"
               />
             ) : (
               <div
-                className="h-16 w-16 flex-shrink-0 rounded-lg"
+                className="h-12 w-12 sm:h-16 sm:w-16 flex-shrink-0 rounded-lg"
                 style={{ background: `linear-gradient(135deg, ${currentTrack.coverGradient?.[0] || '#333'}, ${currentTrack.coverGradient?.[1] || '#222'})` }}
               />
             )}
             <div className="min-w-0 flex-1">
-              <div className="truncate text-lg font-bold text-white">{currentTrack.title}</div>
-              <div className="truncate text-sm text-softText">{currentTrack.artist}</div>
+              <div className="truncate text-base sm:text-lg font-bold text-white">{currentTrack.title}</div>
+              <div className="truncate text-xs sm:text-sm text-softText">{currentTrack.artist}</div>
             </div>
           </div>
         </div>
@@ -65,7 +65,7 @@ export default function QueuePage() {
               return (
                 <div
                   key={`${track.id}-${index}`}
-                  className="group flex w-full items-center gap-4 rounded-xl bg-glass-card backdrop-blur-xl p-3 transition hover:bg-card-hover"
+                  className="group flex w-full items-center gap-3 sm:gap-4 rounded-xl bg-glass-card backdrop-blur-xl p-2.5 sm:p-3 transition hover:bg-card-hover"
                 >
                   <span className="w-8 text-center text-sm font-bold text-dimText">
                     {index + 1}
@@ -74,17 +74,17 @@ export default function QueuePage() {
                     <img
                       src={track.coverUrl}
                       alt={track.title}
-                      className="h-14 w-14 flex-shrink-0 rounded-lg object-cover"
+                      className="h-11 w-11 sm:h-14 sm:w-14 flex-shrink-0 rounded-lg object-cover"
                     />
                   ) : (
                     <div
-                      className="h-14 w-14 flex-shrink-0 rounded-lg"
+                      className="h-11 w-11 sm:h-14 sm:w-14 flex-shrink-0 rounded-lg"
                       style={{ background: `linear-gradient(135deg, ${track.coverGradient?.[0] || '#333'}, ${track.coverGradient?.[1] || '#222'})` }}
                     />
                   )}
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-base font-bold text-white">{track.title}</div>
-                    <div className="truncate text-sm text-softText">{track.artist}</div>
+                    <div className="truncate text-sm sm:text-base font-bold text-white">{track.title}</div>
+                    <div className="truncate text-xs sm:text-sm text-softText">{track.artist}</div>
                   </div>
                   <div className="flex items-center gap-2">
                     <button

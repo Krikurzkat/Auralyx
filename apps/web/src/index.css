@@ -39,6 +39,23 @@ body {
   overflow-x: hidden;
 }
 
+/* Prevent accidental blue text highlight across app UI */
+#root,
+#root *:not(input):not(textarea):not([contenteditable="true"]) {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Keep editing/selecting enabled where needed */
+input,
+textarea,
+[contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
 button, input, textarea, select {
   font: inherit;
   color: inherit;
@@ -599,6 +616,24 @@ input[type="range"]:hover::-webkit-slider-thumb {
   -webkit-backface-visibility: hidden;
 }
 
+/* Disable lyric text selection/highlight across all lyric surfaces */
+.fullscreen-lyric-line-wrapper,
+.drive-lyric-line,
+.drive-lyric-text,
+.rp-lyric-line {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.fullscreen-lyric-line-wrapper::selection,
+.drive-lyric-line::selection,
+.drive-lyric-text::selection,
+.rp-lyric-line::selection {
+  background: transparent;
+  color: inherit;
+}
+
 /* Optimize lyric animations on mobile */
 @media (max-width: 1024px) {
   .rp-lyric-line {
@@ -622,10 +657,62 @@ input[type="range"]:hover::-webkit-slider-thumb {
   animation: rp-glow-bar-pulse 2s ease-in-out infinite;
 }
 
+/* Drive mode kinetic lyrics */
+.drive-lyrics-stage {
+  isolation: isolate;
+}
+
+.drive-lyric-reading-lane {
+  border-radius: 999px;
+  background:
+    radial-gradient(ellipse at center, color-mix(in srgb, var(--accent) 18%, transparent) 0%, transparent 64%),
+    linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.075) 48%, rgba(255, 255, 255, 0.075) 52%, transparent 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  opacity: 0.72;
+}
+
+.drive-lyric-track,
+.drive-lyric-line,
+.drive-lyric-text,
+.drive-lyric-line-glow {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.drive-lyric-line {
+  contain: layout paint;
+  transition: opacity 180ms linear;
+}
+
+.drive-lyric-text {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  text-wrap: balance;
+}
+
+@media (max-width: 640px) {
+  .drive-lyric-reading-lane {
+    height: 108px;
+    opacity: 0.58;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drive-lyric-line,
+  .drive-lyric-track {
+    transition: none !important;
+  }
+
+  .drive-lyric-line-glow {
+    display: none;
+  }
+}
+
 /* ─── Up Next Premium Dynamic Popup ─── */
 .upnext-popup-card {
-  position: absolute;
-  bottom: 120px;
+  position: fixed;
+  top: 80px;
   right: 24px;
   width: 320px;
   border-radius: 20px;
@@ -644,12 +731,11 @@ input[type="range"]:hover::-webkit-slider-thumb {
 }
 
 .upnext-popup-card.drive-mode {
-  bottom: 130px;
-  right: auto;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 90%;
-  max-width: 440px;
+  top: 80px;
+  right: 24px;
+  left: auto;
+  width: 320px;
+  transform: none;
   background: rgba(13, 13, 13, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.15);
 }
@@ -661,19 +747,48 @@ input[type="range"]:hover::-webkit-slider-thumb {
 
 .upnext-popup-card.hidden {
   opacity: 0;
-  transform: translateY(24px) translateZ(0);
+  transform: translateY(-24px) translateZ(0);
   pointer-events: none;
 }
 
 .upnext-popup-card.drive-mode.visible {
   opacity: 1;
-  transform: translateX(-50%) translateY(0) translateZ(0);
+  transform: translateY(0) translateZ(0);
 }
 
 .upnext-popup-card.drive-mode.hidden {
   opacity: 0;
-  transform: translateX(-50%) translateY(32px) translateZ(0);
+  transform: translateY(-24px) translateZ(0);
   pointer-events: none;
+}
+
+/* Responsive positioning for smaller screens */
+@media (max-width: 768px) {
+  .upnext-popup-card {
+    top: 60px;
+    right: 12px;
+    width: calc(100% - 24px);
+    max-width: 320px;
+  }
+  
+  .upnext-popup-card.drive-mode {
+    top: 60px;
+    right: 12px;
+    width: calc(100% - 24px);
+    max-width: 320px;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  .upnext-popup-card {
+    top: 70px;
+    right: 16px;
+  }
+  
+  .upnext-popup-card.drive-mode {
+    top: 70px;
+    right: 16px;
+  }
 }
 
 /* Soundwave micro-animation */

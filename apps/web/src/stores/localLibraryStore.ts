@@ -19,6 +19,173 @@ function stringToGradient(str: string): [string, string] {
   return [`hsl(${h1}, 65%, 45%)`, `hsl(${h2}, 55%, 55%)`];
 }
 
+const AUDIO_EXTENSIONS = new Set(['mp3', 'm4a', 'wav', 'ogg', 'flac', 'aac']);
+const COVER_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp']);
+const COVER_NAME_PRIORITY = ['cover', 'folder', 'front', 'album'];
+
+type ImportableFile = File & { webkitRelativePath?: string };
+
+function getFileExtension(fileName: string): string {
+  return fileName.split('.').pop()?.toLowerCase() || '';
+}
+
+function getBaseName(fileName: string): string {
+  return fileName.replace(/\.[^.]+$/, '').trim().toLowerCase();
+}
+
+function getImportPath(file: ImportableFile): string {
+  return (file.webkitRelativePath || file.name).replace(/\\/g, '/');
+}
+
+function getImportDirectory(file: ImportableFile): string {
+  const importPath = getImportPath(file);
+  const slashIndex = importPath.lastIndexOf('/');
+  return slashIndex >= 0 ? importPath.slice(0, slashIndex).toLowerCase() : '';
+}
+
+function isAudioFile(file: File): boolean {
+  return AUDIO_EXTENSIONS.has(getFileExtension(file.name));
+}
+
+function isCoverImageFile(file: File): boolean {
+  const ext = getFileExtension(file.name);
+  const baseName = getBaseName(file.name);
+  return COVER_IMAGE_EXTENSIONS.has(ext) && COVER_NAME_PRIORITY.includes(baseName);
+}
+
+function compareCoverFiles(a: File, b: File): number {
+  const aNameRank = COVER_NAME_PRIORITY.indexOf(getBaseName(a.name));
+  const bNameRank = COVER_NAME_PRIORITY.indexOf(getBaseName(b.name));
+  if (aNameRank !== bNameRank) return aNameRank - bNameRank;
+
+  const aExtRank = a.name.toLowerCase().endsWith('.jpeg') ? 0 : 1;
+  const bExtRank = b.name.toLowerCase().endsWith('.jpeg') ? 0 : 1;
+  return aExtRank - bExtRank;
+}
+
+function buildCoverFileIndex(files: File[]) {
+  const byDirectory = new Map<string, File>();
+  const covers = files.filter(isCoverImageFile).sort(compareCoverFiles);
+
+  for (const cover of covers) {
+    const directory = getImportDirectory(cover as ImportableFile);
+    if (!byDirectory.has(directory)) {
+      byDirectory.set(directory, cover);
+    }
+  }
+
+  return {
+    byDirectory,
+    batchFallback: covers[0],
+  };
+}
+
+function findBatchCoverFile(
+  audioFile: File,
+  coverIndex: ReturnType<typeof buildCoverFileIndex>
+): File | undefined {
+  let directory = getImportDirectory(audioFile as ImportableFile);
+
+  while (directory) {
+    const cover = coverIndex.byDirectory.get(directory);
+    if (cover) return cover;
+    const parentSlashIndex = directory.lastIndexOf('/');
+    directory = parentSlashIndex >= 0 ? directory.slice(0, parentSlashIndex) : '';
+  }
+
+  return coverIndex.byDirectory.get('') || (getImportDirectory(audioFile as ImportableFile) ? undefined : coverIndex.batchFallback);
+}
+
+function readFileAsDataUrl(file: File): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : undefined);
+    reader.onerror = () => resolve(undefined);
+    reader.readAsDataURL(file);
+  });
+}
+
+function slugifyLocalId(value: string, fallback: string): string {
+  const slug = value
+    .toLowerCase()
+    .trim()
+    .replace(/['"]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+  return slug || fallback;
+}
+
+function cleanFilenamePart(value: string): string {
+  return value
+    .replace(/[_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*\(\s*/g, ' (')
+    .replace(/\s*\)\s*/g, ') ')
+    .trim();
+}
+
+function isMissingMetadata(value?: string | null): boolean {
+  if (!value) return true;
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized.length === 0 ||
+    normalized === 'unknown' ||
+    normalized === 'unknown artist' ||
+    normalized === 'unknown album'
+  );
+}
+
+function parseFilenameTemplate(fileName: string): { title: string; artist?: string; album?: string } {
+  const baseName = fileName
+    .replace(/\.[^.]+$/, '')
+    .replace(/^\s*\d{1,3}\s*[-._]\s*/, '')
+    .trim();
+
+  const parts = baseName
+    .split(/\s+-\s+/)
+    .map(cleanFilenamePart)
+    .filter(Boolean);
+
+  if (parts.length >= 3) {
+    return {
+      title: parts[0],
+      artist: parts[1],
+      album: parts.slice(2).join(' - '),
+    };
+  }
+
+  if (parts.length === 2) {
+    return {
+      title: parts[0],
+      artist: parts[1],
+    };
+  }
+
+  return {
+    title: cleanFilenamePart(baseName.replace(/[._]+/g, ' ')),
+  };
+}
+
+function findReusableAlbumCover(album: string, artist: string, tracks: LocalTrack[]): string | undefined {
+  if (isMissingMetadata(album)) return undefined;
+
+  const normalizedAlbum = album.trim().toLowerCase();
+  const normalizedArtist = artist.trim().toLowerCase();
+  const sameArtistAlbum = tracks.find((track) =>
+    track.coverUrl &&
+    track.album?.trim().toLowerCase() === normalizedAlbum &&
+    track.artist?.trim().toLowerCase() === normalizedArtist
+  );
+
+  if (sameArtistAlbum?.coverUrl) return sameArtistAlbum.coverUrl;
+
+  return tracks.find((track) =>
+    track.coverUrl &&
+    track.album?.trim().toLowerCase() === normalizedAlbum
+  )?.coverUrl;
+}
+
 async function getAudioDuration(file: File): Promise<number> {
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
@@ -126,6 +293,7 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
         lastPlayed: lastPlayed || {},
         isLoaded: true,
       });
+      usePlayerStore.getState().restoreLastPlayback(tracks);
     } catch (err) {
       console.error('Failed to load local library:', err);
       set({ isLoaded: true });
@@ -133,10 +301,20 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
   },
 
   importFiles: async (files: FileList | File[]) => {
-    const fileArray = Array.from(files).filter(f => {
-      const ext = f.name.split('.').pop()?.toLowerCase();
-      return ext && ['mp3', 'm4a', 'wav', 'ogg', 'flac', 'aac'].includes(ext);
-    });
+    const allFiles = Array.from(files);
+    const coverIndex = buildCoverFileIndex(allFiles);
+    const coverDataUrlCache = new Map<File, Promise<string | undefined>>();
+    const getBatchCoverUrl = (file: File): Promise<string | undefined> => {
+      const coverFile = findBatchCoverFile(file, coverIndex);
+      if (!coverFile) return Promise.resolve(undefined);
+      let cached = coverDataUrlCache.get(coverFile);
+      if (!cached) {
+        cached = readFileAsDataUrl(coverFile);
+        coverDataUrlCache.set(coverFile, cached);
+      }
+      return cached;
+    };
+    const fileArray = allFiles.filter(isAudioFile);
 
     if (fileArray.length === 0) return;
 
@@ -157,6 +335,7 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
       try {
         const metadata = await parseBlob(file);
         const { common, format } = metadata;
+        const filenameMetadata = parseFilenameTemplate(file.name);
 
         // Extract cover art
         let coverUrl: string | undefined;
@@ -168,9 +347,20 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
           coverUrl = `data:${pic.format};base64,${base64}`;
         }
 
-        const title = common.title || file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
-        const artist = common.artist || 'Unknown Artist';
-        const album = common.album || 'Unknown Album';
+        const title = cleanFilenamePart(
+          isMissingMetadata(common.title) ? filenameMetadata.title : common.title || filenameMetadata.title
+        );
+        const artist = cleanFilenamePart(
+          isMissingMetadata(common.artist)
+            ? filenameMetadata.artist || common.albumartist || 'Unknown Artist'
+            : common.artist || common.albumartist || 'Unknown Artist'
+        );
+        const album = cleanFilenamePart(
+          isMissingMetadata(common.album) ? filenameMetadata.album || 'Unknown Album' : common.album || 'Unknown Album'
+        );
+        coverUrl = coverUrl
+          || await getBatchCoverUrl(file)
+          || findReusableAlbumCover(album, artist, [...get().localTracks, ...newTracks]);
 
         // Check duplicate by same title+artist
         const existingTracks = get().localTracks;
@@ -183,9 +373,9 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
           id: generateId(),
           title,
           artist,
-          artistId: `local_artist_${artist.toLowerCase().replace(/\s+/g, '_')}`,
+          artistId: `local_artist_${slugifyLocalId(artist, 'unknown')}`,
           album,
-          albumId: `local_album_${album.toLowerCase().replace(/\s+/g, '_')}`,
+          albumId: `local_album_${slugifyLocalId(album, 'unknown')}`,
           duration: format.duration ? Math.round(format.duration) : Math.round(await getAudioDuration(file)),
           genre: common.genre?.[0] || '',
           releaseDate: common.year ? String(common.year) : '',
@@ -200,20 +390,26 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
 
         await localDb.saveTrack(track);
         newTracks.push(track);
-      } catch (err) {
+      } catch {
         // Fallback: add with basic metadata derived from filename
-        const title = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
+        const filenameMetadata = parseFilenameTemplate(file.name);
+        const title = filenameMetadata.title;
+        const artist = filenameMetadata.artist || 'Unknown Artist';
+        const album = filenameMetadata.album || 'Unknown Album';
+        const coverUrl = await getBatchCoverUrl(file)
+          || findReusableAlbumCover(album, artist, [...get().localTracks, ...newTracks]);
         const track: LocalTrack = {
           id: generateId(),
           title,
-          artist: 'Unknown Artist',
-          artistId: 'local_artist_unknown',
-          album: 'Unknown Album',
-          albumId: 'local_album_unknown',
+          artist,
+          artistId: `local_artist_${slugifyLocalId(artist, 'unknown')}`,
+          album,
+          albumId: `local_album_${slugifyLocalId(album, 'unknown')}`,
           duration: Math.round(await getAudioDuration(file)),
           plays: 0,
           explicit: false,
-          coverGradient: stringToGradient(title),
+          coverUrl,
+          coverGradient: stringToGradient(title + artist),
           blob: file,
           isLocal: true,
           addedAt: Date.now(),

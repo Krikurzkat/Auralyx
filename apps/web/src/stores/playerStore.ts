@@ -2,9 +2,21 @@ import { create } from 'zustand';
 import { Track } from '../types';
 
 type AudioSlot = 0 | 1;
+const LAST_PLAYBACK_KEY = 'go_music_last_playback';
 
 const _blobUrlByAudio = new WeakMap<HTMLAudioElement, string>();
 let _crossfadeAnimationFrame: number | null = null;
+let _crossfadeTimeout: number | null = null;
+
+interface PersistedPlaybackState {
+  trackId: string;
+  track?: Track;
+  queueIds: string[];
+  queue?: Track[];
+  queueIndex: number;
+  currentTime: number;
+  updatedAt: number;
+}
 
 // #region debug-point A:reporter
 const reportTrackSwitchDebug = (_hypothesisId: string, _msg: string, _data: Record<string, unknown> = {}) => {};
@@ -95,6 +107,7 @@ interface PlayerState {
   setProgress: (progress: number) => void;
   setCurrentTime: (time: number) => void;
   setDuration: (duration: number) => void;
+  restoreLastPlayback: (tracks: Track[]) => void;
   resetPlaybackState: () => void;
 }
 
@@ -141,6 +154,21 @@ function clearCrossfadeAnimation() {
     cancelAnimationFrame(_crossfadeAnimationFrame);
     _crossfadeAnimationFrame = null;
   }
+  if (_crossfadeTimeout !== null) {
+    window.clearTimeout(_crossfadeTimeout);
+    _crossfadeTimeout = null;
+  }
+}
+
+function isPageHidden() {
+  return typeof document !== 'undefined' && document.hidden;
+}
+
+function scheduleCrossfadeStep(callback: (time: number) => void) {
+  _crossfadeTimeout = window.setTimeout(() => {
+    _crossfadeTimeout = null;
+    callback(performance.now());
+  }, isPageHidden() ? 250 : 50);
 }
 
 function getTargetVolume(state: Pick<PlayerState, 'volume' | 'isMuted'>) {
@@ -203,6 +231,49 @@ function setAudioSource(audio: HTMLAudioElement, track: Track) {
   // #endregion
 }
 
+function readLastPlaybackSnapshot(): PersistedPlaybackState | null {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const raw = window.localStorage.getItem(LAST_PLAYBACK_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PersistedPlaybackState;
+    if (!parsed?.trackId) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function persistLastPlaybackSnapshot(state: Pick<PlayerState, 'currentTrack' | 'queue' | 'queueIndex' | 'currentTime'>) {
+  if (typeof window === 'undefined' || !state.currentTrack) return;
+
+  const serializeTrack = (track: Track): Track => {
+    const serializableTrack = { ...track };
+    delete serializableTrack.blob;
+    return serializableTrack;
+  };
+  const queueIds = state.queue.length > 0
+    ? state.queue.map((track) => track.id)
+    : [state.currentTrack.id];
+
+  const snapshot: PersistedPlaybackState = {
+    trackId: state.currentTrack.id,
+    track: serializeTrack(state.currentTrack),
+    queueIds,
+    queue: state.queue.map(serializeTrack),
+    queueIndex: Math.max(0, state.queueIndex),
+    currentTime: Math.max(0, Math.floor(state.currentTime || 0)),
+    updatedAt: Date.now(),
+  };
+
+  try {
+    window.localStorage.setItem(LAST_PLAYBACK_KEY, JSON.stringify(snapshot));
+  } catch {
+    // Ignore storage failures; playback should keep working.
+  }
+}
+
 /**
  * Equal-power crossfade using cosine curve
  * This maintains constant perceived loudness during transition
@@ -238,16 +309,18 @@ function fadeInAudio(audio: HTMLAudioElement | null, targetVolume: number, durat
   clearCrossfadeAnimation();
   audio.volume = clampAudioVolume(0);
   
+  if (targetVolume <= 0 || durationMs <= 0) {
+    audio.volume = clampAudioVolume(targetVolume);
+    audio.play().catch((err) => {
+      console.error('Failed to play audio:', err);
+    });
+    return;
+  }
+
   // Start playback
   audio.play().catch((err) => {
     console.error('Failed to play audio:', err);
   });
-
-  // Instant volume if no fade duration
-  if (targetVolume <= 0 || durationMs <= 0) {
-    audio.volume = clampAudioVolume(targetVolume);
-    return;
-  }
 
   const startTime = performance.now();
   
@@ -260,7 +333,7 @@ function fadeInAudio(audio: HTMLAudioElement | null, targetVolume: number, durat
     audio.volume = clampAudioVolume(targetVolume * gain);
     
     if (progress < 1) {
-      _crossfadeAnimationFrame = requestAnimationFrame(animate);
+      scheduleCrossfadeStep(animate);
     } else {
       // #region debug-point B:fade-in-complete
       reportTrackSwitchDebug('B', 'fadeInAudio complete', {
@@ -272,7 +345,7 @@ function fadeInAudio(audio: HTMLAudioElement | null, targetVolume: number, durat
     }
   };
   
-  _crossfadeAnimationFrame = requestAnimationFrame(animate);
+  scheduleCrossfadeStep(animate);
 }
 
 /**
@@ -376,7 +449,7 @@ function performManualCrossfade(
         inactiveAudio.volume = clampAudioVolume(targetVolume * fadeIn);
 
         if (progress < 1) {
-          _crossfadeAnimationFrame = requestAnimationFrame(animate);
+          scheduleCrossfadeStep(animate);
         } else {
           // Crossfade complete
           clearCrossfadeAnimation();
@@ -389,7 +462,7 @@ function performManualCrossfade(
         }
       };
 
-      _crossfadeAnimationFrame = requestAnimationFrame(animate);
+      scheduleCrossfadeStep(animate);
     })
     .catch((err) => {
       console.error('Manual crossfade failed:', err);
@@ -487,11 +560,22 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   activeAudioSlot: 0,
   isCrossfading: false,
 
-  setAudioRefs: (primary, secondary) => set((state) => ({
-    primaryAudioRef: primary,
-    secondaryAudioRef: secondary,
-    audioRef: state.activeAudioSlot === 0 ? primary : secondary,
-  })),
+  setAudioRefs: (primary, secondary) => set((state) => {
+    const activeAudio = state.activeAudioSlot === 0 ? primary : secondary;
+
+    if (state.currentTrack && activeAudio.currentSrc === '') {
+      setAudioSource(activeAudio, state.currentTrack);
+      activeAudio.currentTime = state.currentTime || 0;
+      activeAudio.volume = clampAudioVolume(getTargetVolume(state));
+      activeAudio.pause();
+    }
+
+    return {
+      primaryAudioRef: primary,
+      secondaryAudioRef: secondary,
+      audioRef: activeAudio,
+    };
+  }),
 
   playTrack: (track, context, isAutoAdvance = false) => {
     const state = get();
@@ -502,7 +586,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     let newQueue = state.queue;
     let newIndex = state.queueIndex;
 
-    if (context && context.length > 0) {
+    const isExistingQueue = context && (
+      context === state.queue || 
+      (context.length === state.queue.length && context.every((t, i) => t.id === state.queue[i]?.id))
+    );
+
+    if (context && context.length > 0 && !isExistingQueue) {
       // Playing from a new context (e.g., album, playlist)
       if (state.shuffle) {
         // Save original context order before shuffling
@@ -511,14 +600,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           originalQueue: [...context],
           originalQueueIndex: originalIndex >= 0 ? originalIndex : 0,
         });
-        newQueue = shuffleArray(context);
+        
+        // Put the clicked track at index 0, and shuffle all other tracks after it.
+        // This ensures the clicked track plays first immediately and no random tracks 
+        // are marked as completed before it.
+        const otherTracks = context.filter(t => t.id !== track.id);
+        newQueue = [track, ...shuffleArray(otherTracks)];
+        newIndex = 0;
       } else {
         newQueue = context;
         // Clear any stored original queue since we're not shuffled
         set({ originalQueue: [], originalQueueIndex: -1 });
+        newIndex = newQueue.findIndex(t => t.id === track.id);
+        if (newIndex === -1) newIndex = 0;
       }
-      newIndex = newQueue.findIndex(t => t.id === track.id);
-      if (newIndex === -1) newIndex = 0;
     } else {
       // Playing from existing queue
       const existingIndex = state.queue.findIndex(t => t.id === track.id);
@@ -762,6 +857,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         // Start equal-power crossfade animation
         const targetVolume = getTargetVolume(get());
         const durationMs = state.autoFadeDuration * 1000;
+
         const startTime = performance.now();
         const startVolume = activeAudio.volume;
 
@@ -777,7 +873,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           inactiveAudio.volume = clampAudioVolume(targetVolume * fadeIn);
           
           if (progress < 1) {
-            _crossfadeAnimationFrame = requestAnimationFrame(animate);
+            scheduleCrossfadeStep(animate);
           } else {
             // Crossfade complete
             clearCrossfadeAnimation();
@@ -795,7 +891,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           }
         };
         
-        _crossfadeAnimationFrame = requestAnimationFrame(animate);
+        scheduleCrossfadeStep(animate);
       });
     }
   },
@@ -961,8 +1057,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   setVolume: (vol) => {
-    const audio = getActiveAudio(get());
-    if (audio) audio.volume = clampAudioVolume(vol / 100);
+    const state = get();
+    const audio = getActiveAudio(state);
+    const inactiveAudio = getInactiveAudio(state);
+    const nextVolume = clampAudioVolume(vol / 100);
+
+    if (audio) audio.volume = nextVolume;
+    if (state.isCrossfading && inactiveAudio) {
+      inactiveAudio.volume = Math.min(inactiveAudio.volume, nextVolume);
+    }
+
     set({ volume: vol, isMuted: vol === 0 });
   },
 
@@ -981,20 +1085,30 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   toggleShuffle: () => {
     const state = get();
     if (!state.shuffle) {
-      // Turning shuffle ON: save original queue, then shuffle
-      const current = state.queue[state.queueIndex];
-      const rest = state.queue.filter((_, i) => i !== state.queueIndex);
-      const shuffled = [current, ...shuffleArray(rest)];
+      // Turning shuffle ON: save original queue, then shuffle all other tracks
+      const current = state.currentTrack;
+      if (!current || state.queue.length === 0) {
+        set({ shuffle: true });
+        return;
+      }
+
+      // Filter out current track, shuffle all other tracks in the queue
+      const otherTracks = state.queue.filter(t => t.id !== current.id);
+      const shuffledOthers = shuffleArray(otherTracks);
+      
+      // Reconstruct: current track is at index 0 (very first), all others shuffled after it
+      const newQueue = [current, ...shuffledOthers];
+      
       set({
         shuffle: true,
         originalQueue: [...state.queue],
         originalQueueIndex: state.queueIndex,
-        queue: shuffled,
-        queueIndex: 0,
+        queue: newQueue,
+        queueIndex: 0, // Set active index to 0
       });
     } else {
       // Turning shuffle OFF: restore original queue order
-      const current = state.queue[state.queueIndex];
+      const current = state.currentTrack;
       const origQueue = state.originalQueue;
 
       if (origQueue.length > 0 && current) {
@@ -1003,7 +1117,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         set({
           shuffle: false,
           queue: origQueue,
-          queueIndex: restoredIndex >= 0 ? restoredIndex : 0,
+          queueIndex: restoredIndex >= 0 ? restoredIndex : state.originalQueueIndex,
           originalQueue: [],
           originalQueueIndex: -1,
         });
@@ -1064,6 +1178,50 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setProgress: (progress) => set({ progress }),
   setCurrentTime: (time) => set({ currentTime: time }),
   setDuration: (duration) => set({ duration }),
+  restoreLastPlayback: (tracks) => {
+    const snapshot = readLastPlaybackSnapshot();
+    if (!snapshot) return;
+
+    const trackById = new Map(tracks.map((track) => [track.id, track]));
+    const restoredTrack = trackById.get(snapshot.trackId) ?? snapshot.track;
+    if (!restoredTrack) return;
+
+    const snapshotQueueById = new Map((snapshot.queue || []).map((track) => [track.id, track]));
+    const restoredQueue = snapshot.queueIds
+      .map((id) => trackById.get(id))
+      .map((track, index) => track ?? snapshotQueueById.get(snapshot.queueIds[index]))
+      .filter((track): track is Track => Boolean(track));
+    const queue = restoredQueue.length > 0 ? restoredQueue : [restoredTrack];
+    const queueIndex = Math.max(0, queue.findIndex((track) => track.id === restoredTrack.id));
+    const currentTime = Math.max(0, Math.min(snapshot.currentTime || 0, restoredTrack.duration || snapshot.currentTime || 0));
+    const duration = restoredTrack.duration || 0;
+    const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+    const state = get();
+    const activeAudio = getActiveAudio(state);
+    const inactiveAudio = getInactiveAudio(state);
+
+    clearCrossfadeAnimation();
+    stopInactiveAudio(inactiveAudio);
+
+    if (activeAudio) {
+      setAudioSource(activeAudio, restoredTrack);
+      activeAudio.currentTime = currentTime;
+      activeAudio.volume = clampAudioVolume(getTargetVolume(state));
+      activeAudio.pause();
+    }
+
+    set({
+      currentTrack: restoredTrack,
+      queue,
+      queueIndex: queueIndex >= 0 ? queueIndex : 0,
+      progress,
+      currentTime,
+      duration,
+      isPlaying: false,
+      isCrossfading: false,
+      audioRef: activeAudio,
+    });
+  },
   
   resetPlaybackState: () => set({
     shuffle: false,
@@ -1077,6 +1235,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
 // Reset shuffle and repeat on page load/refresh
 if (typeof window !== 'undefined') {
+  usePlayerStore.subscribe((state) => {
+    persistLastPlaybackSnapshot(state);
+  });
+
   window.addEventListener('load', () => {
     usePlayerStore.getState().resetPlaybackState();
   });
@@ -1085,6 +1247,23 @@ if (typeof window !== 'undefined') {
   window.addEventListener('pageshow', (event) => {
     if (event.persisted) {
       usePlayerStore.getState().resetPlaybackState();
+    }
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    const state = usePlayerStore.getState();
+    if (!state.currentTrack || !state.isPlaying) return;
+
+    const activeAudio = getActiveAudio(state);
+    const inactiveAudio = getInactiveAudio(state);
+    const targetVolume = clampAudioVolume(getTargetVolume(state));
+
+    if (!state.isCrossfading && activeAudio && activeAudio.volume < targetVolume) {
+      clearCrossfadeAnimation();
+      activeAudio.volume = targetVolume;
+      activeAudio.play().catch(() => {});
+      stopInactiveAudio(inactiveAudio);
+      usePlayerStore.setState({ isCrossfading: false, audioRef: activeAudio });
     }
   });
 }

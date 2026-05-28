@@ -1,0 +1,6 @@
+{
+  "installCommand": "npm install --prefix apps/web --legacy-peer-deps",
+  "buildCommand": "npm run build --prefix apps/web",
+  "outputDirectory": "apps/web/dist",
+  "framework": "vite"
+}

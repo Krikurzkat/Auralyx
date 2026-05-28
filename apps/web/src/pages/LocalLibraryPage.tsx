@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocalLibraryStore } from '../stores/localLibraryStore';
 import { usePlayerStore } from '../stores/playerStore';
@@ -6,6 +6,7 @@ import { Playlist } from '../types';
 import type { LocalTrack } from '../services/localDb';
 import gsap from 'gsap';
 import { clickedTrackCoverRef } from '../components/player/FullscreenPlayer';
+import { useGalaxyS8PlusLayout } from '../hooks/useGalaxyS8PlusLayout';
 import {
   RiUploadCloud2Line,
   RiSearchLine,
@@ -53,9 +54,8 @@ function formatDuration(seconds: number): string {
 
 // ─── Sub-components ───
 
-function TrackRow({
+const TrackRow = memo(function TrackRow({
   track,
-  index,
   isActive,
   isPlaying,
   playCounts,
@@ -65,18 +65,19 @@ function TrackRow({
   onEdit,
   onAddToQueue,
   onPlayNext,
+  compact,
 }: {
   track: LocalTrack;
-  index: number;
   isActive: boolean;
   isPlaying: boolean;
   playCounts: Record<string, number>;
-  onPlay: (coverElement: HTMLElement | null) => void;
-  onDelete: () => void;
+  onPlay: (track: LocalTrack, coverElement: HTMLElement | null) => void;
+  onDelete: (trackId: string) => void;
   onAddToPlaylist: (track: LocalTrack) => void;
   onEdit: (track: LocalTrack) => void;
   onAddToQueue: (track: LocalTrack) => void;
   onPlayNext: (track: LocalTrack) => void;
+  compact?: boolean;
 }) {
   const [liked, setLiked] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -163,36 +164,38 @@ function TrackRow({
         }
       );
     }
-    // Pass the cover element to the play handler
-    onPlay(coverRef.current);
+    onPlay(track, coverRef.current);
   };
 
   return (
     <div
       ref={rowRef}
-      className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all duration-300 cursor-pointer hover:bg-gradient-to-r hover:from-white/[0.06] hover:to-white/[0.01] hover:shadow-md hover:scale-[1.005] ${
+      className={`group relative flex cursor-pointer items-center rounded-xl transition-all duration-300 hover:scale-[1.005] hover:bg-gradient-to-r hover:from-white/[0.06] hover:to-white/[0.01] hover:shadow-md ${
+        compact ? 'gap-2.5 px-2.5 py-1.5' : 'gap-3 px-3 py-2.5'
+      } ${
         isActive ? 'bg-gradient-to-r from-accent/10 to-accent/5 shadow-sm' : ''
       }`}
       onClick={handlePlayClick}
     >
       {/* Index / Play icon - moved to far left */}
-      <div className="w-10 flex-shrink-0 text-left pl-1">
+      <div className={`flex-shrink-0 text-left ${compact ? 'w-7 pl-0 text-center' : 'w-10 pl-1'}`}>
         {isActive && isPlaying ? (
-          <span className="text-accent flex gap-[2px] items-end h-4">
+          <span className={`text-accent flex items-end gap-[2px] ${compact ? 'h-3.5 justify-center' : 'h-4'}`}>
             <span className="w-[3px] bg-accent rounded-full animate-[bounce_0.6s_0.0s_infinite]" style={{ height: '60%' }} />
             <span className="w-[3px] bg-accent rounded-full animate-[bounce_0.6s_0.2s_infinite]" style={{ height: '100%' }} />
             <span className="w-[3px] bg-accent rounded-full animate-[bounce_0.6s_0.4s_infinite]" style={{ height: '40%' }} />
           </span>
         ) : (
           <>
-            <span className={`text-sm font-medium ${isActive ? 'text-accent' : 'text-white/30'} group-hover:hidden transition-opacity`}>
-              {index + 1}
+            <span className={`${compact ? 'text-xs' : 'text-sm'} font-medium ${isActive ? 'text-accent' : 'text-white/30'} group-hover:hidden transition-opacity`}>
             </span>
             <button
               onClick={(e) => { e.stopPropagation(); handlePlayClick(); }}
-              className="hidden group-hover:flex items-center justify-center text-white w-7 h-7 rounded-full bg-gradient-to-br from-accent to-accent/80 hover:scale-110 transition-all duration-200 shadow-md hover:shadow-accent/50"
+              className={`hidden items-center justify-center rounded-full bg-gradient-to-br from-accent to-accent/80 text-white shadow-md transition-all duration-200 hover:scale-110 hover:shadow-accent/50 group-hover:flex ${
+                compact ? 'h-6 w-6' : 'h-7 w-7'
+              }`}
             >
-              <RiPlayFill size={12} />
+              <RiPlayFill size={compact ? 10 : 12} />
             </button>
           </>
         )}
@@ -201,23 +204,27 @@ function TrackRow({
       {/* Cover art - smaller */}
       <div ref={coverRef} className="flex-shrink-0 group-hover:scale-105 transition-transform duration-300">
         {track.coverUrl ? (
-          <img src={track.coverUrl} alt={track.title} className="h-11 w-11 rounded-lg object-cover shadow-md ring-1 ring-white/10" />
+          <img
+            src={track.coverUrl}
+            alt={track.title}
+            className={`${compact ? 'h-9 w-9 rounded-md' : 'h-11 w-11 rounded-lg'} object-cover shadow-md ring-1 ring-white/10`}
+          />
         ) : (
           <div
-            className="h-11 w-11 rounded-lg flex items-center justify-center shadow-md ring-1 ring-white/10"
+            className={`${compact ? 'h-9 w-9 rounded-md' : 'h-11 w-11 rounded-lg'} flex items-center justify-center shadow-md ring-1 ring-white/10`}
             style={{ background: `linear-gradient(135deg, ${track.coverGradient?.[0] || '#333'}, ${track.coverGradient?.[1] || '#222'})` }}
           >
-            <RiMusicLine size={16} className="text-white/60" />
+            <RiMusicLine size={compact ? 14 : 16} className="text-white/60" />
           </div>
         )}
       </div>
 
       {/* Title + Artist */}
       <div className="flex-1 min-w-0">
-        <div className={`text-sm font-semibold truncate transition-colors ${isActive ? 'text-accent' : 'text-white group-hover:text-white'}`}>
+        <div className={`${compact ? 'text-[13px] leading-tight' : 'text-sm'} font-semibold truncate transition-colors ${isActive ? 'text-accent' : 'text-white group-hover:text-white'}`}>
           {track.title}
         </div>
-        <div className="text-xs text-white/50 truncate group-hover:text-white/60 transition-colors">{track.artist}</div>
+        <div className={`${compact ? 'text-[11px] leading-tight' : 'text-xs'} truncate text-white/50 transition-colors group-hover:text-white/60`}>{track.artist}</div>
       </div>
 
       {/* Album */}
@@ -230,7 +237,7 @@ function TrackRow({
       </div>
 
       {/* Duration */}
-      <div className="w-12 text-xs text-white/40 text-right flex-shrink-0 font-medium group-hover:text-white/50 transition-colors">
+      <div className={`w-12 flex-shrink-0 text-right font-medium text-white/40 transition-colors group-hover:text-white/50 ${compact ? 'text-[11px]' : 'text-xs'}`}>
         {formatDuration(track.duration)}
       </div>
 
@@ -245,11 +252,11 @@ function TrackRow({
             }
             setShowMenu(!showMenu);
           }}
-          className={`rounded-full p-1.5 transition-all duration-200 ${
+          className={`rounded-full transition-all duration-200 ${compact ? 'p-1' : 'p-1.5'} ${
             showMenu ? 'bg-white/15 text-white opacity-100 scale-105' : 'text-white/30 opacity-0 group-hover:opacity-100 hover:text-white hover:bg-white/10 hover:scale-105'
           }`}
         >
-          <RiMore2Fill size={16} />
+          <RiMore2Fill size={compact ? 14 : 16} />
         </button>
 
         {/* Dropdown Menu */}
@@ -317,7 +324,7 @@ function TrackRow({
               </button>
               <div className="mx-3 my-2 h-px bg-white/10" />
               <button
-                onClick={(e) => { e.stopPropagation(); onDelete(); setShowMenu(false); }}
+                onClick={(e) => { e.stopPropagation(); onDelete(track.id); setShowMenu(false); }}
                 className="group flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium text-red-400 transition-all duration-200 hover:bg-red-400/10 rounded-xl mx-1"
               >
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-400/10 group-hover:bg-red-400/20 transition-colors">
@@ -332,7 +339,7 @@ function TrackRow({
       </div>
     </div>
   );
-}
+});
 
 // ─── Playlist Create/Rename Modal ───
 
@@ -399,7 +406,7 @@ function AddToPlaylistModal({
         <p className="mb-6 text-sm text-white/60 truncate bg-white/5 rounded-xl px-4 py-3 border border-white/10">{track.title}</p>
         {playlists.length === 0 ? (
           <div className="text-center py-12">
-            <RiPlayListLine className="mx-auto mb-4 text-5xl text-white/20" />
+            <RiPlayListLine className="mx-auto mb-4 text-3xl text-white/20" />
             <p className="text-sm text-white/50">No playlists yet. Create one first!</p>
           </div>
         ) : (
@@ -738,7 +745,8 @@ export default function LocalLibraryPage() {
     searchTracks, getMostPlayed, getRecentlyPlayed, recordPlay,
   } = useLocalLibraryStore();
 
-  const { playTrack, currentTrack, isPlaying, setFullscreenOpen } = usePlayerStore();
+  const { currentTrack, isPlaying } = usePlayerStore();
+  const isGalaxyS8PlusLayout = useGalaxyS8PlusLayout();
 
   const [tab, setTab] = useState<ViewTab>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('list');
@@ -752,6 +760,7 @@ export default function LocalLibraryPage() {
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
   const dragCounter = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!isLoaded) loadLibrary();
@@ -808,30 +817,38 @@ export default function LocalLibraryPage() {
     }
   }, [importFiles]);
 
-  const handlePlay = (track: LocalTrack, coverElement: HTMLElement | null) => {
-    // Store the clicked cover element for animation
+  const displayTracksRef = useRef(displayTracks);
+  useEffect(() => {
+    displayTracksRef.current = displayTracks;
+  }, [displayTracks]);
+
+  const handlePlayRow = useCallback((track: LocalTrack, coverElement: HTMLElement | null) => {
     if (coverElement) {
       clickedTrackCoverRef.current = coverElement;
     }
-
-    // Check if this track is already playing
-    const isAlreadyPlaying = currentTrack?.id === track.id;
+    const state = usePlayerStore.getState();
+    const isAlreadyPlaying = state.currentTrack?.id === track.id;
 
     if (isAlreadyPlaying) {
-      // Track is already playing, just open fullscreen
-      setTimeout(() => {
-        setFullscreenOpen(true);
-      }, 100);
+      setTimeout(() => { state.setFullscreenOpen(true); }, 100);
     } else {
-      // New track, play it and open fullscreen
-      playTrack(track, displayTracks);
+      state.playTrack(track, displayTracksRef.current);
       recordPlay(track.id);
-      
-      setTimeout(() => {
-        setFullscreenOpen(true);
-      }, 100);
+      setTimeout(() => { state.setFullscreenOpen(true); }, 100);
     }
-  };
+  }, [recordPlay]);
+
+  const handleDeleteRow = useCallback((id: string) => {
+    removeTrack(id);
+  }, [removeTrack]);
+
+  const handleAddToQueue = useCallback((track: LocalTrack) => {
+    usePlayerStore.getState().addToQueue(track);
+  }, []);
+
+  const handlePlayNext = useCallback((track: LocalTrack) => {
+    usePlayerStore.getState().playNext(track);
+  }, []);
 
   const handleCreatePlaylist = async (name: string) => {
     await createPlaylist(name);
@@ -847,15 +864,15 @@ export default function LocalLibraryPage() {
     localTracks.reduce((sum, t) => sum + t.duration, 0), [localTracks]);
 
   const tabItems = [
-    { key: 'all' as const, label: 'All Tracks', icon: RiMusicLine },
-    { key: 'playlists' as const, label: 'Playlists', icon: RiPlayListLine },
-    { key: 'mostPlayed' as const, label: 'Most Played', icon: RiFireLine },
-    { key: 'recent' as const, label: 'Recently Played', icon: RiHistoryLine },
+    { key: 'all' as const, label: 'All Tracks', compactLabel: 'Tracks', icon: RiMusicLine },
+    { key: 'playlists' as const, label: 'Playlists', compactLabel: 'Lists', icon: RiPlayListLine },
+    { key: 'mostPlayed' as const, label: 'Most Played', compactLabel: 'Most', icon: RiFireLine },
+    { key: 'recent' as const, label: 'Recently Played', compactLabel: 'Recent', icon: RiHistoryLine },
   ];
 
   return (
     <div
-      className="relative page-enter min-h-full"
+      className={`relative page-enter min-h-full ${isGalaxyS8PlusLayout ? 's8-plus-layout' : ''}`}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
@@ -869,9 +886,9 @@ export default function LocalLibraryPage() {
               <div className="h-64 w-64 rounded-full bg-accent"></div>
             </div>
             <div className="relative rounded-3xl border-2 border-dashed border-accent bg-accent/10 backdrop-blur-xl px-20 py-16 text-center shadow-2xl">
-              <RiUploadCloud2Line className="mx-auto mb-6 text-7xl text-accent animate-bounce" />
+              <RiUploadCloud2Line className="mx-auto mb-6 text-5xl text-accent animate-bounce" />
               <p className="text-2xl font-bold text-white mb-3">Drop your music files here</p>
-              <p className="text-base text-white/70">MP3, M4A, FLAC, WAV, OGG supported</p>
+              <p className="text-base text-white/70">MP3, M4A, FLAC, WAV, OGG plus cover.jpeg supported</p>
             </div>
           </div>
         </div>
@@ -904,25 +921,27 @@ export default function LocalLibraryPage() {
       )}
 
       {/* ── Hero Header - Simplified ── */}
-      <div className="mb-10">
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+      <div className={isGalaxyS8PlusLayout ? 'mb-4' : 'mb-10'}>
+        <div className={`flex flex-col ${isGalaxyS8PlusLayout ? 'gap-3' : 'gap-6'} sm:flex-row sm:items-end sm:justify-between`}>
           <div>
-            <h1 className="text-6xl font-black text-white tracking-tight mb-4 bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
+            <h1 className={`bg-gradient-to-r from-white to-white/70 bg-clip-text font-black tracking-tight text-transparent ${
+              isGalaxyS8PlusLayout ? 'mb-2 text-3xl leading-none' : 'mb-4 text-4xl'
+            }`}>
               My Music
             </h1>
-            <div className="flex flex-wrap items-center gap-4 text-sm font-medium">
-              <span className="flex items-center gap-2 px-4 py-2 rounded-full bg-glass-card backdrop-blur-xl border border-white/10">
-                <RiMusicLine size={18} className="text-accent" />
+            <div className={`flex flex-wrap items-center font-medium ${isGalaxyS8PlusLayout ? 'gap-1.5 text-[11px]' : 'gap-4 text-sm'}`}>
+              <span className={`flex items-center rounded-full border border-white/10 bg-glass-card backdrop-blur-xl ${isGalaxyS8PlusLayout ? 'gap-1 px-2.5 py-1' : 'gap-2 px-4 py-2'}`}>
+                <RiMusicLine size={isGalaxyS8PlusLayout ? 13 : 18} className="text-accent" />
                 <span className="text-white">{localTracks.length}</span>
                 <span className="text-white/50">tracks</span>
               </span>
-              <span className="flex items-center gap-2 px-4 py-2 rounded-full bg-glass-card backdrop-blur-xl border border-white/10">
-                <RiTimeLine size={18} className="text-gradient-to" />
+              <span className={`flex items-center rounded-full border border-white/10 bg-glass-card backdrop-blur-xl ${isGalaxyS8PlusLayout ? 'gap-1 px-2.5 py-1' : 'gap-2 px-4 py-2'}`}>
+                <RiTimeLine size={isGalaxyS8PlusLayout ? 13 : 18} className="text-gradient-to" />
                 <span className="text-white">{formatDuration(totalDuration)}</span>
                 <span className="text-white/50">total</span>
               </span>
               {localTracks.length > 0 && (
-                <span className="flex items-center gap-2 px-4 py-2 rounded-full bg-glass-card backdrop-blur-xl border border-white/10">
+                <span className={`flex items-center rounded-full border border-white/10 bg-glass-card backdrop-blur-xl ${isGalaxyS8PlusLayout ? 'gap-1 px-2.5 py-1' : 'gap-2 px-4 py-2'}`}>
                   <span className="text-white">{(localTracks.reduce((s, t) => s + (t.blob?.size || 0), 0) / (1024 * 1024)).toFixed(0)}</span>
                   <span className="text-white/50">MB</span>
                 </span>
@@ -930,13 +949,24 @@ export default function LocalLibraryPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-3">
+          <div className={`flex flex-wrap ${isGalaxyS8PlusLayout ? 'gap-1.5' : 'gap-3'}`}>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="group flex items-center gap-3 rounded-2xl bg-theme-gradient px-8 py-4 text-base font-bold text-white shadow-glow transition-all hover:scale-105 hover:shadow-glow-lg active:scale-95"
+              className={`group flex items-center rounded-2xl bg-theme-gradient font-bold text-white shadow-glow transition-all hover:scale-105 hover:shadow-glow-lg active:scale-95 ${
+                isGalaxyS8PlusLayout ? 'gap-1.5 px-4 py-2.5 text-[13px]' : 'gap-3 px-8 py-4 text-base'
+              }`}
             >
-              <RiUploadCloud2Line size={22} className="group-hover:scale-110 transition-transform" /> 
-              Add Files
+              <RiUploadCloud2Line size={isGalaxyS8PlusLayout ? 16 : 22} className="group-hover:scale-110 transition-transform" /> 
+              {isGalaxyS8PlusLayout ? 'Add' : 'Add Files'}
+            </button>
+            <button
+              onClick={() => folderInputRef.current?.click()}
+              className={`group flex items-center rounded-2xl border border-white/10 bg-glass-card font-bold text-white/80 shadow-lg backdrop-blur-xl transition-all hover:scale-105 hover:border-white/20 hover:bg-white/10 hover:text-white active:scale-95 ${
+                isGalaxyS8PlusLayout ? 'gap-1.5 px-4 py-2.5 text-[13px]' : 'gap-3 px-6 py-4 text-base'
+              }`}
+            >
+              <RiPlayListAddLine size={isGalaxyS8PlusLayout ? 16 : 22} className="transition-transform group-hover:scale-110" />
+              {isGalaxyS8PlusLayout ? 'Folder' : 'Add Folder'}
             </button>
           </div>
 
@@ -944,22 +974,30 @@ export default function LocalLibraryPage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".mp3,.m4a,.wav,.ogg,.flac,.aac"
+            accept=".mp3,.m4a,.wav,.ogg,.flac,.aac,.jpg,.jpeg,.png,.webp"
             multiple
             className="hidden"
+            onChange={e => { if (e.target.files) { importFiles(e.target.files); e.target.value = ''; } }}
+          />
+          <input
+            ref={folderInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
             onChange={e => { if (e.target.files) { importFiles(e.target.files); e.target.value = ''; } }}
           />
         </div>
 
         {/* Import Progress Bar */}
         {importProgress.isRunning && (
-          <div className="mt-8 rounded-2xl bg-glass-card backdrop-blur-xl border border-white/10 p-6">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-semibold text-white flex items-center gap-3">
-                <RiLoader4Line className="animate-spin text-accent" size={20} />
+          <div className={`rounded-2xl border border-white/10 bg-glass-card backdrop-blur-xl ${isGalaxyS8PlusLayout ? 'mt-4 p-4' : 'mt-8 p-6'}`}>
+            <div className={`flex items-center justify-between ${isGalaxyS8PlusLayout ? 'mb-2' : 'mb-3'}`}>
+              <span className={`flex items-center font-semibold text-white ${isGalaxyS8PlusLayout ? 'gap-2 text-xs' : 'gap-3 text-sm'}`}>
+                <RiLoader4Line className="animate-spin text-accent" size={isGalaxyS8PlusLayout ? 16 : 20} />
                 Importing {importProgress.current}
               </span>
-              <span className="text-sm font-bold text-white/70">{importProgress.done}/{importProgress.total}</span>
+              <span className={`${isGalaxyS8PlusLayout ? 'text-xs' : 'text-sm'} font-bold text-white/70`}>{importProgress.done}/{importProgress.total}</span>
             </div>
             <div className="h-2 rounded-full bg-white/10 overflow-hidden">
               <div
@@ -972,38 +1010,44 @@ export default function LocalLibraryPage() {
       </div>
 
       {/* ── Tabs + Controls ── */}
-      <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between mb-6">
-        <div className="flex gap-2.5 overflow-x-auto scrollbar-hidden pb-1">
+      <div className={`mb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between ${isGalaxyS8PlusLayout ? 'gap-2.5' : 'mb-6 gap-5'}`}>
+        <div className={`flex overflow-x-auto scrollbar-hidden pb-1 ${isGalaxyS8PlusLayout ? 'gap-1.5' : 'gap-2.5'}`}>
           {tabItems.map(t => (
             <button
               key={t.key}
               onClick={() => { setTab(t.key); if (t.key !== 'playlists') setSelectedPlaylist(null); }}
-              className={`group flex flex-shrink-0 items-center gap-2.5 rounded-2xl px-5 py-3 text-sm font-semibold transition-all duration-300 ${
+              className={`group flex flex-shrink-0 items-center rounded-2xl font-semibold transition-all duration-300 ${
+                isGalaxyS8PlusLayout ? 'gap-1.5 px-3 py-2 text-[12px]' : 'gap-2.5 px-5 py-3 text-sm'
+              } ${
                 tab === t.key
                   ? 'bg-white text-black shadow-lg scale-105'
                   : 'bg-glass-card backdrop-blur-xl border border-white/10 text-white/70 hover:bg-white/10 hover:text-white hover:border-white/20 hover:scale-105'
               }`}
             >
-              <t.icon size={18} className={`transition-transform group-hover:scale-110 ${tab === t.key ? 'text-black' : 'text-accent'}`} />
-              {t.label}
+              <t.icon size={isGalaxyS8PlusLayout ? 14 : 18} className={`transition-transform group-hover:scale-110 ${tab === t.key ? 'text-black' : 'text-accent'}`} />
+              {isGalaxyS8PlusLayout ? t.compactLabel : t.label}
             </button>
           ))}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className={`flex items-center ${isGalaxyS8PlusLayout ? 'gap-2' : 'gap-3'}`}>
           {/* Search */}
-          <div className="relative">
-            <RiSearchLine className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" size={16} />
+          <div className="relative flex-1">
+            <RiSearchLine className={`absolute top-1/2 -translate-y-1/2 text-white/40 ${isGalaxyS8PlusLayout ? 'left-3' : 'left-4'}`} size={isGalaxyS8PlusLayout ? 14 : 16} />
             <input
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search your library…"
-              className="h-11 w-48 rounded-2xl bg-glass-card backdrop-blur-xl border border-white/10 pl-11 pr-10 text-sm text-white placeholder:text-white/40 outline-none transition-all duration-300 focus:w-64 focus:border-accent/50 focus:shadow-lg"
+              placeholder={isGalaxyS8PlusLayout ? 'Search library...' : 'Search your library…'}
+              className={`rounded-2xl border border-white/10 bg-glass-card text-white placeholder:text-white/40 outline-none transition-all duration-300 focus:border-accent/50 focus:shadow-lg ${
+                isGalaxyS8PlusLayout
+                  ? 'h-9 w-full min-w-0 pl-8 pr-8 text-[12px] focus:w-full'
+                  : 'h-11 w-48 pl-11 pr-10 text-sm focus:w-64'
+              }`}
             />
             {search && (
-              <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors">
-                <RiCloseLine size={18} />
+              <button onClick={() => setSearch('')} className={`absolute top-1/2 -translate-y-1/2 text-white/40 transition-colors hover:text-white ${isGalaxyS8PlusLayout ? 'right-2.5' : 'right-3'}`}>
+                <RiCloseLine size={isGalaxyS8PlusLayout ? 16 : 18} />
               </button>
             )}
           </div>
@@ -1011,102 +1055,125 @@ export default function LocalLibraryPage() {
           {/* View mode toggle */}
           <button
             onClick={() => setViewMode(v => v === 'list' ? 'grid' : 'list')}
-            className="rounded-2xl bg-glass-card backdrop-blur-xl border border-white/10 p-3 text-white/70 transition-all duration-300 hover:text-white hover:bg-white/10 hover:border-white/20 hover:scale-105"
+            className={`rounded-2xl border border-white/10 bg-glass-card text-white/70 transition-all duration-300 hover:scale-105 hover:border-white/20 hover:bg-white/10 hover:text-white ${
+              isGalaxyS8PlusLayout ? 'min-h-[36px] min-w-[36px] p-2' : 'p-3'
+            }`}
           >
-            {viewMode === 'list' ? <RiGridLine size={18} /> : <RiListUnordered size={18} />}
+            {viewMode === 'list' ? <RiGridLine size={isGalaxyS8PlusLayout ? 14 : 18} /> : <RiListUnordered size={isGalaxyS8PlusLayout ? 14 : 18} />}
           </button>
         </div>
       </div>
 
       {/* ── Empty state ── */}
       {!isLoaded && (
-        <div className="flex flex-col items-center justify-center py-32 text-center">
+        <div className={`flex flex-col items-center justify-center text-center ${isGalaxyS8PlusLayout ? 'py-14' : 'py-32'}`}>
           <div className="relative">
             <div className="absolute inset-0 animate-ping opacity-20">
-              <div className="h-16 w-16 rounded-full bg-accent"></div>
+              <div className={`${isGalaxyS8PlusLayout ? 'h-12 w-12' : 'h-16 w-16'} rounded-full bg-accent`}></div>
             </div>
-            <RiLoader4Line className="relative mb-6 text-6xl text-accent animate-spin" />
+            <RiLoader4Line className={`relative text-accent animate-spin ${isGalaxyS8PlusLayout ? 'mb-4 text-3xl' : 'mb-6 text-4xl'}`} />
           </div>
-          <p className="text-base text-white/60 font-medium">Loading your local library…</p>
+          <p className={`${isGalaxyS8PlusLayout ? 'text-sm' : 'text-base'} font-medium text-white/60`}>Loading your local library…</p>
         </div>
       )}
 
       {isLoaded && localTracks.length === 0 && tab !== 'playlists' && (
         <div
           onClick={() => fileInputRef.current?.click()}
-          className="group flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-white/10 py-32 text-center cursor-pointer transition-all duration-300 hover:border-accent/50 hover:bg-accent/5 hover:scale-[1.01]"
+          className={`group flex cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-white/10 text-center transition-all duration-300 hover:scale-[1.01] hover:border-accent/50 hover:bg-accent/5 ${
+            isGalaxyS8PlusLayout ? 'px-4 py-10' : 'py-32'
+          }`}
         >
-          <div className="relative mb-8">
+          <div className={`relative ${isGalaxyS8PlusLayout ? 'mb-5' : 'mb-8'}`}>
             <div className="absolute inset-0 blur-2xl opacity-50 group-hover:opacity-70 transition-opacity">
-              <div className="h-24 w-24 rounded-full bg-accent"></div>
+              <div className={`${isGalaxyS8PlusLayout ? 'h-16 w-16' : 'h-24 w-24'} rounded-full bg-accent`}></div>
             </div>
-            <div className="relative flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-accent/20 to-accent/5 backdrop-blur-xl border border-accent/20 transition-all duration-300 group-hover:scale-110 group-hover:border-accent/40">
-              <RiUploadCloud2Line className="text-5xl text-accent transition-transform group-hover:scale-110" />
+            <div className={`relative flex items-center justify-center rounded-full border border-accent/20 bg-gradient-to-br from-accent/20 to-accent/5 backdrop-blur-xl transition-all duration-300 group-hover:scale-110 group-hover:border-accent/40 ${
+              isGalaxyS8PlusLayout ? 'h-16 w-16' : 'h-24 w-24'
+            }`}>
+              <RiUploadCloud2Line className={`text-accent transition-transform group-hover:scale-110 ${isGalaxyS8PlusLayout ? 'text-2xl' : 'text-4xl'}`} />
             </div>
           </div>
-          <h3 className="mb-3 text-2xl font-bold text-white">Add your first tracks</h3>
-          <p className="text-base text-white/50 max-w-md mb-6 leading-relaxed">
-            Drag & drop music files here, or click to browse. Your music stays entirely on your device — no uploads needed.
+          <h3 className={`font-bold text-white ${isGalaxyS8PlusLayout ? 'mb-2 text-xl leading-tight' : 'mb-3 text-2xl'}`}>Add your first tracks</h3>
+          <p className={`text-white/50 ${isGalaxyS8PlusLayout ? 'mb-4 max-w-[240px] text-sm leading-snug' : 'mb-6 max-w-md text-base leading-relaxed'}`}>
+            {isGalaxyS8PlusLayout
+              ? 'Tap to add music from your device.'
+              : 'Drag & drop music files here, or click to browse. Your music stays entirely on your device — no uploads needed.'}
           </p>
-          <div className="flex gap-2.5">
-            <span className="rounded-full bg-glass-card backdrop-blur-xl border border-white/10 px-4 py-2 text-xs font-semibold text-white/70">MP3</span>
-            <span className="rounded-full bg-glass-card backdrop-blur-xl border border-white/10 px-4 py-2 text-xs font-semibold text-white/70">FLAC</span>
-            <span className="rounded-full bg-glass-card backdrop-blur-xl border border-white/10 px-4 py-2 text-xs font-semibold text-white/70">M4A</span>
-            <span className="rounded-full bg-glass-card backdrop-blur-xl border border-white/10 px-4 py-2 text-xs font-semibold text-white/70">WAV</span>
-            <span className="rounded-full bg-glass-card backdrop-blur-xl border border-white/10 px-4 py-2 text-xs font-semibold text-white/70">OGG</span>
+          <div className={`flex flex-wrap justify-center ${isGalaxyS8PlusLayout ? 'gap-1.5' : 'gap-2.5'}`}>
+            {['MP3', 'FLAC', 'M4A'].map((format) => (
+              <span
+                key={format}
+                className={`rounded-full border border-white/10 bg-glass-card backdrop-blur-xl font-semibold text-white/70 ${
+                  isGalaxyS8PlusLayout ? 'px-3 py-1 text-[10px]' : 'px-4 py-2 text-xs'
+                }`}
+              >
+                {format}
+              </span>
+            ))}
           </div>
         </div>
       )}
 
       {/* ── Playlists Tab ── */}
       {isLoaded && tab === 'playlists' && !selectedPlaylist && (
-        <div className="space-y-6">
+        <div className={isGalaxyS8PlusLayout ? 'space-y-4' : 'space-y-6'}>
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-white">Local Playlists</h2>
+            <h2 className={`${isGalaxyS8PlusLayout ? 'text-lg' : 'text-2xl'} font-bold text-white`}>Local Playlists</h2>
             <button
               onClick={() => setShowCreatePlaylist(true)}
-              className="group flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-accent/20 to-accent/10 border border-accent/30 px-5 py-3 text-sm font-bold text-accent transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-accent/20"
+              className={`group flex items-center rounded-2xl border border-accent/30 bg-gradient-to-r from-accent/20 to-accent/10 font-bold text-accent transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-accent/20 ${
+                isGalaxyS8PlusLayout ? 'gap-1.5 px-3 py-2 text-[12px]' : 'gap-2.5 px-5 py-3 text-sm'
+              }`}
             >
-              <RiAddLine size={18} className="group-hover:rotate-90 transition-transform duration-300" /> 
-              New Playlist
+              <RiAddLine size={isGalaxyS8PlusLayout ? 14 : 18} className="group-hover:rotate-90 transition-transform duration-300" /> 
+              {isGalaxyS8PlusLayout ? 'New' : 'New Playlist'}
             </button>
           </div>
 
           {localPlaylists.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-32 text-center rounded-3xl border-2 border-dashed border-white/10">
-              <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-accent/20 to-accent/5 backdrop-blur-xl border border-accent/20">
-                <RiPlayListLine className="text-5xl text-accent" />
+            <div className={`flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-white/10 text-center ${
+              isGalaxyS8PlusLayout ? 'px-4 py-10' : 'py-32'
+            }`}>
+              <div className={`mb-5 flex items-center justify-center rounded-full border border-accent/20 bg-gradient-to-br from-accent/20 to-accent/5 backdrop-blur-xl ${
+                isGalaxyS8PlusLayout ? 'h-16 w-16' : 'h-24 w-24'
+              }`}>
+                <RiPlayListLine className={`${isGalaxyS8PlusLayout ? 'text-2xl' : 'text-4xl'} text-accent`} />
               </div>
-              <h3 className="mb-2 text-xl font-bold text-white">No playlists yet</h3>
-              <p className="text-sm text-white/50 mb-6">Create one to organize your music!</p>
+              <h3 className={`${isGalaxyS8PlusLayout ? 'text-lg' : 'text-xl'} mb-2 font-bold text-white`}>No playlists yet</h3>
+              <p className={`${isGalaxyS8PlusLayout ? 'mb-4 text-xs' : 'mb-6 text-sm'} text-white/50`}>Create one to organize your music.</p>
               <button
                 onClick={() => setShowCreatePlaylist(true)}
-                className="flex items-center gap-2 rounded-2xl bg-theme-gradient px-6 py-3 text-sm font-bold text-white shadow-glow-sm transition-all hover:scale-105"
+                className={`flex items-center gap-2 rounded-2xl bg-theme-gradient font-bold text-white shadow-glow-sm transition-all hover:scale-105 ${
+                  isGalaxyS8PlusLayout ? 'px-4 py-2 text-[12px]' : 'px-6 py-3 text-sm'
+                }`}
               >
-                <RiAddLine size={18} /> Create Playlist
+                <RiAddLine size={isGalaxyS8PlusLayout ? 14 : 18} /> {isGalaxyS8PlusLayout ? 'Create' : 'Create Playlist'}
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 ${isGalaxyS8PlusLayout ? 'gap-3' : 'gap-5'}`}>
               {localPlaylists.map(pl => {
                 const trackCount = pl.trackIds.length;
                 return (
                   <button
                     key={pl.id}
                     onClick={() => { setSelectedPlaylist(pl); }}
-                    className="group relative flex flex-col items-start rounded-2xl bg-glass-card backdrop-blur-xl border border-white/10 p-5 text-left transition-all duration-300 hover:bg-white/10 hover:border-white/20 hover:scale-105 hover:shadow-xl"
+                    className={`group relative flex flex-col items-start rounded-2xl border border-white/10 bg-glass-card text-left transition-all duration-300 hover:scale-105 hover:border-white/20 hover:bg-white/10 hover:shadow-xl ${
+                      isGalaxyS8PlusLayout ? 'p-3' : 'p-5'
+                    }`}
                   >
                     <div
-                      className="mb-4 aspect-square w-full rounded-xl shadow-lg transition-transform duration-300 group-hover:scale-105"
+                      className={`aspect-square w-full rounded-xl shadow-lg transition-transform duration-300 group-hover:scale-105 ${isGalaxyS8PlusLayout ? 'mb-2.5' : 'mb-4'}`}
                       style={{ background: `linear-gradient(135deg, ${pl.coverGradient?.[0] || '#333'}, ${pl.coverGradient?.[1] || '#222'})` }}
                     >
                       <div className="flex h-full w-full items-center justify-center opacity-40 group-hover:opacity-60 transition-opacity">
-                        <RiPlayListLine size={48} className="text-white" />
+                        <RiPlayListLine size={isGalaxyS8PlusLayout ? 30 : 48} className="text-white" />
                       </div>
                     </div>
                     <div className="w-full">
-                      <p className="text-base font-bold text-white truncate mb-1">{pl.title}</p>
-                      <p className="text-xs text-white/50">{trackCount} {trackCount === 1 ? 'track' : 'tracks'}</p>
+                      <p className={`${isGalaxyS8PlusLayout ? 'mb-0.5 text-sm' : 'mb-1 text-base'} truncate font-bold text-white`}>{pl.title}</p>
+                      <p className={`${isGalaxyS8PlusLayout ? 'text-[10px]' : 'text-xs'} text-white/50`}>{trackCount} {trackCount === 1 ? 'track' : 'tracks'}</p>
                     </div>
                     {/* Delete button */}
                     <button
@@ -1121,12 +1188,14 @@ export default function LocalLibraryPage() {
               {/* Create new card */}
               <button
                 onClick={() => setShowCreatePlaylist(true)}
-                className="group flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-white/10 p-5 transition-all duration-300 hover:border-accent/50 hover:bg-accent/5 hover:scale-105 aspect-square"
+                className={`group aspect-square flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-white/10 transition-all duration-300 hover:scale-105 hover:border-accent/50 hover:bg-accent/5 ${
+                  isGalaxyS8PlusLayout ? 'p-3' : 'p-5'
+                }`}
               >
-                <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-accent/10 transition-all duration-300 group-hover:bg-accent/20 group-hover:scale-110">
-                  <RiAddLine className="text-3xl text-accent transition-transform group-hover:rotate-90" />
+                <div className={`flex items-center justify-center rounded-full bg-accent/10 transition-all duration-300 group-hover:bg-accent/20 group-hover:scale-110 ${isGalaxyS8PlusLayout ? 'mb-2 h-12 w-12' : 'mb-3 h-16 w-16'}`}>
+                  <RiAddLine className={`${isGalaxyS8PlusLayout ? 'text-2xl' : 'text-3xl'} text-accent transition-transform group-hover:rotate-90`} />
                 </div>
-                <span className="text-sm font-semibold text-white/60 group-hover:text-accent transition-colors">New Playlist</span>
+                <span className={`${isGalaxyS8PlusLayout ? 'text-[11px]' : 'text-sm'} font-semibold text-white/60 transition-colors group-hover:text-accent`}>New Playlist</span>
               </button>
             </div>
           )}
@@ -1135,26 +1204,26 @@ export default function LocalLibraryPage() {
 
       {/* ── Playlist Detail ── */}
       {isLoaded && tab === 'playlists' && selectedPlaylist && (
-        <div className="space-y-6">
+        <div className={isGalaxyS8PlusLayout ? 'space-y-4' : 'space-y-6'}>
           <button
             onClick={() => setSelectedPlaylist(null)}
-            className="group flex items-center gap-2 text-sm font-medium text-white/60 hover:text-white transition-colors"
+            className={`group flex items-center gap-2 font-medium text-white/60 transition-colors hover:text-white ${isGalaxyS8PlusLayout ? 'text-xs' : 'text-sm'}`}
           >
             <span className="group-hover:-translate-x-1 transition-transform">←</span> All Playlists
           </button>
-          <div className="flex items-center gap-6 p-6 rounded-3xl bg-glass-card backdrop-blur-xl border border-white/10">
+          <div className={`flex items-center rounded-3xl border border-white/10 bg-glass-card backdrop-blur-xl ${isGalaxyS8PlusLayout ? 'gap-3 p-4' : 'gap-6 p-6'}`}>
             <div
-              className="h-32 w-32 flex-shrink-0 rounded-2xl shadow-2xl"
+              className={`${isGalaxyS8PlusLayout ? 'h-20 w-20' : 'h-32 w-32'} flex-shrink-0 rounded-2xl shadow-2xl`}
               style={{ background: `linear-gradient(135deg, ${selectedPlaylist.coverGradient?.[0] || '#333'}, ${selectedPlaylist.coverGradient?.[1] || '#222'})` }}
             >
               <div className="flex h-full w-full items-center justify-center opacity-40">
-                <RiPlayListLine size={56} className="text-white" />
+                <RiPlayListLine size={isGalaxyS8PlusLayout ? 34 : 56} className="text-white" />
               </div>
             </div>
             <div className="flex-1">
-              <p className="text-xs font-bold text-accent uppercase tracking-widest mb-2">Local Playlist</p>
-              <h2 className="text-4xl font-black text-white mb-2">{selectedPlaylist.title}</h2>
-              <p className="text-base text-white/60 font-medium">{selectedPlaylist.trackIds.length} {selectedPlaylist.trackIds.length === 1 ? 'track' : 'tracks'}</p>
+              <p className={`font-bold uppercase tracking-widest text-accent ${isGalaxyS8PlusLayout ? 'mb-1 text-[10px]' : 'mb-2 text-xs'}`}>Local Playlist</p>
+              <h2 className={`${isGalaxyS8PlusLayout ? 'mb-1 text-2xl' : 'mb-2 text-4xl'} font-black text-white`}>{selectedPlaylist.title}</h2>
+              <p className={`${isGalaxyS8PlusLayout ? 'text-sm' : 'text-base'} font-medium text-white/60`}>{selectedPlaylist.trackIds.length} {selectedPlaylist.trackIds.length === 1 ? 'track' : 'tracks'}</p>
             </div>
           </div>
         </div>
@@ -1162,12 +1231,12 @@ export default function LocalLibraryPage() {
 
       {/* ── Track List / Grid ── */}
       {isLoaded && localTracks.length > 0 && (tab !== 'playlists' || selectedPlaylist) && (
-        <div className="mt-6">
+        <div className={isGalaxyS8PlusLayout ? 'mt-4' : 'mt-6'}>
           {/* Sort row (list mode only) */}
           {viewMode === 'list' && tab !== 'mostPlayed' && tab !== 'recent' && !(tab === 'playlists' && selectedPlaylist) && (
-            <div className="mb-2 flex items-center gap-3 px-3 py-2 text-xs font-bold uppercase tracking-widest text-white/30 border-b border-white/5">
-              <div className="w-10 flex-shrink-0 pl-1">#</div>
-              <div className="w-11 flex-shrink-0" />
+            <div className={`mb-1 flex items-center border-b border-white/5 font-bold uppercase tracking-widest text-white/30 ${isGalaxyS8PlusLayout ? 'gap-2 px-2.5 py-1.5 text-[10px]' : 'gap-3 px-3 py-2 text-xs'}`}>
+              <div className={`${isGalaxyS8PlusLayout ? 'w-7' : 'w-10'} flex-shrink-0 ${isGalaxyS8PlusLayout ? 'text-center' : 'pl-1'}`}></div>
+              <div className={`${isGalaxyS8PlusLayout ? 'w-9' : 'w-11'} flex-shrink-0`} />
               <button onClick={() => toggleSort('title')} className="flex flex-1 items-center gap-2 hover:text-white/50 transition-colors">
                 Title {sortKey === 'title' && (sortDir === 'asc' ? <RiSortAsc size={12} /> : <RiSortDesc size={12} />)}
               </button>
@@ -1185,46 +1254,38 @@ export default function LocalLibraryPage() {
           )}
 
           {viewMode === 'list' ? (
-            <div className="space-y-1">
+            <div className={isGalaxyS8PlusLayout ? 'space-y-0.5' : 'space-y-1'}>
               {displayTracks.length === 0 ? (
                 <div className="py-20 text-center">
-                  <RiMusicLine className="mx-auto mb-4 text-5xl text-white/20" />
+                  <RiMusicLine className="mx-auto mb-4 text-3xl text-white/20" />
                   <p className="text-sm text-white/40">No tracks found.</p>
                 </div>
-              ) : displayTracks.map((track, i) => (
+              ) : displayTracks.map((track) => (
                 <TrackRow
                   key={track.id}
                   track={track}
-                  index={i}
                   isActive={currentTrack?.id === track.id}
                   isPlaying={isPlaying}
                   playCounts={playCounts}
-                  onPlay={(coverElement) => handlePlay(track, coverElement)}
-                  onDelete={() => removeTrack(track.id)}
+                  onPlay={handlePlayRow}
+                  onDelete={handleDeleteRow}
                   onAddToPlaylist={setAddToPlaylistTrack}
                   onEdit={setEditTrack}
-                  onAddToQueue={(track) => {
-                    const { addToQueue } = usePlayerStore.getState();
-                    addToQueue(track);
-                  }}
-                  onPlayNext={(track) => {
-                    const { playNext } = usePlayerStore.getState();
-                    playNext(track);
-                  }}
+                  onAddToQueue={handleAddToQueue}
+                  onPlayNext={handlePlayNext}
+                  compact={isGalaxyS8PlusLayout}
                 />
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 ${isGalaxyS8PlusLayout ? 'gap-3' : 'gap-4'}`}>
               {displayTracks.map(track => {
-                const coverRef = useRef<HTMLDivElement>(null);
-                
                 return (
                   <button
                     key={track.id}
                     onClick={(e) => {
                       const coverEl = e.currentTarget.querySelector('.grid-track-cover') as HTMLElement;
-                      handlePlay(track, coverEl);
+                      handlePlayRow(track, coverEl);
                     }}
                     className={`group relative flex flex-col rounded-2xl bg-glass-card backdrop-blur-xl p-4 text-left transition hover:bg-card-hover ${
                       currentTrack?.id === track.id ? 'ring-2 ring-accent' : ''
@@ -1259,7 +1320,7 @@ export default function LocalLibraryPage() {
         </div>
       )}
 
-      <div className="h-8" />
+      <div className={isGalaxyS8PlusLayout ? 'h-3' : 'h-8'} />
     </div>
   );
 }

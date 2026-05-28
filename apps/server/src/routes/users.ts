@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { User } from '../db.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { verifyToken, AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'go-music-dev-secret-key-change-in-production';
@@ -9,29 +10,45 @@ const JWT_SECRET = process.env.JWT_SECRET || 'go-music-dev-secret-key-change-in-
 // POST /api/users/register
 router.post('/register', async (req, res) => {
   try {
-    let { email, password, displayName } = req.body;
+    let { username, email, password, displayName } = req.body;
+    if (username) username = username.trim().toLowerCase();
     if (email) email = email.trim().toLowerCase();
     if (displayName) displayName = displayName.trim();
     
-    if (!email || !password || !displayName) {
-      return res.status(400).json({ error: 'Email, password, and display name are required' });
+    if (!username || !email || !password || !displayName) {
+      return res.status(400).json({ error: 'Username, email, password, and display name are required' });
+    }
+
+    if (!/^[a-z0-9_.-]{3,30}$/.test(username)) {
+      return res.status(400).json({ error: 'Username must be 3-30 characters and use only letters, numbers, dot, underscore, or hyphen' });
     }
 
     if (password.length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters long' });
     }
 
+    const existingUsername = await User.findOne({ username });
+    if (existingUsername) return res.status(409).json({ error: 'Username already taken' });
+
     const existing = await User.findOne({ email });
     if (existing) return res.status(409).json({ error: 'Email already registered' });
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const user = await User.create({ email, passwordHash, displayName, role: 'user' });
+    const user = await User.create({ username, email, passwordHash, displayName, role: 'user' });
 
-    const token = jwt.sign({ userId: user._id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ userId: String(user._id), email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
 
     res.status(201).json({
       token,
-      user: { id: user._id, email: user.email, displayName: user.displayName, subscription: user.subscription, role: user.role },
+      user: {
+        id: String(user._id),
+        username: user.username,
+        email: user.email,
+        displayName: user.displayName,
+        avatarUrl: user.avatarUrl,
+        subscription: user.subscription,
+        role: user.role,
+      },
     });
   } catch (err) {
     res.status(500).json({ error: 'Registration failed' });
@@ -41,22 +58,30 @@ router.post('/register', async (req, res) => {
 // POST /api/users/login
 router.post('/login', async (req, res) => {
   try {
-    let { email, password } = req.body;
-    if (email) email = email.trim().toLowerCase();
+    let { username, password } = req.body;
+    if (username) username = username.trim().toLowerCase();
     
-    if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
+    if (!username || !password) return res.status(400).json({ error: 'Username and password are required' });
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ username });
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
 
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
 
-    const token = jwt.sign({ userId: user._id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ userId: String(user._id), email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
 
     res.json({
       token,
-      user: { id: user._id, email: user.email, displayName: user.displayName, subscription: user.subscription, role: user.role },
+      user: {
+        id: String(user._id),
+        username: user.username,
+        email: user.email,
+        displayName: user.displayName,
+        avatarUrl: user.avatarUrl,
+        subscription: user.subscription,
+        role: user.role,
+      },
     });
   } catch (err) {
     res.status(500).json({ error: 'Login failed' });
@@ -75,17 +100,39 @@ router.get('/:id', async (req, res) => {
 });
 
 // PUT /api/users/:id — Update profile
-router.put('/:id', async (req, res) => {
+router.put('/:id', verifyToken, async (req: AuthRequest, res) => {
   try {
+    if (req.user?.userId !== req.params.id && req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'You can only edit your own profile' });
+    }
+
     const { displayName, avatarUrl, settings } = req.body;
     const update: Record<string, unknown> = {};
-    if (displayName) update.displayName = displayName;
-    if (avatarUrl) update.avatarUrl = avatarUrl;
+    if (typeof displayName === 'string') {
+      const trimmedDisplayName = displayName.trim();
+      if (!trimmedDisplayName) {
+        return res.status(400).json({ error: 'Display name is required' });
+      }
+      update.displayName = trimmedDisplayName;
+    }
+    if (typeof avatarUrl === 'string') update.avatarUrl = avatarUrl.trim();
     if (settings) update.settings = settings;
 
     const user = await User.findByIdAndUpdate(req.params.id, update, { new: true }).select('-passwordHash');
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json(user);
+    if (!user) {
+      return res.status(404).json({ error: 'Your saved session no longer exists on the server. Please log in again.' });
+    }
+    res.json({
+      user: {
+        id: String(user._id),
+        username: user.username,
+        email: user.email,
+        displayName: user.displayName,
+        avatarUrl: user.avatarUrl,
+        subscription: user.subscription,
+        role: user.role,
+      },
+    });
   } catch (err) {
     res.status(400).json({ error: 'Failed to update user' });
   }

@@ -130,7 +130,7 @@ export const requestIdleCallback = (callback: () => void): number => {
   if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
     return window.requestIdleCallback(callback);
   }
-  return window.setTimeout(callback, 1) as unknown as number;
+  return globalThis.setTimeout(callback, 1) as unknown as number;
 };
 
 /**
@@ -140,7 +140,7 @@ export const cancelIdleCallback = (id: number): void => {
   if (typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
     window.cancelIdleCallback(id);
   } else {
-    clearTimeout(id);
+    globalThis.clearTimeout(id);
   }
 };
 

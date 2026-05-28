@@ -74,7 +74,7 @@ export default function ArtistPage() {
   return (
     <div className="page-enter pb-8">
       {/* Header */}
-      <div className="relative mb-8 h-[340px] overflow-hidden rounded-[28px] md:h-[400px]">
+      <div className="relative mb-4 sm:mb-8 h-[220px] sm:h-[320px] md:h-[400px] overflow-hidden rounded-[24px] sm:rounded-[28px]">
         {artist.avatarUrl ? (
           <img
             src={artist.avatarUrl}
@@ -89,42 +89,46 @@ export default function ArtistPage() {
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
         
-        <div className="absolute bottom-0 left-0 p-6 md:p-8">
-          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-white/80">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-500 text-white">✓</span>
+        <div className="absolute bottom-0 left-0 p-4 sm:p-6 md:p-8">
+          <div className="mb-1 sm:mb-2 flex items-center gap-2 text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-white/80">
+            <span className="flex h-4 w-4 sm:h-5 sm:w-5 items-center justify-center rounded-full bg-blue-500 text-[10px] sm:text-xs text-white">✓</span>
             Local Artist
           </div>
-          <h1 className="text-5xl font-black md:text-7xl">{artist.name}</h1>
-          <div className="mt-4 text-sm text-white/70">
+          <h1 className="text-2xl sm:text-3xl font-black md:text-5xl">{artist.name}</h1>
+          <div className="mt-2 sm:mt-4 text-xs sm:text-sm text-white/70">
             {formatListeners(artist.monthlyListeners)} local plays
           </div>
         </div>
       </div>
 
       {/* Actions */}
-      <div className="mb-8 flex items-center gap-4 px-4 md:px-0">
+      <div className="mb-4 sm:mb-8 flex items-center gap-3 px-4 md:px-0">
         <button
           onClick={handlePlayAll}
-          className="flex h-14 w-14 items-center justify-center rounded-full bg-accent text-white shadow-glow transition hover:scale-105 hover:bg-accent-hover"
+          className="flex h-11 w-11 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-accent text-white shadow-glow transition hover:scale-105 hover:bg-accent-hover"
         >
-          {isCurrentArtist && isPlaying ? <RiPauseFill size={28} /> : <RiPlayFill size={28} className="ml-1" />}
+          {isCurrentArtist && isPlaying ? <RiPauseFill size={22} className="sm:hidden" /> : <RiPlayFill size={22} className="ml-0.5 sm:hidden" />}
+          {isCurrentArtist && isPlaying ? <RiPauseFill size={28} className="hidden sm:block" /> : <RiPlayFill size={28} className="ml-1 hidden sm:block" />}
         </button>
-        <button className="rounded-full bg-glass-card backdrop-blur-xl p-3.5 text-softText transition hover:bg-card-hover hover:text-white">
-          <RiShuffleLine size={22} />
+        <button className="rounded-full bg-glass-card backdrop-blur-xl p-2.5 sm:p-3.5 text-softText transition hover:bg-card-hover hover:text-white">
+          <RiShuffleLine size={18} className="sm:hidden" />
+          <RiShuffleLine size={22} className="hidden sm:block" />
         </button>
         <button
           onClick={() => toggleFollowArtist(artist.id)}
-          className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition ${
+          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold transition ${
             isFollowed
               ? 'border-white text-white hover:border-white/70 hover:text-white/70'
               : 'border-white/30 text-white hover:border-white'
           }`}
         >
-          {isFollowed ? <RiUserFollowFill size={18} /> : <RiUserFollowLine size={18} />}
+          {isFollowed ? <RiUserFollowFill size={15} className="sm:hidden" /> : <RiUserFollowLine size={15} className="sm:hidden" />}
+          {isFollowed ? <RiUserFollowFill size={18} className="hidden sm:block" /> : <RiUserFollowLine size={18} className="hidden sm:block" />}
           {isFollowed ? 'Following' : 'Follow'}
         </button>
-        <button className="rounded-full p-2 text-softText transition hover:text-white">
-          <RiMoreLine size={24} />
+        <button className="rounded-full p-1.5 sm:p-2 text-softText transition hover:text-white">
+          <RiMoreLine size={20} className="sm:hidden" />
+          <RiMoreLine size={24} className="hidden sm:block" />
         </button>
       </div>
 

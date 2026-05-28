@@ -5,18 +5,19 @@ import BottomPlayer from './BottomPlayer';
 import RightPanel from './RightPanel';
 import FullscreenPlayer from '../player/FullscreenPlayer';
 import { useUIStore } from '../../stores/uiStore';
+import { useGalaxyS8PlusLayout } from '../../hooks/useGalaxyS8PlusLayout';
+import AlbumArtGlow from '../ui/AlbumArtGlow';
+import BlinkingStars from '../ui/BlinkingStars';
 
 export default function AppShell() {
   const { contextMenu, closeContextMenu, modalContent, closeModal } = useUIStore();
+  const isGalaxyS8PlusLayout = useGalaxyS8PlusLayout();
 
   return (
     <div className="relative flex h-[100dvh] bg-glass backdrop-blur-2xl text-white overflow-hidden">
-      {/* Animated Background Blobs for Glassmorphism Effect */}
-      <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
-        <div className="absolute left-[-10%] top-[-10%] h-[500px] w-[500px] rounded-full bg-gradient-to-br from-gradient-from/20 to-gradient-to/10 blur-[120px] animate-pulse-glow" />
-        <div className="absolute right-[-15%] top-[20%] h-[600px] w-[600px] rounded-full bg-gradient-to-br from-gradient-to/15 to-gradient-from/10 blur-[140px] animate-pulse-glow" style={{ animationDelay: '2s' }} />
-        <div className="absolute bottom-[-20%] left-[30%] h-[550px] w-[550px] rounded-full bg-gradient-to-br from-purple-500/10 to-blue-500/10 blur-[130px] animate-pulse-glow" style={{ animationDelay: '4s' }} />
-      </div>
+      {/* Dynamic Background Blobs for Glassmorphism Effect */}
+      <AlbumArtGlow />
+      <BlinkingStars />
 
       {/* Sidebar */}
       <Sidebar />
@@ -24,7 +25,11 @@ export default function AppShell() {
       {/* Main area */}
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar />
-        <main className="flex-1 overflow-y-auto px-4 py-5 pb-[140px] md:pb-[100px] md:px-6">
+        <main
+          className={`flex-1 overflow-y-auto px-4 md:px-6 ${
+            isGalaxyS8PlusLayout ? 'py-3 pb-[112px]' : 'py-5 pb-[140px] md:pb-[100px]'
+          }`}
+        >
           <Outlet />
         </main>
       </div>

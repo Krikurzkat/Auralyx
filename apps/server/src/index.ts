@@ -93,7 +93,7 @@ io.on('connection', (socket) => {
 
 // Start server
 const PORT = process.env.PORT || 3001;
-const ADMIN_EMAIL = 'admin@go-music.com';
+const ADMIN_EMAIL = 'admin@auralyx.com';
 const ADMIN_PASSWORD = 'admin123';
 
 async function ensureDefaultAdmin() {
@@ -131,7 +131,7 @@ async function start() {
   await ensureDefaultAdmin();
 
   httpServer.listen(PORT, () => {
-    console.log(`\n🎵 Go-Music API server running on http://localhost:${PORT}`);
+    console.log(`\n🎵 Auralyx API server running on http://localhost:${PORT}`);
     console.log(`📡 Socket.io ready for real-time connections`);
     console.log(`💾 MongoDB: ${process.env.MONGODB_URI ? 'Connected' : 'In-Memory Mode'}\n`);
   });

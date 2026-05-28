@@ -1,46 +1,77 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getAccessTokenFromCode } from '../services/spotifyAuth';
+import { handleSpotifyAuthCallback, isAuthCallback } from '../services/spotifyAuthLogin';
+import { useAuthStore } from '../stores/authStore';
 
 export default function SpotifyCallback() {
   const [message, setMessage] = useState('Connecting to Spotify...');
   const [isError, setIsError] = useState(false);
   const navigate = useNavigate();
+  const login = useAuthStore(state => state.login);
 
   useEffect(() => {
     async function handleCallback() {
       const params = new URLSearchParams(window.location.search);
       const code = params.get('code');
       const error = params.get('error');
+      const errorDescription = params.get('error_description');
+
+      // Debug logging
+      console.log('Callback URL:', window.location.href);
+      console.log('Code:', code);
+      console.log('Error:', error);
+      console.log('Error description:', errorDescription);
+      console.log('All params:', Object.fromEntries(params.entries()));
 
       if (error) {
-        setMessage('Spotify login was cancelled or failed.');
+        setMessage(`Spotify error: ${errorDescription || error}`);
         setIsError(true);
-        setTimeout(() => navigate('/'), 3000);
+        setTimeout(() => navigate('/login'), 3000);
         return;
       }
 
       if (!code) {
         setMessage('No authorization code received from Spotify.');
         setIsError(true);
-        setTimeout(() => navigate('/'), 3000);
+        setTimeout(() => navigate('/login'), 3000);
         return;
       }
 
       try {
-        await getAccessTokenFromCode(code);
-        setMessage('Spotify connected successfully! Redirecting...');
-        setTimeout(() => navigate('/'), 1500);
+        console.log('Exchanging code for token...');
+        // Exchange code for access token
+        const accessToken = await getAccessTokenFromCode(code);
+        console.log('Got access token:', accessToken ? 'Yes' : 'No');
+        
+        // Check if this is for login/signup or just Spotify connection
+        if (isAuthCallback()) {
+          setMessage('Authenticating with Auralyx...');
+          
+          // Handle login/signup with backend
+          const { user, token } = await handleSpotifyAuthCallback(accessToken);
+          
+          // Login to Auralyx
+          login(user, token);
+          
+          setMessage('Login successful! Redirecting...');
+          setTimeout(() => navigate('/'), 1500);
+        } else {
+          // Regular Spotify connection (for Settings)
+          setMessage('Spotify connected successfully! Redirecting...');
+          setTimeout(() => navigate('/settings'), 1500);
+        }
       } catch (err) {
         console.error('Spotify callback error:', err);
-        setMessage('Failed to connect to Spotify. Please try again.');
+        const errorMessage = err instanceof Error ? err.message : 'Failed to connect';
+        setMessage(`Error: ${errorMessage}`);
         setIsError(true);
-        setTimeout(() => navigate('/'), 3000);
+        setTimeout(() => navigate('/login'), 3000);
       }
     }
 
     handleCallback();
-  }, [navigate]);
+  }, [navigate, login]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[var(--gradient-from)] to-[var(--gradient-to)]">

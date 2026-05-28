@@ -78,7 +78,7 @@ export default function AlbumPage() {
 
           <div className="min-w-0 flex-1">
             <div className="text-xs font-semibold uppercase tracking-wider text-white/60">Local Album</div>
-            <h1 className="mt-1 text-3xl font-bold md:text-5xl">{album.title}</h1>
+            <h1 className="mt-1 text-2xl font-bold md:text-3xl">{album.title}</h1>
             <div className="mt-3 flex items-center gap-2 text-sm text-white/60">
               <span className="font-bold text-white">{album.artist}</span>
               <span>·</span>
@@ -116,7 +116,7 @@ export default function AlbumPage() {
 
       {/* Tracks */}
       <div className="mb-2 flex items-center gap-3 border-b border-white/5 px-3 py-2 text-xs font-medium uppercase tracking-wider text-dimText">
-        <div className="w-8 text-center">#</div>
+        <div className="w-8 text-center"></div>
         <div className="min-w-0 flex-1">Title</div>
         <div className="w-8" />
         <div className="w-12 text-right">

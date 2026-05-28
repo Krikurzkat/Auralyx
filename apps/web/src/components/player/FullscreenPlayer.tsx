@@ -24,7 +24,6 @@ import { gsap } from 'gsap';
 import { bottomPlayerCoverRef } from '../layout/BottomPlayer';
 import DrivePlayer from './DrivePlayer';
 import FloatingOrbs from '../ui/FloatingOrbs';
-import { usePerformance } from '../../hooks/usePerformance';
 
 
 // Shared ref for tracking clicked track covers
@@ -55,8 +54,6 @@ function getFullscreenLayoutProfile(): FullscreenLayoutProfile {
 }
 
 export default function FullscreenPlayer() {
-  const performanceSettings = usePerformance();
-  
   const {
     currentTrack,
     isPlaying,
@@ -1100,7 +1097,7 @@ export default function FullscreenPlayer() {
 
       {/* Floating Orbs - rising ember particles */}
       <div className="absolute inset-0 -z-[5] pointer-events-none">
-        <FloatingOrbs />
+        <FloatingOrbs variant={isDriveMode ? "drive" : "default"} />
       </div>
 
       {visualTrack ? (

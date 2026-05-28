@@ -1,0 +1,41 @@
+import { usePlayerStore } from '../../stores/playerStore';
+import { useEffect, useRef, useState } from 'react';
+
+/**
+ * Dynamic Album Art Glow — a blurred ambient background that smoothly
+ * transitions to match the currently playing track's cover gradient colors.
+ * Falls back to a subtle neutral glow when nothing is playing.
+ */
+export default function AlbumArtGlow() {
+  const currentTrack = usePlayerStore(s => s.currentTrack);
+  const [colors, setColors] = useState<[string, string]>(['#1a1a2e', '#16213e']);
+  const prevColors = useRef(colors);
+
+  useEffect(() => {
+    const gradient = currentTrack?.coverGradient;
+    if (gradient && gradient.length === 2) {
+      prevColors.current = colors;
+      setColors(gradient);
+    }
+  }, [currentTrack?.coverGradient?.[0], currentTrack?.coverGradient?.[1]]);
+
+  return (
+    <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden opacity-40 transition-opacity duration-1000">
+      {/* Primary blob — top-left */}
+      <div
+        className="absolute -top-[30%] -left-[15%] h-[80%] w-[70%] rounded-full blur-[160px] transition-[background] duration-[2500ms] ease-in-out"
+        style={{ background: colors[0] }}
+      />
+      {/* Secondary blob — bottom-right */}
+      <div
+        className="absolute -bottom-[25%] -right-[10%] h-[70%] w-[65%] rounded-full blur-[140px] transition-[background] duration-[2500ms] ease-in-out"
+        style={{ background: colors[1] }}
+      />
+      {/* Accent center blob for depth */}
+      <div
+        className="absolute top-[40%] left-[35%] h-[40%] w-[40%] rounded-full blur-[120px] transition-[background] duration-[2500ms] ease-in-out mix-blend-screen"
+        style={{ background: `color-mix(in srgb, ${colors[0]} 50%, ${colors[1]})` }}
+      />
+    </div>
+  );
+}

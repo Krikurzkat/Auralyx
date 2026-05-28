@@ -27,19 +27,20 @@ export default function LikedSongsPage() {
   return (
     <div className="page-enter pb-8">
       {/* Header */}
-      <div className="relative mb-6 overflow-hidden rounded-[28px] bg-theme-gradient-subtle p-6 md:p-8">
+      <div className="relative mb-4 sm:mb-6 overflow-hidden rounded-2xl sm:rounded-[28px] bg-theme-gradient-subtle p-4 sm:p-6 md:p-8">
         <div className="absolute inset-0 backdrop-blur-3xl" />
         <div className="relative flex flex-col gap-6 md:flex-row md:items-end">
-          <div className="flex h-48 w-48 flex-shrink-0 items-center justify-center rounded-2xl bg-theme-gradient shadow-glow-lg md:h-56 md:w-56">
-            <RiHeartFill size={80} className="text-white" />
+          <div className="flex h-32 w-32 sm:h-48 sm:w-48 flex-shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-theme-gradient shadow-glow-lg md:h-56 md:w-56">
+            <RiHeartFill size={56} className="text-white sm:hidden" />
+            <RiHeartFill size={80} className="text-white hidden sm:block" />
           </div>
 
           <div className="min-w-0 flex-1">
             <div className="text-xs font-semibold uppercase tracking-wider text-white/60">
               Playlist
             </div>
-            <h1 className="mt-1 text-4xl font-bold md:text-6xl">Liked Songs</h1>
-            <div className="mt-3 flex items-center gap-1 text-sm text-white/60">
+            <h1 className="mt-1 text-xl sm:text-2xl font-bold md:text-4xl">Liked Songs</h1>
+            <div className="mt-2 sm:mt-3 flex items-center gap-1 text-xs sm:text-sm text-white/60">
               <span className="font-bold text-white">You</span>
               <span>·</span>
               <span>{likedTracks.length} songs</span>
@@ -53,7 +54,7 @@ export default function LikedSongsPage() {
         <div className="mb-6 flex items-center gap-3">
           <button
             onClick={handlePlayAll}
-            className="flex h-14 w-14 items-center justify-center rounded-full bg-accent text-white shadow-glow transition hover:scale-105 hover:bg-accent-hover"
+            className="flex h-11 w-11 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-accent text-white shadow-glow transition hover:scale-105 hover:bg-accent-hover"
           >
             {isCurrentPlaylist && isPlaying ? <RiPauseFill size={28} /> : <RiPlayFill size={28} className="ml-1" />}
           </button>
@@ -64,7 +65,7 @@ export default function LikedSongsPage() {
       {likedTracks.length > 0 ? (
         <>
           <div className="mb-2 flex items-center gap-3 border-b border-white/5 px-3 py-2 text-xs font-medium uppercase tracking-wider text-dimText">
-            <div className="w-8 text-center">#</div>
+            <div className="w-8 text-center"></div>
             <div className="min-w-0 flex-1">Title</div>
             <div className="hidden min-w-[140px] md:block">Album</div>
             <div className="w-8" />

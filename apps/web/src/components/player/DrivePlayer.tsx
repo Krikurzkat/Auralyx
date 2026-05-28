@@ -4,6 +4,7 @@ import { Track } from '../../types';
 import { useLibraryStore } from '../../stores/libraryStore';
 import { formatDuration, getLyricsForTrack } from '../../utils/formatters';
 import { useFluidLyricMotion } from '../../utils/lyricMotion';
+import { getCurrentLyricIndex } from '../../utils/lrcParser';
 import { gsap } from 'gsap';
 import {
   RiArrowLeftLine,
@@ -21,12 +22,19 @@ import {
   RiMusic2Line,
   RiImageLine,
 } from 'react-icons/ri';
-import { usePerformance } from '../../hooks/usePerformance';
 
 interface DrivePlayerProps {
   onClose: () => void;
   isEmbedded?: boolean;
 }
+
+type CoverTransitionRect = Pick<DOMRect, 'top' | 'left' | 'width' | 'height'>;
+
+type DriveTransitionWindow = Window & {
+  __fullscreenCoverRect?: CoverTransitionRect;
+  __driveModeBackRect?: CoverTransitionRect;
+  __clearDriveModeTransition?: () => void;
+};
 
 export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayerProps) {
   const {
@@ -101,13 +109,40 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
     () => (currentTrack ? getLyricsForTrack(currentTrack.id, currentTrack.lyrics) : []),
     [currentTrack]
   );
-  // Perfect sync offset (900ms look-ahead)
-  const { focusPosition: lyricFocusPosition, activeLyricIndex } = useFluidLyricMotion(lyrics, currentTime + 0.80, isPlaying);
-  const lyricWindowCenter = lyrics.length > 0
-    ? Math.max(0, Math.min(lyrics.length - 1, Math.floor(lyricFocusPosition)))
+  const lyricScrollAheadSeconds = isWideLyricsViewport ? 0.52 : 0.42;
+  const lyricHighlightAheadSeconds = 0.12;
+  const { fluidTime: lyricFluidTime, focusPosition: lyricFocusPosition } = useFluidLyricMotion(
+    lyrics,
+    currentTime + lyricScrollAheadSeconds,
+    isPlaying,
+    {
+      stiffness: 48,
+      damping: 19,
+      maxVelocity: 3.8,
+      snapThreshold: 3.25,
+    }
+  );
+  const syncedLyricTime = Math.max(
+    0,
+    lyricFluidTime - lyricScrollAheadSeconds + lyricHighlightAheadSeconds
+  );
+  const activeLyricIndex = useMemo(
+    () => getCurrentLyricIndex(lyrics, syncedLyricTime),
+    [lyrics, syncedLyricTime]
+  );
+  const lyricWindowAnchor = lyrics.length > 0
+    ? Math.max(0, Math.min(lyrics.length - 1, Math.floor(Math.max(0, lyricFocusPosition) + 0.08)))
     : -1;
-  const lyricWindowStart = lyricWindowCenter >= 0 ? Math.max(0, lyricWindowCenter - 5) : 0;
-  const visibleLyrics = lyrics.slice(lyricWindowStart, lyricWindowCenter >= 0 ? lyricWindowCenter + 6 : 0);
+  const lyricLinesBefore = isWideLyricsViewport ? 5 : 4;
+  const lyricLinesAfter = isWideLyricsViewport ? 8 : 7;
+  const lyricWindowCenter = lyrics.length > 0
+    ? Math.max(0, Math.min(lyrics.length - 1, Math.floor(lyricFocusPosition + 0.5)))
+    : -1;
+  const lyricWindowStart = lyricWindowAnchor >= 0 ? Math.max(0, lyricWindowAnchor - lyricLinesBefore) : 0;
+  const lyricWindowEnd = lyricWindowAnchor >= 0
+    ? Math.min(lyrics.length, lyricWindowAnchor + lyricLinesAfter + 1)
+    : 0;
+  const visibleLyrics = lyrics.slice(lyricWindowStart, lyricWindowEnd);
 
   // Calculate cover URL early so it can be used in effects
   const coverUrl = currentTrack?.coverUrl?.startsWith('/')
@@ -134,28 +169,23 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
     WebkitBackfaceVisibility: 'hidden',
     contain: 'paint',
   }), []);
-  const lyricSpacingStep = isWideLyricsViewport ? 160 : 110;
+  const lyricRowHeight = isWideLyricsViewport ? 154 : 112;
   const lyricFontSize = isWideLyricsViewport
-    ? 'clamp(1.2rem, 2.6vw, 1.9rem)'
-    : 'clamp(0.85rem, 3.5vw, 1.35rem)';
-  const lyricLineHeight = isWideLyricsViewport ? '2.0' : '1.8';
-  const lyricLetterSpacing = isWideLyricsViewport ? '0.045em' : '0.02em';
-  const lyricMaxHeight = isWideLyricsViewport ? '7em' : '5.5em';
-
-  // Auto-adjust: Calculate dynamic spacing based on lyric line count
-  const calculateDynamicSpacing = (text: string, baseSpacing: number) => {
-    if (!text) return baseSpacing;
-    
-    // Estimate line count based on text length and viewport
-    const avgCharsPerLine = isWideLyricsViewport ? 50 : 35;
-    const estimatedLines = Math.ceil(text.length / avgCharsPerLine);
-    
-    // Multiply spacing by line count to prevent overlap
-    // 1 line = 1x, 2 lines = 1.5x, 3+ lines = 2x
-    const multiplier = estimatedLines === 1 ? 1 : estimatedLines === 2 ? 1.5 : 2;
-    
-    return baseSpacing * multiplier;
-  };
+    ? 'clamp(1.4rem, 2.9vw, 2.45rem)'
+    : 'clamp(1.05rem, 4.8vw, 1.62rem)';
+  const lyricDenseFontSize = isWideLyricsViewport
+    ? 'clamp(1.08rem, 2.15vw, 1.82rem)'
+    : 'clamp(0.88rem, 3.9vw, 1.28rem)';
+  const lyricCompactFontSize = isWideLyricsViewport
+    ? 'clamp(0.96rem, 1.82vw, 1.42rem)'
+    : 'clamp(0.78rem, 3.35vw, 1.08rem)';
+  const lyricUltraCompactFontSize = isWideLyricsViewport
+    ? 'clamp(0.88rem, 1.55vw, 1.18rem)'
+    : 'clamp(0.68rem, 2.8vw, 0.94rem)';
+  const lyricLineHeight = isWideLyricsViewport ? '1.18' : '1.22';
+  const lyricTrackOffset = lyricWindowCenter >= 0
+    ? -(lyricFocusPosition - lyricWindowStart + 0.5) * lyricRowHeight
+    : 0;
 
   // Intro animation for all elements - DISABLED for instant appearance
   useLayoutEffect(() => {
@@ -193,7 +223,8 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
   // Animate large cover from fullscreen position to Drive Mode center position
   useLayoutEffect(() => {
     const largeCover = largeCoverRef.current;
-    const fullscreenRect = (window as any).__fullscreenCoverRect;
+    const driveWindow = window as DriveTransitionWindow;
+    const fullscreenRect = driveWindow.__fullscreenCoverRect;
 
     if (driveModeTransitionRetryRef.current !== null) {
       window.clearTimeout(driveModeTransitionRetryRef.current);
@@ -203,9 +234,9 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
     // Only animate if we have fullscreen rect and we're in compact mode
     if (!largeCover || !fullscreenRect || showFullLyrics) {
       // Clear the callback if it exists
-      if ((window as any).__clearDriveModeTransition) {
-        (window as any).__clearDriveModeTransition();
-        delete (window as any).__clearDriveModeTransition;
+      if (driveWindow.__clearDriveModeTransition) {
+        driveWindow.__clearDriveModeTransition();
+        delete driveWindow.__clearDriveModeTransition;
       }
       return;
     }
@@ -224,10 +255,10 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
         retryCount += 1;
         if (retryCount > 10) {
           gsap.set(largeCover, { clearProps: 'all' });
-          delete (window as any).__fullscreenCoverRect;
-          if ((window as any).__clearDriveModeTransition) {
-            (window as any).__clearDriveModeTransition();
-            delete (window as any).__clearDriveModeTransition;
+          delete driveWindow.__fullscreenCoverRect;
+          if (driveWindow.__clearDriveModeTransition) {
+            driveWindow.__clearDriveModeTransition();
+            delete driveWindow.__clearDriveModeTransition;
           }
           return;
         }
@@ -249,7 +280,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
     };
   }, [showFullLyrics]); // Re-run when showFullLyrics changes
   
-  const animateCoverTransition = (largeCover: HTMLDivElement, fullscreenRect: any, driveRect: DOMRect) => {
+  const animateCoverTransition = (largeCover: HTMLDivElement, fullscreenRect: CoverTransitionRect, driveRect: DOMRect) => {
     // Calculate initial position (from fullscreen)
     const initialX = fullscreenRect.left - driveRect.left;
     const initialY = fullscreenRect.top - driveRect.top;
@@ -279,13 +310,13 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
       onComplete: () => {
         gsap.set(largeCover, { clearProps: 'all' });
         driveModeTransitionRetryRef.current = null;
-        delete (window as any).__fullscreenCoverRect;
+        delete (window as DriveTransitionWindow).__fullscreenCoverRect;
         
         // Clear the transition flag in parent
-        const parentWindow = window.parent || window;
-        if ((parentWindow as any).__clearDriveModeTransition) {
-          (parentWindow as any).__clearDriveModeTransition();
-          delete (parentWindow as any).__clearDriveModeTransition;
+        const parentWindow = (window.parent || window) as DriveTransitionWindow;
+        if (parentWindow.__clearDriveModeTransition) {
+          parentWindow.__clearDriveModeTransition();
+          delete parentWindow.__clearDriveModeTransition;
         }
       }
     });
@@ -443,7 +474,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
     const driveRect = largeCover.getBoundingClientRect();
     
     // Store Drive Mode position for FullscreenPlayer to animate from
-    (window as any).__driveModeBackRect = {
+    (window as DriveTransitionWindow).__driveModeBackRect = {
       top: driveRect.top,
       left: driveRect.left,
       width: driveRect.width,
@@ -477,6 +508,12 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
   const isLiked = likedTrackIds.has(currentTrack.id);
+  const upNextTrack = queue[queueIndex + 1] || (repeat === 'all' && queue.length > 1 ? queue[0] : null);
+  const andLaterTrack = queue[queueIndex + 2] || (
+    repeat === 'all' && queue.length > 2
+      ? queue[(queueIndex + 2) % queue.length]
+      : null
+  );
 
   // Get repeat icon based on mode
   const getRepeatIcon = () => {
@@ -578,65 +615,100 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
       </div>
 
       {/* Content Area - Always render both modes, control visibility */}
-      <div className="drive-lyrics-container flex-1 relative px-6 overflow-hidden min-h-0">
+      <div className="drive-lyrics-container flex-1 relative overflow-hidden min-h-0 px-3 sm:px-5 md:px-8 lg:px-12">
         {/* Lyrics Mode */}
         <div className={`absolute inset-0 ${showFullLyrics ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
           {lyrics.length > 0 ? (
-            <div className="absolute inset-0">
-              {visibleLyrics.map((line, index) => {
-                const actualIndex = lyricWindowStart + index;
-                const relativePosition = actualIndex - lyricFocusPosition;
-                const distance = Math.abs(relativePosition);
-                const direction = relativePosition < 0 ? -1 : 1;
-                
-                // Auto-adjust spacing based on lyric length
-                const dynamicSpacing = calculateDynamicSpacing(line.text, lyricSpacingStep);
-                const verticalOffset = direction * Math.pow(distance, 1.25) * dynamicSpacing;
-                
-                // More aggressive scale reduction to prevent overlap
-                const scaleValue = 1.05 - Math.min(distance * 0.2, 0.55);
-                const opacityValue = Math.max(0.08, 1 - distance * 0.2);
-                const isCurrent = actualIndex === activeLyricIndex;
-                
-                // Simplify for performance: no blur filter. Transition color from gray to white.
-                // Add a lightweight theme-colored shadow for the active line.
-                // Strictly use grey for non-active lines and white + shadow for active line
-                const textColor = isCurrent ? '#ffffff' : 'rgb(128, 128, 128)';
-                const textShadow = isCurrent ? `0 0 14px var(--accent)` : 'none';
+            <div
+              className="drive-lyrics-stage absolute inset-0"
+              style={{
+                maskImage: 'linear-gradient(to bottom, transparent 0%, black 12%, black 84%, transparent 100%)',
+                WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 12%, black 84%, transparent 100%)',
+              }}
+            >
+              <div
+                aria-hidden="true"
+                className="drive-lyric-reading-lane pointer-events-none absolute left-1/2 top-1/2 h-[132px] w-full max-w-6xl -translate-x-1/2 -translate-y-1/2"
+              />
+              <div
+                className="drive-lyric-track absolute left-0 right-0 top-1/2 flex flex-col items-center"
+                style={{
+                  transform: `translate3d(0, ${lyricTrackOffset.toFixed(2)}px, 0)`,
+                  willChange: 'transform',
+                }}
+              >
+                {visibleLyrics.map((line, index) => {
+                  const actualIndex = lyricWindowStart + index;
+                  const distance = Math.abs(actualIndex - lyricFocusPosition);
+                  const focusFactor = Math.max(0, 1 - distance * 0.78);
+                  const bloomFactor = Math.sin(focusFactor * Math.PI * 0.5);
+                  const depthFactor = Math.min(distance / 6, 1);
+                  const scaleValue = 0.9 + bloomFactor * 0.12 - depthFactor * 0.025;
+                  const isCurrent = actualIndex === activeLyricIndex;
+                  const isPastLine = actualIndex < activeLyricIndex;
+                  const isReadingLine = isCurrent || distance < 0.72;
+                  const lyricLength = line.text.length;
+                  const isDenseLine = lyricLength > (isWideLyricsViewport ? 58 : 36);
+                  const isVeryDenseLine = lyricLength > (isWideLyricsViewport ? 92 : 58);
+                  const isUltraDenseLine = lyricLength > (isWideLyricsViewport ? 132 : 86);
+                  const opacityBase = isPastLine ? 0.2 : 0.34;
+                  const opacityValue = Math.max(opacityBase, 1 - Math.pow(Math.min(distance / 6.4, 1), 1.45));
+                  const textAlpha = Math.min(1, opacityBase + bloomFactor * (isCurrent ? 0.82 : 0.62)).toFixed(3);
+                  const textColor = `rgba(255, 255, 255, ${textAlpha})`;
+                  const textShadow = bloomFactor > 0.08
+                    ? `0 0 ${Math.round(8 + bloomFactor * 16)}px color-mix(in srgb, var(--accent) ${Math.round(18 + bloomFactor * 28)}%, transparent), 0 4px 18px rgba(0,0,0,0.74)`
+                    : '0 3px 14px rgba(0,0,0,0.78)';
+                  const lineFontSize = isVeryDenseLine
+                    ? isUltraDenseLine ? lyricUltraCompactFontSize : lyricCompactFontSize
+                    : isDenseLine
+                      ? lyricDenseFontSize
+                      : lyricFontSize;
+                  const lineHeight = isUltraDenseLine ? (isWideLyricsViewport ? '1.14' : '1.16') : lyricLineHeight;
 
-                return (
-                  <div
-                    key={`${line.time}-${actualIndex}`}
-                    className="absolute left-1/2 w-full max-w-4xl -translate-x-1/2 px-8 text-center font-bold md:px-12 lg:px-16"
-                    style={{
-                      top: '50%',
-                      fontSize: lyricFontSize,
-                      lineHeight: lyricLineHeight,
-                      letterSpacing: lyricLetterSpacing,
-                      transform: `translate3d(-50%, calc(-50% + ${verticalOffset.toFixed(2)}px), 0) scale(${scaleValue.toFixed(3)})`,
-                      opacity: opacityValue,
-                      color: textColor,
-                      textShadow,
-                      fontWeight: isCurrent ? '900' : '700',
-                      zIndex: isCurrent ? 10 : Math.max(1, 10 - Math.round(distance)),
-                      willChange: 'transform, opacity, color',
-                      wordWrap: 'break-word',
-                      overflowWrap: 'break-word',
-                      hyphens: 'auto',
-                      whiteSpace: 'normal',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      minHeight: '2em',
-                      maxHeight: lyricMaxHeight,
-                      paddingTop: '1em',
-                      paddingBottom: '1em',
-                    }}
-                  >
-                    {line.text || '♪'}
-                  </div>
-                );
-              })}
+                  return (
+                    <div
+                      key={`${line.time}-${actualIndex}`}
+                      aria-current={isCurrent ? 'true' : undefined}
+                      className="drive-lyric-line relative flex w-full items-center justify-center px-2 text-center md:px-10 lg:px-16"
+                      style={{
+                        height: `${lyricRowHeight}px`,
+                        transform: `scale(${scaleValue.toFixed(3)})`,
+                        opacity: opacityValue,
+                        zIndex: isReadingLine ? 12 : Math.max(1, 10 - Math.round(distance)),
+                        willChange: 'transform, opacity',
+                      }}
+                    >
+                      <div
+                        aria-hidden="true"
+                        className="drive-lyric-line-glow pointer-events-none absolute left-1/2 top-1/2 h-24 w-full max-w-5xl -translate-x-1/2 -translate-y-1/2"
+                        style={{
+                          opacity: bloomFactor * 0.17,
+                          transform: `translate3d(-50%, -50%, 0) scaleX(${(0.68 + bloomFactor * 0.26).toFixed(3)})`,
+                          background: 'linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--accent) 34%, rgba(255,255,255,0.1)) 50%, transparent 100%)',
+                        }}
+                      />
+                      <div
+                        className="drive-lyric-text relative w-full font-bold"
+                        style={{
+                          maxWidth: isVeryDenseLine ? 'min(95vw, 1040px)' : 'min(92vw, 980px)',
+                          fontSize: lineFontSize,
+                          lineHeight,
+                          letterSpacing: '0',
+                          color: textColor,
+                          textShadow,
+                          fontWeight: isReadingLine ? '900' : '700',
+                          textWrap: 'balance',
+                          overflowWrap: 'anywhere',
+                          wordBreak: 'break-word',
+                          hyphens: 'auto',
+                        }}
+                      >
+                        {line.text || 'Instrumental break'}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           ) : (
             <div className="absolute inset-0 flex items-center justify-center">
@@ -765,13 +837,16 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
           </button>
         </div>
 
-        {/* Up Next dynamic popup */}
-        <UpNextPopup 
-          track={queue[queueIndex + 1] || (repeat === 'all' ? queue[0] : null)}
-          visible={progressPercent >= 75 && progressPercent <= 80}
-          isDriveMode={true}
-        />
       </div>
+
+      {/* Up Next stays outside the auto-hiding controls container. */}
+      <UpNextPopup 
+        track={upNextTrack}
+        laterTrack={andLaterTrack}
+        visible={Boolean(upNextTrack) && progressPercent >= 73}
+        cycleEnabled={progressPercent >= 73}
+        isDriveMode={true}
+      />
     </div>
   );
 }
@@ -779,20 +854,36 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
 /* ─── Up Next Dynamic Popup Component ─── */
 interface UpNextPopupProps {
   track: Track | null;
+  laterTrack?: Track | null;
   visible: boolean;
+  cycleEnabled?: boolean;
   isDriveMode?: boolean;
 }
 
-function UpNextPopup({ track, visible, isDriveMode = false }: UpNextPopupProps) {
+function UpNextPopup({ track, laterTrack = null, visible, cycleEnabled = false, isDriveMode = false }: UpNextPopupProps) {
+  const [showLaterTrack, setShowLaterTrack] = useState(false);
+
+  useEffect(() => {
+    setShowLaterTrack(false);
+
+    if (!visible || !cycleEnabled || !laterTrack) return undefined;
+
+    const interval = window.setInterval(() => {
+      setShowLaterTrack((current) => !current);
+    }, 5000);
+
+    return () => window.clearInterval(interval);
+  }, [visible, cycleEnabled, laterTrack, track?.id]);
+
   if (!track) return null;
-  const coverGradient = track.coverGradient || ['#3b82f6', '#1e3a8a'];
+  const headline = showLaterTrack && laterTrack ? 'And Later' : 'Up Next';
 
   return (
     <div className={`upnext-popup-card ${isDriveMode ? 'drive-mode' : ''} ${visible ? 'visible' : 'hidden'}`}>
       <div className="flex items-center justify-between">
         <span className="text-[10px] font-bold uppercase tracking-widest text-accent flex items-center gap-1.5">
           <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
-          Up Next
+          {headline}
         </span>
         <div className="upnext-soundwave">
           <div className="upnext-bar" style={{ height: '40%' }}></div>
@@ -801,23 +892,42 @@ function UpNextPopup({ track, visible, isDriveMode = false }: UpNextPopupProps) 
           <div className="upnext-bar" style={{ height: '50%' }}></div>
         </div>
       </div>
-      <div className="flex items-center gap-3">
-        {track.coverUrl ? (
-          <img
-            src={track.coverUrl}
-            alt={track.title}
-            className="h-12 w-12 rounded-xl object-cover shadow-md border border-white/10"
-          />
-        ) : (
-          <div
-            className="h-12 w-12 rounded-xl border border-white/10 shadow-md animate-gradient"
-            style={{ background: `linear-gradient(135deg, ${coverGradient[0]}, ${coverGradient[1]})` }}
-          />
-        )}
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-bold text-white truncate text-left">{track.title}</div>
-          <div className="text-[11px] text-softText truncate text-left">{track.artist}</div>
-        </div>
+      <div className="relative min-h-[56px]">
+        {[track, laterTrack].map((queuedTrack, index) => {
+          if (!queuedTrack) return null;
+
+          const isLaterSlot = index === 1;
+          const isActive = showLaterTrack === isLaterSlot;
+          const slotGradient = queuedTrack.coverGradient || ['#3b82f6', '#1e3a8a'];
+
+          return (
+            <div
+              key={`${isLaterSlot ? 'later' : 'next'}-${queuedTrack.id}`}
+              className={`absolute inset-0 flex items-center gap-3 transition-all duration-500 ease-out ${
+                isActive ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
+              }`}
+              aria-hidden={!isActive}
+            >
+              {queuedTrack.coverUrl ? (
+                <img
+                  src={queuedTrack.coverUrl}
+                  alt={queuedTrack.title}
+                  className="h-12 w-12 rounded-xl object-cover shadow-md border border-white/10"
+                />
+              ) : (
+                <div
+                  className="h-12 w-12 rounded-xl border border-white/10 shadow-md animate-gradient"
+                  style={{ background: `linear-gradient(135deg, ${slotGradient[0]}, ${slotGradient[1]})` }}
+                />
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-bold text-white truncate text-left">{queuedTrack.title}</div>
+                <div className="text-[11px] text-softText truncate text-left">{queuedTrack.artist}</div>
+                <div className="text-[10px] text-white/35 truncate text-left">{queuedTrack.album || 'Unknown Album'}</div>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

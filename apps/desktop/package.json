@@ -1,0 +1,13 @@
+{
+  "name": "@go-music/desktop",
+  "private": true,
+  "version": "0.1.0",
+  "main": "src/main.cjs",
+  "scripts": {
+    "dev": "electron .",
+    "typecheck": "node -e \"process.exit(0)\""
+  },
+  "devDependencies": {
+    "electron": "^31.7.7"
+  }
+}

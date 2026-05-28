@@ -73,16 +73,14 @@ export default function PlaylistPage() {
               className="h-48 w-48 flex-shrink-0 rounded-2xl shadow-glow-lg md:h-56 md:w-56"
               style={{ background: `linear-gradient(135deg, ${coverGradient[0]}, ${coverGradient[1]})` }}
             >
-              <div className="flex h-full w-full items-center justify-center text-5xl font-bold text-white/20">♪</div>
+              <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-white/20">♪</div>
             </div>
           )}
 
           {/* Info */}
           <div className="min-w-0 flex-1">
-            <div className="text-xs font-semibold uppercase tracking-wider text-white/60">
-              Local Playlist
-            </div>
-            <h1 className="mt-1 text-3xl font-bold md:text-5xl">{playlist.title}</h1>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-white/70">Playlist</p>
+            <h1 className="mt-1 text-2xl font-bold md:text-3xl">{playlist.title}</h1>
             <div className="mt-3 flex flex-wrap items-center gap-1 text-sm text-white/60">
               <span className="font-medium text-white">{playlist.owner || playlist.ownerName || 'You'}</span>
               <span>·</span>
@@ -124,7 +122,7 @@ export default function PlaylistPage() {
 
       {/* Track list header */}
       <div className="mb-2 flex items-center gap-3 border-b border-white/5 px-3 py-2 text-xs font-medium uppercase tracking-wider text-dimText">
-        <div className="w-8 text-center">#</div>
+        <div className="w-8 text-center"></div>
         <div className="min-w-0 flex-1">Title</div>
         <div className="hidden min-w-[140px] md:block">Album</div>
         <div className="hidden min-w-[100px] lg:block">Date added</div>
