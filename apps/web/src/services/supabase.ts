@@ -8,12 +8,21 @@ export interface AppProfileRow {
   updated_at: string;
 }
 
+export type AppProfileInsert = Omit<AppProfileRow, 'updated_at'> & { updated_at?: string };
+export type AppProfileUpdate = Partial<Omit<AppProfileRow, 'id'>>;
+
 export interface FriendshipRow {
   id: string;
   user_id: string;
   friend_id: string;
   created_at: string;
 }
+
+export type FriendshipInsert = Omit<FriendshipRow, 'id' | 'created_at'> & {
+  id?: string;
+  created_at?: string;
+};
+export type FriendshipUpdate = Partial<Omit<FriendshipRow, 'id'>>;
 
 export interface ListeningStatusRow {
   user_id: string;
@@ -26,23 +35,29 @@ export interface ListeningStatusRow {
   updated_at: string;
 }
 
-interface Database {
+export type ListeningStatusInsert = Omit<ListeningStatusRow, 'updated_at'> & { updated_at?: string };
+export type ListeningStatusUpdate = Partial<Omit<ListeningStatusRow, 'user_id'>>;
+
+export type Database = {
   public: {
     Tables: {
       app_profiles: {
         Row: AppProfileRow;
-        Insert: Omit<AppProfileRow, 'updated_at'> & { updated_at?: string };
-        Update: Partial<Omit<AppProfileRow, 'id'>>;
+        Insert: AppProfileInsert;
+        Update: AppProfileUpdate;
+        Relationships: [];
       };
       friendships: {
         Row: FriendshipRow;
-        Insert: Omit<FriendshipRow, 'id' | 'created_at'> & { id?: string; created_at?: string };
-        Update: Partial<Omit<FriendshipRow, 'id'>>;
+        Insert: FriendshipInsert;
+        Update: FriendshipUpdate;
+        Relationships: [];
       };
       listening_status: {
         Row: ListeningStatusRow;
-        Insert: Omit<ListeningStatusRow, 'updated_at'> & { updated_at?: string };
-        Update: Partial<Omit<ListeningStatusRow, 'user_id'>>;
+        Insert: ListeningStatusInsert;
+        Update: ListeningStatusUpdate;
+        Relationships: [];
       };
     };
     Views: Record<string, never>;
@@ -50,7 +65,7 @@ interface Database {
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };
-}
+};
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;

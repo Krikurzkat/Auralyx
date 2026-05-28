@@ -1,6 +1,13 @@
 import type { User } from '../stores/authStore';
 import type { Track } from '../types';
-import { supabase, type ListeningStatusRow } from './supabase';
+import {
+  supabase,
+  type AppProfileInsert,
+  type AppProfileRow,
+  type FriendshipRow,
+  type ListeningStatusInsert,
+  type ListeningStatusRow,
+} from './supabase';
 
 export interface FriendListeningActivity {
   userId: string;
@@ -25,35 +32,33 @@ function requireSupabase() {
 
 export async function upsertAppProfile(user: User) {
   const client = requireSupabase();
+  const payload: AppProfileInsert = {
+    id: user.id,
+    username: user.username,
+    display_name: user.displayName,
+    avatar_url: user.avatarUrl ?? null,
+    updated_at: new Date().toISOString(),
+  };
 
-  const { error } = await client
-    .from('app_profiles')
-    .upsert({
-      id: user.id,
-      username: user.username,
-      display_name: user.displayName,
-      avatar_url: user.avatarUrl ?? null,
-      updated_at: new Date().toISOString(),
-    });
+  const { error } = await client.from('app_profiles').upsert(payload as never);
 
   if (error) throw error;
 }
 
 export async function publishListeningStatus(user: User, track: Track | null, isPlaying: boolean) {
   const client = requireSupabase();
+  const payload: ListeningStatusInsert = {
+    user_id: user.id,
+    track_id: track?.id ?? null,
+    title: track?.title ?? null,
+    artist: track?.artist ?? null,
+    album: track?.album ?? null,
+    cover_url: track?.coverUrl ?? null,
+    is_playing: Boolean(track && isPlaying),
+    updated_at: new Date().toISOString(),
+  };
 
-  const { error } = await client
-    .from('listening_status')
-    .upsert({
-      user_id: user.id,
-      track_id: track?.id ?? null,
-      title: track?.title ?? null,
-      artist: track?.artist ?? null,
-      album: track?.album ?? null,
-      cover_url: track?.coverUrl ?? null,
-      is_playing: Boolean(track && isPlaying),
-      updated_at: new Date().toISOString(),
-    });
+  const { error } = await client.from('listening_status').upsert(payload as never);
 
   if (error) throw error;
 }
@@ -68,7 +73,8 @@ export async function getFriendListeningActivity(userId: string): Promise<Friend
 
   if (friendshipsError) throw friendshipsError;
 
-  const friendIds = (friendships || []).map((friendship) => friendship.friend_id);
+  const friendshipRows = (friendships ?? []) as Pick<FriendshipRow, 'friend_id'>[];
+  const friendIds = friendshipRows.map((friendship) => friendship.friend_id);
   if (friendIds.length === 0) return [];
 
   const [{ data: profiles, error: profilesError }, { data: statuses, error: statusesError }] = await Promise.all([
@@ -86,9 +92,11 @@ export async function getFriendListeningActivity(userId: string): Promise<Friend
   if (profilesError) throw profilesError;
   if (statusesError) throw statusesError;
 
-  const profileById = new Map((profiles || []).map((profile) => [profile.id, profile]));
+  const profileRows = (profiles ?? []) as AppProfileRow[];
+  const statusRows = (statuses ?? []) as ListeningStatusRow[];
+  const profileById = new Map(profileRows.map((profile) => [profile.id, profile]));
 
-  return (statuses || [])
+  return statusRows
     .filter((status): status is ListeningStatusRow => Boolean(status.title && status.artist))
     .map((status) => {
       const profile = profileById.get(status.user_id);
@@ -108,15 +116,16 @@ export async function getFriendListeningActivity(userId: string): Promise<Friend
 }
 
 export function subscribeToFriendActivity(userId: string, onChange: () => void) {
-  if (!supabase) return () => {};
+  const client = supabase;
+  if (!client) return () => {};
 
-  const channel = supabase
+  const channel = client
     .channel(`friend-activity:${userId}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships' }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'listening_status' }, onChange)
     .subscribe();
 
   return () => {
-    supabase.removeChannel(channel);
+    client.removeChannel(channel);
   };
 }
