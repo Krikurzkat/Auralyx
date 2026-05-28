@@ -342,7 +342,7 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
         if (common.picture && common.picture.length > 0) {
           const pic = common.picture[0];
           const base64 = btoa(
-            pic.data.reduce((data, byte) => data + String.fromCharCode(byte), '')
+            pic.data.reduce((data: string, byte: number) => data + String.fromCharCode(byte), '')
           );
           coverUrl = `data:${pic.format};base64,${base64}`;
         }
