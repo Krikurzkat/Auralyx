@@ -16,7 +16,6 @@ import LikedSongsPage from './pages/LikedSongsPage';
 import LoginPage from './pages/LoginPage';
 import SignUpPage from './pages/SignUpPage';
 import AdminPage from './pages/AdminPage';
-import SpotifyCallback from './pages/SpotifyCallback';
 import LocalLibraryPage from './pages/LocalLibraryPage';
 import RecentlyPlayedPage from './pages/RecentlyPlayedPage';
 import ListeningHistoryPage from './pages/ListeningHistoryPage';
@@ -121,7 +120,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignUpPage />} />
-          <Route path="/callback" element={<SpotifyCallback />} />
           <Route element={<AppShell />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/search" element={<SearchPage />} />
