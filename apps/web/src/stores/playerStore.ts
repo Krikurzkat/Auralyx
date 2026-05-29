@@ -7,6 +7,15 @@ const LAST_PLAYBACK_KEY = 'go_music_last_playback';
 const _blobUrlByAudio = new WeakMap<HTMLAudioElement, string>();
 let _crossfadeAnimationFrame: number | null = null;
 let _crossfadeTimeout: number | null = null;
+let _pendingAutoAdvance: {
+  nextTrack: Track;
+  nextIndex: number;
+  queue: Track[];
+  history: Track[];
+  nextSlot: AudioSlot;
+  activeAudio: HTMLAudioElement;
+  inactiveAudio: HTMLAudioElement;
+} | null = null;
 
 interface PersistedPlaybackState {
   trackId: string;
@@ -378,6 +387,7 @@ function performManualCrossfade(
   // #endregion
   // Prepare next track
   clearCrossfadeAnimation();
+  _pendingAutoAdvance = null;
   stopInactiveAudio(inactiveAudio);
   setAudioSource(inactiveAudio, nextTrack);
   inactiveAudio.currentTime = 0;
@@ -504,6 +514,7 @@ function performDirectTrackSwitch(
   // #endregion
   if (activeAudio) {
     clearCrossfadeAnimation();
+    _pendingAutoAdvance = null;
     resetAndStopAudio(activeAudio, state);
     stopInactiveAudio(inactiveAudio);
     setAudioSource(activeAudio, nextTrack);
@@ -740,6 +751,33 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       isCrossfading,
     });
     // #endregion
+    if (isCrossfading && _pendingAutoAdvance) {
+      const pending = _pendingAutoAdvance;
+      _pendingAutoAdvance = null;
+      clearCrossfadeAnimation();
+      pending.activeAudio.pause();
+      pending.activeAudio.currentTime = 0;
+      pending.activeAudio.volume = clampAudioVolume(getTargetVolume(state));
+      pending.inactiveAudio.volume = clampAudioVolume(getTargetVolume(state));
+
+      set({
+        currentTrack: pending.nextTrack,
+        queue: pending.queue,
+        queueIndex: pending.nextIndex,
+        history: pending.history,
+        progress: pending.inactiveAudio.duration
+          ? (pending.inactiveAudio.currentTime / pending.inactiveAudio.duration) * 100
+          : 0,
+        currentTime: pending.inactiveAudio.currentTime || 0,
+        duration: pending.inactiveAudio.duration || pending.nextTrack.duration || 0,
+        isPlaying: true,
+        isCrossfading: false,
+        activeAudioSlot: pending.nextSlot,
+        audioRef: pending.inactiveAudio,
+      });
+      return;
+    }
+
     if (isCrossfading) return;
     if (queue.length === 0) {
       set({ isPlaying: false });
@@ -823,35 +861,31 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     stopInactiveAudio(inactiveAudio);
     setAudioSource(inactiveAudio, nextTrack);
     inactiveAudio.currentTime = 0;
-          inactiveAudio.volume = clampAudioVolume(0);
+    inactiveAudio.volume = clampAudioVolume(0);
 
     // Preload next track
     inactiveAudio.load();
     
     // Start playing next track (muted initially)
-    const playPromise = inactiveAudio.play().catch((err) => {
-      console.error('Crossfade play failed, falling back to direct switch:', err);
-      reportTrackSwitchDebug('C', 'auto crossfade fallback to direct switch', {
-        toTrackId: nextTrack.id,
-        error: err.message,
-      });
-      get().playTrack(nextTrack, queue, true);
-    });
+    const playPromise = inactiveAudio.play();
 
     // Wait for play to start before beginning crossfade
     if (playPromise) {
       playPromise.then(() => {
-        // Update state
-        set({
-          currentTrack: nextTrack,
-          queueIndex: nextIndex,
+        _pendingAutoAdvance = {
+          nextTrack,
+          nextIndex,
+          queue,
           history,
-          progress: 0,
-          currentTime: 0,
+          nextSlot,
+          activeAudio,
+          inactiveAudio,
+        };
+
+        // Keep the old track as the visible/current track until it really ends.
+        set({
           isPlaying: true,
           isCrossfading: true,
-          activeAudioSlot: nextSlot,
-          audioRef: inactiveAudio,
         });
 
         // Start equal-power crossfade animation
@@ -875,16 +909,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           if (progress < 1) {
             scheduleCrossfadeStep(animate);
           } else {
-            // Crossfade complete
+            // Fade complete, but do not switch visible/current track yet.
+            // The next audio keeps playing underneath until the old track fires "ended".
             clearCrossfadeAnimation();
-            activeAudio.pause();
-            activeAudio.currentTime = 0;
-            activeAudio.volume = clampAudioVolume(targetVolume);
+            activeAudio.volume = clampAudioVolume(0);
             inactiveAudio.volume = clampAudioVolume(targetVolume);
             
-            set({ isCrossfading: false });
-            
-            reportTrackSwitchDebug('C', 'auto crossfade complete', {
+            reportTrackSwitchDebug('C', 'auto crossfade audio overlap ready', {
               toTrackId: nextTrack.id,
               finalVolume: inactiveAudio.volume,
             });
@@ -892,6 +923,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         };
         
         scheduleCrossfadeStep(animate);
+      }).catch((err) => {
+        console.error('Crossfade play failed, falling back to direct switch:', err);
+        _pendingAutoAdvance = null;
+        reportTrackSwitchDebug('C', 'auto crossfade fallback to direct switch', {
+          toTrackId: nextTrack.id,
+          error: err.message,
+        });
+        get().playTrack(nextTrack, queue, true);
       });
     }
   },
@@ -912,6 +951,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       inactiveAudio?.pause();
     } else {
       audio?.play().catch(() => {});
+      if (_pendingAutoAdvance) {
+        _pendingAutoAdvance.inactiveAudio.play().catch(() => {});
+      }
     }
     set({ isPlaying: !state.isPlaying });
   },
@@ -926,6 +968,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   resume: () => {
     getActiveAudio(get())?.play().catch(() => {});
+    if (_pendingAutoAdvance) {
+      _pendingAutoAdvance.inactiveAudio.play().catch(() => {});
+    }
     set({ isPlaying: true });
   },
 
