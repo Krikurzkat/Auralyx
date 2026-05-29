@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../stores/authStore';
+import { canManageContent, isAdminRole, useAuthStore } from '../stores/authStore';
+import { apiUrl } from '../services/api';
 import {
   RiAddLine,
   RiDiscLine,
@@ -18,6 +19,7 @@ import {
   RiLoader4Line,
   RiCheckDoubleLine,
   RiErrorWarningLine,
+  RiTeamLine,
 } from 'react-icons/ri';
 import toast from 'react-hot-toast';
 
@@ -33,9 +35,47 @@ interface ParsedTrackMeta {
   duration: number; // seconds
   year: number;
   coverDataUrl: string | null;
+  lyricsText: string;
+  lyricsFileName?: string;
+  missingFields: string[];
+  sourceKind: 'file' | 'folder' | 'batch';
+  fileHash?: string;
+  uploadStatus?: 'quarantined' | 'approved' | 'blocked';
+  visibility?: 'private' | 'friends' | 'public';
+  moderationFlags?: string[];
   status: 'pending' | 'uploading' | 'creating' | 'done' | 'error';
   errorMsg?: string;
   isEditing: boolean;
+}
+
+interface StaffAccount {
+  id: string;
+  username: string;
+  email: string;
+  displayName: string;
+  role: 'staff' | 'admin';
+  createdAt?: string;
+}
+
+interface ReviewTrack {
+  _id: string;
+  title: string;
+  artist: string;
+  album: string;
+  artistId?: string;
+  albumId?: string;
+  genre?: string;
+  releaseDate?: string;
+  coverUrl?: string;
+  audioUrl?: string;
+  duration: number;
+  fileHash?: string;
+  submittedBy?: string;
+  submittedByName?: string;
+  uploadStatus?: 'quarantined' | 'approved' | 'blocked';
+  visibility?: 'private' | 'friends' | 'public';
+  moderationFlags?: string[];
+  createdAt?: string;
 }
 
 // ─── Helpers ───
@@ -55,37 +95,196 @@ function generateId(): string {
   return Math.random().toString(36).substring(2, 10);
 }
 
+type ImportableFile = File & { webkitRelativePath?: string };
+
+const AUDIO_EXTENSIONS = new Set(['mp3', 'm4a', 'wav', 'ogg', 'flac', 'aac']);
+const COVER_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp']);
+const COVER_NAMES = ['cover', 'folder', 'front', 'album'];
+const USER_SUBMISSION_LIMIT = 5;
+
+function getFileExtension(fileName: string): string {
+  return fileName.split('.').pop()?.toLowerCase() || '';
+}
+
+function getFileBase(fileName: string): string {
+  return fileName.replace(/\.[^.]+$/, '').trim();
+}
+
+function getImportPath(file: ImportableFile): string {
+  return (file.webkitRelativePath || file.name).replace(/\\/g, '/');
+}
+
+function getImportDirectory(file: ImportableFile): string {
+  const importPath = getImportPath(file);
+  const slashIndex = importPath.lastIndexOf('/');
+  return slashIndex >= 0 ? importPath.slice(0, slashIndex).toLowerCase() : '';
+}
+
+function cleanFilenamePart(value: string): string {
+  return value
+    .replace(/[_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*\(\s*/g, ' (')
+    .replace(/\s*\)\s*/g, ') ')
+    .trim();
+}
+
+function isMissingMetadata(value?: string | null): boolean {
+  if (!value) return true;
+  const normalized = value.trim().toLowerCase();
+  return normalized.length === 0 || normalized === 'unknown' || normalized.startsWith('unknown ');
+}
+
+function parseSmartFilename(fileName: string) {
+  const base = getFileBase(fileName).replace(/^\s*\d{1,3}\s*[-._]\s*/, '');
+  const parts = base.split(/\s+-\s+/).map(cleanFilenamePart).filter(Boolean);
+  const result: { title?: string; artist?: string; album?: string; year?: number } = {
+    title: cleanFilenamePart(base.replace(/[._]+/g, ' ')),
+  };
+
+  if (parts.length >= 4) {
+    const yearCandidate = Number.parseInt(parts[parts.length - 1], 10);
+    result.title = parts[0];
+    result.artist = parts[1];
+    result.album = parts.slice(2, Number.isFinite(yearCandidate) ? -1 : undefined).join(' - ');
+    if (Number.isFinite(yearCandidate) && yearCandidate >= 1900) result.year = yearCandidate;
+    return result;
+  }
+
+  if (parts.length === 3) {
+    result.title = parts[0];
+    result.artist = parts[1];
+    result.album = parts[2];
+  } else if (parts.length === 2) {
+    result.title = parts[0];
+    result.artist = parts[1];
+  }
+
+  return result;
+}
+
+function readFileAsDataUrl(file: File): Promise<string | null> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : null);
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(file);
+  });
+}
+
+function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+    reader.onerror = () => resolve('');
+    reader.readAsText(file);
+  });
+}
+
+function buildCompanionIndexes(files: ImportableFile[]) {
+  const coversByDirectory = new Map<string, File>();
+  const coversByPathBase = new Map<string, File>();
+  const lyricsByPathBase = new Map<string, File>();
+  const lyricsByDirectory = new Map<string, File[]>();
+
+  for (const file of files) {
+    const extension = getFileExtension(file.name);
+    const directory = getImportDirectory(file);
+    const baseKey = `${directory}/${getFileBase(file.name).toLowerCase()}`;
+
+    if (COVER_EXTENSIONS.has(extension)) {
+      const baseName = getFileBase(file.name).toLowerCase();
+      coversByPathBase.set(baseKey, file);
+      if (COVER_NAMES.includes(baseName) && !coversByDirectory.has(directory)) {
+        coversByDirectory.set(directory, file);
+      }
+    }
+
+    if (extension === 'lrc') {
+      lyricsByPathBase.set(baseKey, file);
+      const directoryLyrics = lyricsByDirectory.get(directory) || [];
+      directoryLyrics.push(file);
+      lyricsByDirectory.set(directory, directoryLyrics);
+    }
+  }
+
+  return { coversByDirectory, coversByPathBase, lyricsByPathBase, lyricsByDirectory };
+}
+
+function findCompanionCover(file: ImportableFile, indexes: ReturnType<typeof buildCompanionIndexes>) {
+  const directory = getImportDirectory(file);
+  const baseKey = `${directory}/${getFileBase(file.name).toLowerCase()}`;
+  return indexes.coversByPathBase.get(baseKey) || indexes.coversByDirectory.get(directory);
+}
+
+function findCompanionLyrics(file: ImportableFile, indexes: ReturnType<typeof buildCompanionIndexes>) {
+  const directory = getImportDirectory(file);
+  const baseKey = `${directory}/${getFileBase(file.name).toLowerCase()}`;
+  const exact = indexes.lyricsByPathBase.get(baseKey);
+  if (exact) return exact;
+  const directoryLyrics = indexes.lyricsByDirectory.get(directory) || [];
+  return directoryLyrics.length === 1 ? directoryLyrics[0] : undefined;
+}
+
+function getMissingFields(item: Pick<ParsedTrackMeta, 'title' | 'artist' | 'album' | 'genre' | 'year' | 'coverDataUrl'>): string[] {
+  const missing: string[] = [];
+  if (isMissingMetadata(item.title)) missing.push('title');
+  if (isMissingMetadata(item.artist)) missing.push('artist');
+  if (isMissingMetadata(item.album)) missing.push('album');
+  if (isMissingMetadata(item.genre)) missing.push('genre');
+  if (!item.year || item.year < 1900) missing.push('year');
+  if (!item.coverDataUrl) missing.push('cover photo');
+  return missing;
+}
+
 // ─── Component ───
 
 export default function AdminPage() {
   const { user, token } = useAuthStore();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'upload' | 'artist' | 'album' | 'track'>('upload');
+  const isAdmin = isAdminRole(user?.role);
+  const isContentManager = canManageContent(user?.role);
+  const isRegularUser = user?.role === 'user';
+  const canUploadFolders = isAdmin;
+  const [activeTab, setActiveTab] = useState<'upload' | 'review' | 'artist' | 'album' | 'track' | 'staff'>('upload');
   const [loading, setLoading] = useState(false);
 
   // Data for dropdowns
   const [artists, setArtists] = useState<any[]>([]);
   const [albums, setAlbums] = useState<any[]>([]);
+  const [reviewTracks, setReviewTracks] = useState<ReviewTrack[]>([]);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [staffAccounts, setStaffAccounts] = useState<StaffAccount[]>([]);
+  const [staffForm, setStaffForm] = useState({
+    username: '',
+    email: '',
+    displayName: '',
+    password: '',
+    role: 'staff' as 'staff' | 'admin',
+  });
 
   // Batch upload state
   const [queue, setQueue] = useState<ParsedTrackMeta[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
 
   // Fetch artists & albums for dropdowns
   useEffect(() => {
-    if (user?.role !== 'admin') {
+    if (!user) {
       toast.error('Unauthorized access');
       navigate('/');
       return;
     }
+    if (!isContentManager) return;
+
     const fetchData = async () => {
       try {
         const [artistRes, albumRes] = await Promise.all([
-          fetch('http://localhost:3001/api/artists?limit=100'),
-          fetch('http://localhost:3001/api/albums?limit=100'),
+          fetch(apiUrl('/api/artists?limit=100')),
+          fetch(apiUrl('/api/albums?limit=100')),
         ]);
         const artistData = await artistRes.json();
         const albumData = await albumRes.json();
@@ -96,7 +295,57 @@ export default function AdminPage() {
       }
     };
     fetchData();
-  }, [user, navigate]);
+  }, [isContentManager, user, navigate]);
+
+  useEffect(() => {
+    if (!isAdmin && activeTab === 'staff') {
+      setActiveTab('upload');
+    }
+    if (!isContentManager && activeTab !== 'upload') {
+      setActiveTab('upload');
+    }
+  }, [activeTab, isAdmin, isContentManager]);
+
+  const fetchStaffAccounts = useCallback(async () => {
+    if (!isAdmin || !token) return;
+    try {
+      const res = await fetch(apiUrl('/api/users/staff'), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load staff');
+      setStaffAccounts(data.staff || []);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to load staff');
+    }
+  }, [isAdmin, token]);
+
+  useEffect(() => {
+    void fetchStaffAccounts();
+  }, [fetchStaffAccounts]);
+
+  const fetchReviewQueue = useCallback(async () => {
+    if (!isContentManager || !token) return;
+    setReviewLoading(true);
+    try {
+      const res = await fetch(apiUrl('/api/tracks/review'), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load review queue');
+      setReviewTracks(data.tracks || []);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to load review queue');
+    } finally {
+      setReviewLoading(false);
+    }
+  }, [isContentManager, token]);
+
+  useEffect(() => {
+    if (activeTab === 'review') {
+      void fetchReviewQueue();
+    }
+  }, [activeTab, fetchReviewQueue]);
 
   // ─── ID3 Parsing ───
 
@@ -104,18 +353,38 @@ export default function AdminPage() {
     // Dynamic import to avoid bundling issues
     const { parseBlob } = await import('music-metadata-browser');
 
+    const allFiles = Array.from(files) as ImportableFile[];
+    const companionIndexes = buildCompanionIndexes(allFiles);
     const newItems: ParsedTrackMeta[] = [];
+    const availableSubmissionSlots = isRegularUser ? Math.max(0, USER_SUBMISSION_LIMIT - queue.length) : Number.POSITIVE_INFINITY;
 
-    for (const file of Array.from(files)) {
-      const ext = file.name.split('.').pop()?.toLowerCase();
-      if (!ext || !['mp3', 'm4a', 'wav', 'ogg', 'flac', 'aac'].includes(ext)) {
-        toast.error(`Skipped "${file.name}" — unsupported format`);
+    for (const file of allFiles) {
+      const ext = getFileExtension(file.name);
+      if (!canUploadFolders && file.webkitRelativePath) {
+        toast.error('Folder uploads are admin-only');
         continue;
+      }
+
+      if (!AUDIO_EXTENSIONS.has(ext)) {
+        if (!COVER_EXTENSIONS.has(ext) && ext !== 'lrc') {
+          toast.error(`Skipped "${file.name}" - unsupported format`);
+        }
+        continue;
+      }
+
+      if (newItems.length >= availableSubmissionSlots) {
+        toast.error(`User submissions are limited to ${USER_SUBMISSION_LIMIT} tracks per batch`);
+        break;
       }
 
       try {
         const metadata = await parseBlob(file);
         const { common, format } = metadata;
+        const filenameMeta = parseSmartFilename(file.name);
+        const companionCover = findCompanionCover(file, companionIndexes);
+        const companionLyrics = findCompanionLyrics(file, companionIndexes);
+        const companionCoverDataUrl = companionCover ? await readFileAsDataUrl(companionCover) : null;
+        const lyricsText = companionLyrics ? await readFileAsText(companionLyrics) : '';
 
         // Extract cover art as data URL
         let coverDataUrl: string | null = null;
@@ -127,43 +396,62 @@ export default function AdminPage() {
           coverDataUrl = `data:${pic.format};base64,${base64}`;
         }
 
-        newItems.push({
+        const item: ParsedTrackMeta = {
           id: generateId(),
           file,
-          title: common.title || file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' '),
-          artist: common.artist || 'Unknown Artist',
-          album: common.album || 'Unknown Album',
+          title: isMissingMetadata(common.title) ? filenameMeta.title || getFileBase(file.name) : common.title || filenameMeta.title || getFileBase(file.name),
+          artist: isMissingMetadata(common.artist) ? filenameMeta.artist || common.albumartist || 'Unknown Artist' : common.artist || common.albumartist || filenameMeta.artist || 'Unknown Artist',
+          album: isMissingMetadata(common.album) ? filenameMeta.album || 'Unknown Album' : common.album || filenameMeta.album || 'Unknown Album',
           genre: common.genre?.[0] || '',
           duration: Math.round(format.duration || 0),
-          year: common.year || new Date().getFullYear(),
-          coverDataUrl,
+          year: common.year || filenameMeta.year || new Date().getFullYear(),
+          coverDataUrl: coverDataUrl || companionCoverDataUrl,
+          lyricsText,
+          lyricsFileName: companionLyrics?.name,
+          sourceKind: file.webkitRelativePath ? 'folder' : 'file',
           status: 'pending',
+          missingFields: [],
           isEditing: false,
-        });
+        };
+        item.missingFields = getMissingFields(item);
+        item.isEditing = item.missingFields.length > 0;
+        newItems.push(item);
       } catch (err) {
         console.error(`Failed to parse ${file.name}:`, err);
         // Still add it, just with filename-derived metadata
-        newItems.push({
+        const filenameMeta = parseSmartFilename(file.name);
+        const companionCover = findCompanionCover(file, companionIndexes);
+        const companionLyrics = findCompanionLyrics(file, companionIndexes);
+        const coverDataUrl = companionCover ? await readFileAsDataUrl(companionCover) : null;
+        const lyricsText = companionLyrics ? await readFileAsText(companionLyrics) : '';
+        const item: ParsedTrackMeta = {
           id: generateId(),
           file,
-          title: file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' '),
-          artist: 'Unknown Artist',
-          album: 'Unknown Album',
+          title: filenameMeta.title || getFileBase(file.name),
+          artist: filenameMeta.artist || 'Unknown Artist',
+          album: filenameMeta.album || 'Unknown Album',
           genre: '',
           duration: 0,
-          year: new Date().getFullYear(),
-          coverDataUrl: null,
+          year: filenameMeta.year || new Date().getFullYear(),
+          coverDataUrl,
+          lyricsText,
+          lyricsFileName: companionLyrics?.name,
+          sourceKind: file.webkitRelativePath ? 'folder' : 'file',
           status: 'pending',
-          isEditing: false,
-        });
+          missingFields: [],
+          isEditing: true,
+        };
+        item.missingFields = getMissingFields(item);
+        newItems.push(item);
       }
     }
 
     if (newItems.length > 0) {
+      const needsReview = newItems.filter((item) => item.missingFields.length > 0).length;
       setQueue((prev) => [...prev, ...newItems]);
-      toast.success(`Parsed ${newItems.length} track${newItems.length > 1 ? 's' : ''}`);
+      toast.success(`Parsed ${newItems.length} track${newItems.length > 1 ? 's' : ''}${needsReview ? `, ${needsReview} need review` : ''}`);
     }
-  }, []);
+  }, [canUploadFolders, isRegularUser, queue.length]);
 
   // ─── Drag & Drop Handlers ───
 
@@ -207,7 +495,11 @@ export default function AdminPage() {
   // ─── Queue Management ───
 
   const updateQueueItem = useCallback((id: string, updates: Partial<ParsedTrackMeta>) => {
-    setQueue((prev) => prev.map((item) => (item.id === id ? { ...item, ...updates } : item)));
+    setQueue((prev) => prev.map((item) => {
+      if (item.id !== id) return item;
+      const next = { ...item, ...updates };
+      return { ...next, missingFields: getMissingFields(next) };
+    }));
   }, []);
 
   const removeFromQueue = useCallback((id: string) => {
@@ -226,15 +518,97 @@ export default function AdminPage() {
       toast.error('No pending tracks to submit');
       return;
     }
+    if (isRegularUser && pending.length > USER_SUBMISSION_LIMIT) {
+      toast.error(`You can submit up to ${USER_SUBMISSION_LIMIT} tracks at a time`);
+      return;
+    }
+
+    const blockedForReview = pending
+      .map((item) => ({ ...item, missingFields: getMissingFields(item) }))
+      .filter((item) => item.missingFields.length > 0);
+    if (blockedForReview.length > 0) {
+      setQueue((prev) => prev.map((item) => {
+        const blocked = blockedForReview.find((candidate) => candidate.id === item.id);
+        return blocked
+          ? { ...item, missingFields: blocked.missingFields, isEditing: true }
+          : item;
+      }));
+      toast.error(`${blockedForReview.length} track${blockedForReview.length === 1 ? '' : 's'} need cover, genre, or metadata before upload`);
+      return;
+    }
 
     setIsSubmitting(true);
     let successCount = 0;
+
+    if (!isContentManager) {
+      for (const item of pending) {
+        try {
+          updateQueueItem(item.id, { status: 'uploading' });
+          const formData = new FormData();
+          formData.append('audio', item.file);
+          formData.append('sourceKind', 'file');
+          const uploadRes = await fetch(apiUrl('/api/tracks/upload'), {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'X-Upload-Source': 'file',
+            },
+            body: formData,
+          });
+          const uploadData = await uploadRes.json();
+          if (!uploadRes.ok) throw new Error(uploadData.error || 'Failed to upload audio');
+
+          updateQueueItem(item.id, { status: 'creating' });
+          const trackRes = await fetch(apiUrl('/api/tracks'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              title: item.title,
+              artist: item.artist,
+              artistId: `pending:${user?.id || 'user'}:${item.artist}`,
+              album: item.album,
+              albumId: `pending:${user?.id || 'user'}:${item.album}`,
+              duration: item.duration,
+              audioUrl: uploadData.audioUrl?.startsWith('http') ? uploadData.audioUrl : apiUrl(uploadData.audioUrl),
+              coverUrl: item.coverDataUrl || '',
+              genre: item.genre,
+              releaseDate: `${item.year}`,
+              lyrics: item.lyricsText,
+              fileHash: uploadData.fileHash,
+              uploadStatus: 'quarantined',
+              visibility: 'private',
+              moderationFlags: ['user_submission', 'awaiting_staff_review'],
+              submittedBy: user?.id,
+              submittedByName: user?.displayName || user?.username,
+            }),
+          });
+          const trackData = await trackRes.json();
+          if (!trackRes.ok) throw new Error(trackData.error || 'Failed to submit track for review');
+
+          updateQueueItem(item.id, {
+            status: 'done',
+            fileHash: uploadData.fileHash,
+            uploadStatus: 'quarantined',
+            visibility: 'private',
+            moderationFlags: ['user_submission', 'awaiting_staff_review'],
+          });
+          successCount++;
+        } catch (err: any) {
+          console.error(`Error submitting ${item.title}:`, err);
+          updateQueueItem(item.id, { status: 'error', errorMsg: err.message });
+        }
+      }
+
+      setIsSubmitting(false);
+      toast.success(`${successCount}/${pending.length} submitted for staff review`);
+      return;
+    }
 
     for (const item of pending) {
       try {
         // Step 1: Find or create artist
         updateQueueItem(item.id, { status: 'creating' });
-        const artistRes = await fetch('http://localhost:3001/api/artists/find-or-create', {
+        const artistRes = await fetch(apiUrl('/api/artists/find-or-create'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({
@@ -246,7 +620,7 @@ export default function AdminPage() {
         const { artist } = await artistRes.json();
 
         // Step 2: Find or create album
-        const albumRes = await fetch('http://localhost:3001/api/albums/find-or-create', {
+        const albumRes = await fetch(apiUrl('/api/albums/find-or-create'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({
@@ -265,16 +639,27 @@ export default function AdminPage() {
         updateQueueItem(item.id, { status: 'uploading' });
         const formData = new FormData();
         formData.append('audio', item.file);
-        const uploadRes = await fetch('http://localhost:3001/api/tracks/upload', {
+        formData.append('sourceKind', item.sourceKind);
+        const uploadRes = await fetch(apiUrl('/api/tracks/upload'), {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'X-Upload-Source': item.sourceKind,
+          },
           body: formData,
         });
-        if (!uploadRes.ok) throw new Error('Failed to upload audio');
-        const { audioUrl } = await uploadRes.json();
+        const uploadData = await uploadRes.json();
+        if (!uploadRes.ok) throw new Error(uploadData.error || 'Failed to upload audio');
+        const {
+          audioUrl,
+          fileHash,
+          uploadStatus = 'quarantined',
+          visibility = 'private',
+          moderationFlags = ['quarantined_until_review'],
+        } = uploadData;
 
         // Step 4: Create track record
-        const trackRes = await fetch('http://localhost:3001/api/tracks', {
+        const trackRes = await fetch(apiUrl('/api/tracks'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({
@@ -284,15 +669,20 @@ export default function AdminPage() {
             album: album.title,
             albumId: album._id,
             duration: item.duration,
-            audioUrl: `http://localhost:3001${audioUrl}`,
+            audioUrl: audioUrl.startsWith('http') ? audioUrl : apiUrl(audioUrl),
             coverUrl: album.coverUrl || item.coverDataUrl || '',
             genre: item.genre,
             releaseDate: `${item.year}`,
+            lyrics: item.lyricsText,
+            fileHash,
+            uploadStatus,
+            visibility,
+            moderationFlags,
           }),
         });
         if (!trackRes.ok) throw new Error('Failed to create track');
 
-        updateQueueItem(item.id, { status: 'done' });
+        updateQueueItem(item.id, { status: 'done', fileHash, uploadStatus, visibility, moderationFlags });
         successCount++;
       } catch (err: any) {
         console.error(`Error processing ${item.title}:`, err);
@@ -305,8 +695,8 @@ export default function AdminPage() {
     // Re-fetch artists and albums for the dropdowns
     try {
       const [artistRes, albumRes] = await Promise.all([
-        fetch('http://localhost:3001/api/artists?limit=100'),
-        fetch('http://localhost:3001/api/albums?limit=100'),
+        fetch(apiUrl('/api/artists?limit=100')),
+        fetch(apiUrl('/api/albums?limit=100')),
       ]);
       const artistData = await artistRes.json();
       const albumData = await albumRes.json();
@@ -332,7 +722,7 @@ export default function AdminPage() {
     if (!artistForm.name) return toast.error('Artist name required');
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:3001/api/artists', {
+      const res = await fetch(apiUrl('/api/artists'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
@@ -358,7 +748,7 @@ export default function AdminPage() {
     setLoading(true);
     try {
       const selectedArtist = artists.find((a) => a._id === albumForm.artistId);
-      const res = await fetch('http://localhost:3001/api/albums', {
+      const res = await fetch(apiUrl('/api/albums'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ ...albumForm, artist: selectedArtist.name }),
@@ -382,7 +772,7 @@ export default function AdminPage() {
     try {
       const selectedArtist = artists.find((a) => a._id === trackForm.artistId);
       const selectedAlbum = albums.find((a) => a._id === trackForm.albumId);
-      const res = await fetch('http://localhost:3001/api/tracks', {
+      const res = await fetch(apiUrl('/api/tracks'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
@@ -406,7 +796,135 @@ export default function AdminPage() {
     }
   };
 
-  if (user?.role !== 'admin') return null;
+  const handleStaffSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAdmin) return toast.error('Admin access required');
+    if (!staffForm.username || !staffForm.email || !staffForm.displayName || !staffForm.password) {
+      return toast.error('Fill every staff account field');
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch(apiUrl('/api/users/staff'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(staffForm),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create staff account');
+      setStaffAccounts((prev) => [...prev, data.staff]);
+      setStaffForm({ username: '', email: '', displayName: '', password: '', role: 'staff' });
+      toast.success('Staff account created');
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateStaffRole = async (staffId: string, role: 'user' | 'staff' | 'admin') => {
+    if (!isAdmin) return toast.error('Admin access required');
+
+    try {
+      const res = await fetch(apiUrl(`/api/users/${staffId}/role`), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ role }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update role');
+      setStaffAccounts((prev) =>
+        role === 'user'
+          ? prev.filter((staff) => staff.id !== staffId)
+          : prev.map((staff) => (staff.id === staffId ? data.user : staff))
+      );
+      toast.success(role === 'user' ? 'Staff access removed' : 'Role updated');
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const approveReviewTrack = async (track: ReviewTrack) => {
+    if (!isContentManager) return toast.error('Staff access required');
+
+    try {
+      const artistRes = await fetch(apiUrl('/api/artists/find-or-create'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          name: track.artist,
+          genres: track.genre ? [track.genre] : [],
+        }),
+      });
+      const artistData = await artistRes.json();
+      if (!artistRes.ok) throw new Error(artistData.error || 'Failed to resolve artist');
+
+      const albumRes = await fetch(apiUrl('/api/albums/find-or-create'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          title: track.album,
+          artist: artistData.artist.name,
+          artistId: artistData.artist._id,
+          year: Number.parseInt(track.releaseDate || '', 10) || new Date().getFullYear(),
+          genre: track.genre || '',
+          coverUrl: track.coverUrl || '',
+        }),
+      });
+      const albumData = await albumRes.json();
+      if (!albumRes.ok) throw new Error(albumData.error || 'Failed to resolve album');
+
+      const res = await fetch(apiUrl(`/api/tracks/${track._id}`), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          artist: artistData.artist.name,
+          artistId: artistData.artist._id,
+          album: albumData.album.title,
+          albumId: albumData.album._id,
+          uploadStatus: 'approved',
+          visibility: 'public',
+          moderationFlags: [],
+          reviewedBy: user?.id,
+          reviewedAt: new Date().toISOString(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to approve track');
+
+      setReviewTracks((prev) => prev.filter((item) => item._id !== track._id));
+      toast.success('Track approved');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to approve track');
+    }
+  };
+
+  const blockReviewTrack = async (track: ReviewTrack) => {
+    if (!isContentManager) return toast.error('Staff access required');
+
+    try {
+      const res = await fetch(apiUrl(`/api/tracks/${track._id}`), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          uploadStatus: 'blocked',
+          visibility: 'private',
+          moderationFlags: ['blocked_by_staff'],
+          reviewedBy: user?.id,
+          reviewedAt: new Date().toISOString(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to block track');
+
+      setReviewTracks((prev) => prev.filter((item) => item._id !== track._id));
+      toast.success('Track blocked');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to block track');
+    }
+  };
+
+  if (!user) return null;
 
   const pendingCount = queue.filter((q) => q.status === 'pending').length;
   const doneCount = queue.filter((q) => q.status === 'done').length;
@@ -415,16 +933,26 @@ export default function AdminPage() {
 
   return (
     <div className="page-enter mx-auto max-w-5xl p-6 pb-40">
-      <h1 className="mb-2 text-4xl font-black text-white">Admin Dashboard</h1>
-      <p className="mb-10 text-dimText">Add new music content directly into the database.</p>
+      <h1 className="mb-2 text-4xl font-black text-white">
+        {isAdmin ? 'Admin Studio' : isContentManager ? 'Staff Studio' : 'Submit Music'}
+      </h1>
+      <p className="mb-10 text-dimText">
+        {isContentManager
+          ? 'Focused tools for preparing music files, metadata, artwork, lyrics, and catalog records.'
+          : `Submit up to ${USER_SUBMISSION_LIMIT} tracks for staff review before they appear in Auralyx.`}
+      </p>
 
       {/* Tabs */}
       <div className="mb-8 flex gap-4 border-b border-white/10 pb-1 overflow-x-auto scrollbar-hidden">
         {[
           { id: 'upload' as const, label: 'Upload MP3s', icon: <RiUploadCloud2Line /> },
-          { id: 'artist' as const, label: 'Add Artist', icon: <RiMicLine /> },
-          { id: 'album' as const, label: 'Add Album', icon: <RiDiscLine /> },
-          { id: 'track' as const, label: 'Add Track', icon: <RiMusic2Line /> },
+          ...(isContentManager ? [
+            { id: 'review' as const, label: 'Review', icon: <RiCheckDoubleLine /> },
+            { id: 'artist' as const, label: 'Add Artist', icon: <RiMicLine /> },
+            { id: 'album' as const, label: 'Add Album', icon: <RiDiscLine /> },
+            { id: 'track' as const, label: 'Add Track', icon: <RiMusic2Line /> },
+          ] : []),
+          ...(isAdmin ? [{ id: 'staff' as const, label: 'Staff', icon: <RiTeamLine /> }] : []),
         ].map((tab) => (
           <button
             key={tab.id}
@@ -466,21 +994,31 @@ export default function AdminPage() {
                 <RiUploadCloud2Line className={`text-4xl transition-all duration-300 ${isDragging ? 'text-accent scale-110' : 'text-softText'}`} />
               </div>
               <h3 className="mb-2 text-xl font-bold text-white">
-                {isDragging ? 'Drop your MP3 files here!' : 'Drag & Drop MP3 Files'}
+                {isDragging ? 'Drop your music here!' : isContentManager ? 'Drag & Drop Music Files' : 'Submit Music for Review'}
               </h3>
               <p className="mb-5 text-sm text-dimText">
                 Supports MP3, M4A, WAV, OGG, FLAC • Up to 50MB each • Batch upload supported
               </p>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="inline-flex items-center gap-2 rounded-full bg-white/10 px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-white/15 hover:scale-105 active:scale-95"
-              >
-                <RiFileMusicLine /> Browse Files
-              </button>
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center gap-2 rounded-full bg-white/10 px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-white/15 hover:scale-105 active:scale-95"
+                >
+                  <RiFileMusicLine /> Browse Files
+                </button>
+                {canUploadFolders && (
+                  <button
+                    onClick={() => folderInputRef.current?.click()}
+                    className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-6 py-2.5 text-sm font-semibold text-white/80 transition-all hover:bg-white/10 hover:text-white hover:scale-105 active:scale-95"
+                  >
+                    <RiUploadCloud2Line /> Browse Folder
+                  </button>
+                )}
+              </div>
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".mp3,.m4a,.wav,.ogg,.flac,.aac"
+                accept=".mp3,.m4a,.wav,.ogg,.flac,.aac,.lrc,.jpg,.jpeg,.png,.webp"
                 multiple
                 className="hidden"
                 onChange={(e) => {
@@ -488,6 +1026,20 @@ export default function AdminPage() {
                   e.target.value = '';
                 }}
               />
+              {canUploadFolders && (
+                <input
+                  ref={folderInputRef}
+                  type="file"
+                  accept=".mp3,.m4a,.wav,.ogg,.flac,.aac,.lrc,.jpg,.jpeg,.png,.webp"
+                  multiple
+                  className="hidden"
+                  {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
+                  onChange={(e) => {
+                    if (e.target.files) parseFiles(e.target.files);
+                    e.target.value = '';
+                  }}
+                />
+              )}
             </div>
           </div>
 
@@ -523,7 +1075,7 @@ export default function AdminPage() {
                         </>
                       ) : (
                         <>
-                          <RiUploadCloud2Line /> Upload {pendingCount} Track{pendingCount > 1 ? 's' : ''}
+                          <RiUploadCloud2Line /> {isContentManager ? 'Upload' : 'Submit'} {pendingCount} Track{pendingCount > 1 ? 's' : ''}
                         </>
                       )}
                     </button>
@@ -606,6 +1158,46 @@ export default function AdminPage() {
                               placeholder="Year"
                               className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white outline-none focus:border-accent/50"
                             />
+                            <label className="col-span-2 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 transition hover:border-accent/40 hover:bg-white/10">
+                              <RiAlbumLine />
+                              {item.coverDataUrl ? 'Replace cover photo' : 'Add cover photo'}
+                              <input
+                                type="file"
+                                accept=".jpg,.jpeg,.png,.webp,image/*"
+                                className="hidden"
+                                onChange={async (event) => {
+                                  const coverFile = event.target.files?.[0];
+                                  if (coverFile) {
+                                    updateQueueItem(item.id, { coverDataUrl: await readFileAsDataUrl(coverFile) });
+                                  }
+                                  event.target.value = '';
+                                }}
+                              />
+                            </label>
+                            <label className="col-span-2 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 transition hover:border-accent/40 hover:bg-white/10">
+                              <RiFileMusicLine />
+                              {item.lyricsText ? 'Replace .lrc lyrics' : 'Add .lrc lyrics'}
+                              <input
+                                type="file"
+                                accept=".lrc"
+                                className="hidden"
+                                onChange={async (event) => {
+                                  const lyricsFile = event.target.files?.[0];
+                                  if (lyricsFile) {
+                                    updateQueueItem(item.id, {
+                                      lyricsText: await readFileAsText(lyricsFile),
+                                      lyricsFileName: lyricsFile.name,
+                                    });
+                                  }
+                                  event.target.value = '';
+                                }}
+                              />
+                            </label>
+                            {item.missingFields.length > 0 && (
+                              <div className="col-span-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                                Required before upload: {item.missingFields.join(', ')}
+                              </div>
+                            )}
                             <button
                               onClick={() => updateQueueItem(item.id, { isEditing: false })}
                               className="col-span-2 flex items-center justify-center gap-1 rounded-lg bg-accent/20 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent/30"
@@ -637,6 +1229,16 @@ export default function AdminPage() {
                                   <RiTimeLine /> {formatDuration(item.duration)}
                                 </span>
                               )}
+                              {item.lyricsText && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-medium text-emerald-300" title={item.lyricsFileName || 'Lyrics detected'}>
+                                  <RiFileMusicLine /> LRC
+                                </span>
+                              )}
+                              {item.missingFields.length > 0 && (
+                                <span className="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-medium text-amber-300">
+                                  needs {item.missingFields.join(', ')}
+                                </span>
+                              )}
                               {item.year > 0 && (
                                 <span className="rounded-full bg-white/5 px-2.5 py-0.5 text-[10px] font-medium text-dimText">
                                   {item.year}
@@ -645,6 +1247,18 @@ export default function AdminPage() {
                               <span className="rounded-full bg-white/5 px-2.5 py-0.5 text-[10px] font-medium text-dimText">
                                 {formatFileSize(item.file.size)}
                               </span>
+                              <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-medium ${
+                                item.sourceKind === 'folder'
+                                  ? 'bg-blue-500/10 text-blue-300'
+                                  : 'bg-white/5 text-dimText'
+                              }`}>
+                                {item.sourceKind}
+                              </span>
+                              {item.uploadStatus === 'quarantined' && (
+                                <span className="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-medium text-amber-300">
+                                  quarantined
+                                </span>
+                              )}
                             </div>
                           </>
                         )}
@@ -679,9 +1293,9 @@ export default function AdminPage() {
                           </div>
                         )}
                         {item.status === 'done' && (
-                          <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+                          <div className="flex items-center gap-1.5 text-xs text-amber-300" title="Uploaded privately and held for review">
                             <RiCheckDoubleLine size={18} />
-                            <span className="font-medium">Done</span>
+                            <span className="font-medium">{isContentManager ? 'Quarantined' : 'Submitted'}</span>
                           </div>
                         )}
                         {item.status === 'error' && (
@@ -712,6 +1326,72 @@ export default function AdminPage() {
       )}
 
       {/* ═══════════ ARTIST TAB ═══════════ */}
+      {activeTab === 'review' && isContentManager && (
+        <div className="animate-fade-in space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold text-white">Submission Review</h2>
+              <p className="text-sm text-dimText">Approve clean user uploads before they become public.</p>
+            </div>
+            <button
+              onClick={() => void fetchReviewQueue()}
+              disabled={reviewLoading}
+              className="rounded-full bg-white/10 px-4 py-2 text-xs font-semibold text-white transition hover:bg-white/15 disabled:opacity-50"
+            >
+              {reviewLoading ? 'Loading...' : 'Refresh'}
+            </button>
+          </div>
+
+          {reviewTracks.length === 0 ? (
+            <div className="rounded-2xl border border-white/10 bg-glass-heavy p-8 text-center text-sm text-dimText">
+              No tracks waiting for review.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {reviewTracks.map((track) => (
+                <div key={track._id} className="flex flex-wrap items-center gap-4 rounded-2xl border border-white/10 bg-glass-heavy p-4">
+                  {track.coverUrl ? (
+                    <img src={track.coverUrl} alt="" className="h-16 w-16 rounded-xl object-cover" />
+                  ) : (
+                    <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-white/5">
+                      <RiAlbumLine className="text-2xl text-dimText" />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <h3 className="truncate font-bold text-white">{track.title}</h3>
+                    <p className="truncate text-sm text-softText">{track.artist} - {track.album}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {track.genre && <span className="rounded-full bg-accent/10 px-2.5 py-0.5 text-[10px] font-semibold text-accent">{track.genre}</span>}
+                      {track.submittedByName && <span className="rounded-full bg-white/5 px-2.5 py-0.5 text-[10px] font-semibold text-dimText">by {track.submittedByName}</span>}
+                      <span className="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-amber-300">
+                        {track.uploadStatus || 'quarantined'}
+                      </span>
+                    </div>
+                  </div>
+                  {track.audioUrl && (
+                    <audio src={track.audioUrl} controls className="h-10 max-w-[260px]" />
+                  )}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => void approveReviewTrack(track)}
+                      className="rounded-full bg-emerald-500/20 px-4 py-2 text-xs font-bold text-emerald-200 transition hover:bg-emerald-500/30"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => void blockReviewTrack(track)}
+                      className="rounded-full bg-red-500/20 px-4 py-2 text-xs font-bold text-red-200 transition hover:bg-red-500/30"
+                    >
+                      Block
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {activeTab === 'artist' && (
         <div className="rounded-3xl border border-white/10 bg-glass-heavy backdrop-blur-2xl p-8 shadow-float glass-heavy animate-fade-in">
           <form onSubmit={handleArtistSubmit} className="flex flex-col gap-4">
@@ -819,6 +1499,93 @@ export default function AdminPage() {
               <RiAddLine size={20} /> Submit Track
             </button>
           </form>
+        </div>
+      )}
+
+      {activeTab === 'staff' && isAdmin && (
+        <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+          <div className="rounded-3xl border border-white/10 bg-glass-heavy p-8 shadow-float backdrop-blur-2xl">
+            <h2 className="mb-2 flex items-center gap-2 text-xl font-bold text-white">
+              <RiTeamLine className="text-accent" /> Add Staff
+            </h2>
+            <p className="mb-6 text-sm text-dimText">
+              Staff accounts can access content tools. Only admins can create staff or use folder uploads.
+            </p>
+            <form onSubmit={handleStaffSubmit} className="flex flex-col gap-4">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-dimText">Username *</label>
+                <input value={staffForm.username} onChange={(e) => setStaffForm({ ...staffForm, username: e.target.value })} required className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none transition focus:border-accent/50" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-dimText">Email *</label>
+                <input type="email" value={staffForm.email} onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })} required className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none transition focus:border-accent/50" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-dimText">Display Name *</label>
+                <input value={staffForm.displayName} onChange={(e) => setStaffForm({ ...staffForm, displayName: e.target.value })} required className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none transition focus:border-accent/50" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-dimText">Password *</label>
+                  <input type="password" value={staffForm.password} onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })} required minLength={8} className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none transition focus:border-accent/50" />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-dimText">Role</label>
+                  <select value={staffForm.role} onChange={(e) => setStaffForm({ ...staffForm, role: e.target.value as 'staff' | 'admin' })} className="w-full rounded-xl border border-white/10 bg-glass px-4 py-3 text-white outline-none transition focus:border-accent/50">
+                    <option value="staff">Staff</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+              </div>
+              <button type="submit" disabled={loading} className="mt-2 flex w-max items-center gap-2 rounded-full bg-theme-gradient px-8 py-3 text-sm font-bold text-white shadow-glow transition hover:scale-105 active:scale-95 disabled:opacity-50">
+                <RiAddLine size={20} /> Create Staff
+              </button>
+            </form>
+          </div>
+
+          <div className="rounded-3xl border border-white/10 bg-glass-heavy p-8 shadow-float backdrop-blur-2xl">
+            <div className="mb-6 flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold text-white">Staff Roster</h2>
+                <p className="text-sm text-dimText">Manage who can access catalog operations.</p>
+              </div>
+              <button onClick={() => void fetchStaffAccounts()} className="rounded-full bg-white/10 px-4 py-2 text-xs font-semibold text-white transition hover:bg-white/15">
+                Refresh
+              </button>
+            </div>
+            <div className="space-y-3">
+              {staffAccounts.length === 0 ? (
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-sm text-dimText">
+                  No staff accounts yet.
+                </div>
+              ) : (
+                staffAccounts.map((staff) => (
+                  <div key={staff.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-white">{staff.displayName}</h3>
+                        <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${staff.role === 'admin' ? 'bg-accent/20 text-accent' : 'bg-white/10 text-softText'}`}>
+                          {staff.role}
+                        </span>
+                      </div>
+                      <p className="text-xs text-dimText">{staff.username} - {staff.email}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={staff.role}
+                        onChange={(e) => void updateStaffRole(staff.id, e.target.value as 'user' | 'staff' | 'admin')}
+                        className="rounded-full border border-white/10 bg-glass px-3 py-2 text-xs font-semibold text-white outline-none"
+                      >
+                        <option value="staff">Staff</option>
+                        <option value="admin">Admin</option>
+                        <option value="user">Remove access</option>
+                      </select>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

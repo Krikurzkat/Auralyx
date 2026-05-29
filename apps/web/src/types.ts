@@ -16,6 +16,10 @@ export interface Track {
   audioUrl?: string;
   genre?: string;
   releaseDate?: string;
+  fileHash?: string;
+  uploadStatus?: 'quarantined' | 'approved' | 'blocked';
+  visibility?: 'private' | 'friends' | 'public';
+  moderationFlags?: string[];
   isLocal?: boolean;
   blob?: Blob;
   year?: number;

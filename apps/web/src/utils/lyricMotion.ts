@@ -214,10 +214,19 @@ export function useFluidLyricMotion(
   });
 
   const activeLyricIndex = useMemo(() => getCurrentLyricIndex(lyrics, fluidTime), [lyrics, fluidTime]);
+  const centeredFocusPosition = useMomentumValue(activeLyricIndex < 0 ? targetFocus : activeLyricIndex, {
+    stiffness: options.stiffness ?? 54,
+    damping: options.damping ?? 20,
+    precision: options.precision ?? 0.0004,
+    maxVelocity: options.maxVelocity ?? 7,
+    snapThreshold: options.snapThreshold ?? 4,
+    immediate: !isPlaying,
+  });
 
   return {
     fluidTime,
     focusPosition,
+    centeredFocusPosition,
     activeLyricIndex,
   };
 }

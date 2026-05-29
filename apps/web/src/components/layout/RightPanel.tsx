@@ -64,15 +64,18 @@ export default function RightPanel() {
   }, [currentTrack]);
 
   // Use the fluid physics-based lyric motion system (same as FullscreenPlayer/DrivePlayer)
-  const { focusPosition: lyricFocusPosition, activeLyricIndex: fluidActiveLyricIndex } = useFluidLyricMotion(
+  const {
+    centeredFocusPosition: centeredLyricFocusPosition,
+    activeLyricIndex: fluidActiveLyricIndex,
+  } = useFluidLyricMotion(
     lyrics,
-    currentTime + 0.80, // look-ahead for sync
+    currentTime + 0.12,
     isPlaying
   );
 
   // Compute a visible window of lyrics around the focus position
   const lyricWindowCenter = lyrics.length > 0
-    ? Math.max(0, Math.min(lyrics.length - 1, Math.floor(lyricFocusPosition)))
+    ? Math.max(0, Math.min(lyrics.length - 1, Math.round(centeredLyricFocusPosition)))
     : -1;
   const LYRIC_WINDOW_RADIUS = 5;
   const lyricWindowStart = lyricWindowCenter >= 0 ? Math.max(0, lyricWindowCenter - LYRIC_WINDOW_RADIUS) : 0;
@@ -544,7 +547,7 @@ export default function RightPanel() {
                       <div className="absolute inset-0">
                         {visibleLyrics.map((line, index) => {
                           const actualIndex = lyricWindowStart + index;
-                          const relativePosition = actualIndex - lyricFocusPosition;
+                          const relativePosition = actualIndex - centeredLyricFocusPosition;
                           const distance = Math.abs(relativePosition);
                           const direction = relativePosition < 0 ? -1 : 1;
 

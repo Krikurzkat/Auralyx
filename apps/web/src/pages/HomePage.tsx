@@ -270,7 +270,7 @@ export default function HomePage() {
         <div className="h-[380px] rounded-[28px] bg-white/5" />
         <div className="space-y-4">
           <div className="h-6 w-48 rounded bg-white/10" />
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
             {[...Array(6)].map((_, i) => (
               <div key={i} className="aspect-[0.8] rounded-2xl bg-white/5 p-4 space-y-3">
                 <div className="aspect-square w-full rounded-xl bg-white/10" />
@@ -340,8 +340,8 @@ export default function HomePage() {
       </section>
 
       {/* Hero Banner - Enhanced */}
-      <section className="hidden items-start gap-4 md:grid lg:grid-cols-[1.5fr_0.5fr]">
-        <div ref={heroRef} className="group relative min-h-[280px] overflow-hidden rounded-[24px] bg-gradient-to-br from-[#1A1A1A] via-[#1F1F1F] to-[#151515] p-4 shadow-2xl border border-white/5 flex flex-col justify-between gap-4">
+      <section className="hidden items-start gap-4 md:grid md:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[1.5fr_0.5fr]">
+        <div ref={heroRef} className="group relative min-h-[360px] overflow-hidden rounded-[24px] bg-gradient-to-br from-[#1A1A1A] via-[#1F1F1F] to-[#151515] p-5 shadow-2xl border border-white/5 flex flex-col justify-between gap-4 xl:min-h-[280px] xl:p-4">
           {/* Animated Background Blobs */}
           <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
             <div className="absolute left-[-15%] top-[-20%] h-[380px] w-[380px] rounded-full bg-accent/40 blur-[100px] animate-pulse-glow" />
@@ -355,48 +355,48 @@ export default function HomePage() {
           {/* Particle Nebula Dust */}
           <NebulaDust id="hero-nebula" />
 
-          <div className="relative z-10 grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px_220px] xl:grid-cols-[minmax(0,1fr)_300px_250px]">
+          <div className="home-hero-feature-grid relative z-10 grid gap-4 md:grid-cols-[minmax(0,1fr)_300px_180px] xl:grid-cols-[minmax(0,1fr)_300px_250px]">
             <div ref={contentRef} className="max-w-lg space-y-3">
               <div className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/15 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-accent backdrop-blur-sm shadow-lg">
                 <RiFireLine size={12} className="animate-pulse" />
                 Total Music Library
               </div>
-              <h1 className="text-3xl font-black leading-[0.98] md:text-[2.15rem] text-white tracking-tight drop-shadow-2xl">
+              <h1 className="text-3xl font-black leading-[0.98] md:text-[1.85rem] xl:text-[2.15rem] text-white tracking-tight drop-shadow-2xl">
                 Most Listened <br/>
                 <span className="text-gradient">Music</span>
               </h1>
-              <p className="max-w-md text-sm text-white/90 leading-snug font-medium">
+              <p className="max-w-md text-sm md:text-xs xl:text-sm text-white/90 leading-snug font-medium">
                 Experience the pinnacle of offline listening. Dive into your most popular, frequently played music tracks available exclusively on your Total Music platform.
               </p>
               <div className="flex flex-wrap gap-3 pointer-events-auto">
                 <button
                   onClick={() => { if (topListenedTracks[0]) playTrack(topListenedTracks[0], localTracks); }}
                   disabled={topListenedTracks.length === 0}
-                  className="group flex items-center gap-2 rounded-full bg-theme-gradient px-5 py-2.5 text-sm font-bold text-white transition-all hover:scale-[1.05] hover:shadow-glow-lg active:scale-95 disabled:opacity-50 disabled:hover:scale-100 shadow-glow"
+                  className="group flex items-center gap-2 rounded-full bg-theme-gradient px-5 py-2.5 text-sm md:px-4 md:py-2 md:text-xs xl:px-5 xl:py-2.5 xl:text-sm font-bold text-white transition-all hover:scale-[1.05] hover:shadow-glow-lg active:scale-95 disabled:opacity-50 disabled:hover:scale-100 shadow-glow"
                 >
                   <RiPlayFill size={18} className="group-hover:scale-110 transition-transform" /> 
                   Play Most Listened
                 </button>
                 <button
                   onClick={() => navigate('/local')}
-                  className="group rounded-full border-2 border-white/30 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white backdrop-blur-xl transition-all hover:bg-white/20 hover:border-white/50 hover:scale-[1.05] active:scale-95 shadow-lg"
+                  className="group rounded-full border-2 border-white/30 bg-white/10 px-5 py-2.5 text-sm md:px-4 md:py-2 md:text-xs xl:px-5 xl:py-2.5 xl:text-sm font-semibold text-white backdrop-blur-xl transition-all hover:bg-white/20 hover:border-white/50 hover:scale-[1.05] active:scale-95 shadow-lg"
                 >
                   Open Library
                 </button>
               </div>
             </div>
 
-            <div className="hidden items-start justify-start lg:flex lg:translate-x-14 xl:translate-x-16">
+            <div className="home-hero-album-copy hidden items-start justify-start md:flex xl:translate-x-16">
               <div className="space-y-3">
                 <div className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/15 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-accent backdrop-blur-sm shadow-lg">
                   <RiAlbumLine size={12} />
                   Best Album
                 </div>
-                <h2 className="max-w-[260px] text-left text-3xl font-black leading-[0.98] text-white tracking-tight drop-shadow-2xl md:text-[2.15rem]">
+                <h2 className="max-w-[260px] text-left text-3xl font-black leading-[0.98] text-white tracking-tight drop-shadow-2xl md:text-[1.85rem] xl:text-[2.15rem]">
                   <span className="whitespace-nowrap">Most Listened</span> <br />
                   <span className="text-gradient">Album</span>
                 </h2>
-                <p className="max-w-[250px] text-sm font-medium leading-snug text-white/85">
+                <p className="max-w-[250px] text-sm md:text-xs xl:text-sm font-medium leading-snug text-white/85">
                   Your top album based on repeat plays and listening history across your local music library.
                 </p>
                 {mostPlayedAlbum && (
@@ -412,8 +412,8 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div className="hidden lg:flex items-center justify-end">
-              <div className="group relative aspect-square w-full max-w-[220px] overflow-hidden rounded-[22px] border border-white/10 bg-white/5 text-left shadow-2xl shadow-black/40 transition-all hover:scale-[1.02] hover:border-accent/30 xl:max-w-[250px]">
+            <div className="home-hero-album-cover hidden items-center justify-end md:flex">
+              <div className="group relative aspect-square w-full max-w-[180px] overflow-hidden rounded-[22px] border border-white/10 bg-white/5 text-left shadow-2xl shadow-black/40 transition-all hover:scale-[1.02] hover:border-accent/30 xl:max-w-[250px]">
                 <button
                   onClick={() => {
                     if (mostPlayedAlbum) navigate(`/album/${encodeURIComponent(mostPlayedAlbum.id)}`);
@@ -653,7 +653,7 @@ export default function HomePage() {
           <h2 className="text-lg sm:text-2xl font-bold">Your Playlists</h2>
           <button onClick={() => navigate('/local')} className="text-sm font-semibold text-softText transition hover:text-white">View all</button>
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 xl:grid-cols-6">
           {userPlaylists.map(pl => (
             <ContentCard
               key={pl.id}
@@ -686,7 +686,7 @@ export default function HomePage() {
         <div className="mb-3 sm:mb-5 flex items-center justify-between">
           <h2 className="text-lg sm:text-2xl font-bold">Popular Artists in Library</h2>
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 xl:grid-cols-6">
           {popularArtists.map(artist => (
             <ContentCard
               key={artist.id}

@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../stores/authStore';
 import { useLocalLibraryStore } from '../stores/localLibraryStore';
-import { apiUrl, getNetworkErrorMessage } from '../services/api';
+import { getNetworkErrorMessage } from '../services/api';
+import { updateSupabaseProfile } from '../services/auth';
 import {
   RiCheckLine,
   RiCloseLine,
@@ -15,7 +16,7 @@ import {
 } from 'react-icons/ri';
 
 export default function ProfilePage() {
-  const { user, token, updateUser, logout } = useAuthStore();
+  const { user, updateUser, logout } = useAuthStore();
   const navigate = useNavigate();
   const { localTracks, localPlaylists } = useLocalLibraryStore();
   const [isEditing, setIsEditing] = useState(false);
@@ -55,7 +56,7 @@ export default function ProfilePage() {
   const handleSaveProfile = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (!user || !token) {
+    if (!user) {
       const message = 'Log in before editing your profile.';
       setError(message);
       toast.error(message);
@@ -66,7 +67,7 @@ export default function ProfilePage() {
       const message = 'Your saved session is missing a profile id. Please log in again.';
       setError(message);
       toast.error(message);
-      logout();
+      void logout();
       navigate('/login');
       return;
     }
@@ -85,41 +86,21 @@ export default function ProfilePage() {
     setError('');
 
     try {
-      const res = await fetch(apiUrl(`/api/users/${user.id}`), {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          displayName: trimmedDisplayName,
-          avatarUrl: trimmedAvatarUrl,
-        }),
+      const updatedUser = await updateSupabaseProfile({
+        displayName: trimmedDisplayName,
+        avatarUrl: trimmedAvatarUrl,
       });
-
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        const message = data?.error || 'Failed to update profile';
-        if ([401, 403, 404].includes(res.status)) {
-          setError(message);
-          toast.error(message);
-          logout();
-          navigate('/login');
-          return;
-        }
-
-        throw new Error(message);
-      }
-
-      if (!data?.user) throw new Error('Profile update response was incomplete');
-
-      updateUser(data.user);
+      updateUser(updatedUser);
       setIsEditing(false);
       toast.success('Profile updated');
     } catch (err) {
       const message = getNetworkErrorMessage(err);
       setError(message);
       toast.error(message);
+      if (/logged in/i.test(message) || /jwt/i.test(message) || /session/i.test(message)) {
+        void logout();
+        navigate('/login');
+      }
     } finally {
       setIsSaving(false);
     }

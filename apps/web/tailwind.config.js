@@ -2,10 +2,18 @@
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
+    // Device lanes:
+    // base/sm = phone, md = tablet, lg/xl = PC.
+    // PC variants require a fine pointer so large tablets/iPads do not inherit desktop UI by accident.
+    screens: {
+      xs: '475px',
+      sm: '640px',
+      md: '768px',
+      lg: { raw: '(min-width: 1280px) and (hover: hover) and (pointer: fine)' },
+      xl: { raw: '(min-width: 1280px) and (hover: hover) and (pointer: fine)' },
+      '2xl': { raw: '(min-width: 1536px) and (hover: hover) and (pointer: fine)' },
+    },
     extend: {
-      screens: {
-        'xs': '475px', // Extra small devices
-      },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
       },

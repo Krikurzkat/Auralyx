@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import toast from 'react-hot-toast';
-import { apiUrl, getNetworkErrorMessage } from '../services/api';
+import { getNetworkErrorMessage } from '../services/api';
+import { ensureUsernameAvailable, signUpWithEmail } from '../services/auth';
+import { isSupabaseConfigured } from '../services/supabase';
 import StarParticles from '../components/ui/StarParticles';
 import AuroraBackground from '../components/ui/AuroraBackground';
 import Meteors from '../components/ui/Meteors';
@@ -15,7 +17,7 @@ export default function SignUpPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
-  const login = useAuthStore(state => state.login);
+  const setSession = useAuthStore((state) => state.setSession);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,29 +31,38 @@ export default function SignUpPage() {
       return toast.error(message);
     }
 
+    if (!isSupabaseConfigured) {
+      const message = 'Supabase Auth is not configured yet.';
+      setError(message);
+      return toast.error(message);
+    }
+
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(apiUrl('/api/users/register'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          username: trimmedUsername,
-          email: trimmedEmail,
-          password,
-          displayName: trimmedDisplayName,
-        }),
+      const isUsernameFree = await ensureUsernameAvailable(trimmedUsername);
+      if (!isUsernameFree) {
+        throw new Error('Username already taken');
+      }
+
+      const { data, error: signUpError } = await signUpWithEmail({
+        username: trimmedUsername,
+        email: trimmedEmail,
+        password,
+        displayName: trimmedDisplayName,
       });
 
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || 'Registration failed');
-      if (!data?.user || !data?.token) throw new Error('Registration response was incomplete');
+      if (signUpError) throw signUpError;
 
-      login(data.user, data.token);
-      toast.success(`Welcome to Auralyx, ${data.user.displayName}!`);
-      navigate('/');
+      if (data.session) {
+        setSession(data.session);
+        toast.success(`Welcome to Auralyx, ${trimmedDisplayName}!`);
+        navigate('/');
+        return;
+      }
+
+      toast.success('Account created. Check your email to confirm your sign-up.');
+      navigate('/login');
     } catch (err) {
       const message = getNetworkErrorMessage(err);
       setError(message);

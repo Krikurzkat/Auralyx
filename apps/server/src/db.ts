@@ -25,7 +25,24 @@ const trackSchema = new mongoose.Schema({
   explicit: { type: Boolean, default: false },
   genre: String,
   releaseDate: String,
-  lyrics: [{ time: Number, text: String }],
+  lyrics: mongoose.Schema.Types.Mixed,
+  fileHash: { type: String, index: true },
+  uploadStatus: {
+    type: String,
+    enum: ['quarantined', 'approved', 'blocked'],
+    default: 'quarantined',
+  },
+  visibility: {
+    type: String,
+    enum: ['private', 'friends', 'public'],
+    default: 'private',
+  },
+  moderationFlags: [String],
+  submittedBy: String,
+  submittedByName: String,
+  reviewedBy: String,
+  reviewedAt: Date,
+  reviewNote: String,
 }, { timestamps: true });
 
 const albumSchema = new mongoose.Schema({
@@ -81,7 +98,7 @@ const userSchema = new mongoose.Schema({
   subscribedPodcastIds: [String],
   recentlyPlayed: [String],
   subscription: { type: String, enum: ['free', 'premium', 'duo', 'family', 'student'], default: 'free' },
-  role: { type: String, enum: ['user', 'admin'], default: 'user' },
+  role: { type: String, enum: ['user', 'staff', 'admin'], default: 'user' },
   settings: {
     audioQuality: { type: String, default: 'high' },
     crossfade: { type: Number, default: 0 },
@@ -92,6 +109,24 @@ const userSchema = new mongoose.Schema({
   },
 }, { timestamps: true });
 
+const uploadAuditSchema = new mongoose.Schema({
+  userId: { type: String, required: true, index: true },
+  fileHash: { type: String, required: true, index: true },
+  originalName: { type: String, required: true },
+  sourceKind: { type: String, enum: ['file', 'folder', 'batch'], default: 'file' },
+  size: { type: Number, required: true },
+  mimetype: String,
+  status: {
+    type: String,
+    enum: ['accepted', 'duplicate', 'rate_limited', 'blocked'],
+    required: true,
+  },
+  abuseFlags: [String],
+  duplicateOf: String,
+}, { timestamps: true });
+
+uploadAuditSchema.index({ userId: 1, fileHash: 1, status: 1 });
+
 // ─── Models ───
 
 export const Track = mongoose.models.Track || mongoose.model('Track', trackSchema);
@@ -99,3 +134,4 @@ export const Album = mongoose.models.Album || mongoose.model('Album', albumSchem
 export const Artist = mongoose.models.Artist || mongoose.model('Artist', artistSchema);
 export const Playlist = mongoose.models.Playlist || mongoose.model('Playlist', playlistSchema);
 export const User = mongoose.models.User || mongoose.model('User', userSchema);
+export const UploadAudit = mongoose.models.UploadAudit || mongoose.model('UploadAudit', uploadAuditSchema);

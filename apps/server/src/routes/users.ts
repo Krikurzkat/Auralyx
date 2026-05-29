@@ -2,10 +2,25 @@ import { Router } from 'express';
 import { User } from '../db.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { verifyToken, AuthRequest } from '../middleware/auth.js';
+import { verifyToken, isAdmin, AuthRequest, AppRole } from '../middleware/auth.js';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'go-music-dev-secret-key-change-in-production';
+const STAFF_ROLES: AppRole[] = ['staff', 'admin'];
+
+function serializeUser(user: any) {
+  return {
+    id: String(user._id),
+    username: user.username,
+    email: user.email,
+    displayName: user.displayName,
+    avatarUrl: user.avatarUrl,
+    subscription: user.subscription,
+    role: user.role,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  };
+}
 
 // POST /api/users/register
 router.post('/register', async (req, res) => {
@@ -40,15 +55,7 @@ router.post('/register', async (req, res) => {
 
     res.status(201).json({
       token,
-      user: {
-        id: String(user._id),
-        username: user.username,
-        email: user.email,
-        displayName: user.displayName,
-        avatarUrl: user.avatarUrl,
-        subscription: user.subscription,
-        role: user.role,
-      },
+      user: serializeUser(user),
     });
   } catch (err) {
     res.status(500).json({ error: 'Registration failed' });
@@ -58,12 +65,19 @@ router.post('/register', async (req, res) => {
 // POST /api/users/login
 router.post('/login', async (req, res) => {
   try {
-    let { username, password } = req.body;
+    let { username, email, password } = req.body;
     if (username) username = username.trim().toLowerCase();
+    if (email) email = email.trim().toLowerCase();
     
-    if (!username || !password) return res.status(400).json({ error: 'Username and password are required' });
+    const login = username || email;
+    if (!login || !password) return res.status(400).json({ error: 'Username/email and password are required' });
 
-    const user = await User.findOne({ username });
+    const user = await User.findOne({
+      $or: [
+        { username: login },
+        { email: login },
+      ],
+    });
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
 
     const valid = await bcrypt.compare(password, user.passwordHash);
@@ -73,18 +87,79 @@ router.post('/login', async (req, res) => {
 
     res.json({
       token,
-      user: {
-        id: String(user._id),
-        username: user.username,
-        email: user.email,
-        displayName: user.displayName,
-        avatarUrl: user.avatarUrl,
-        subscription: user.subscription,
-        role: user.role,
-      },
+      user: serializeUser(user),
     });
   } catch (err) {
     res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// GET /api/users/staff - Admin-only staff roster
+router.get('/staff', verifyToken, isAdmin, async (_req, res) => {
+  try {
+    const staff = await User.find({ role: { $in: STAFF_ROLES } })
+      .select('-passwordHash -settings')
+      .sort({ role: 1, displayName: 1 });
+    res.json({ staff: staff.map(serializeUser) });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch staff accounts' });
+  }
+});
+
+// POST /api/users/staff - Admin-only staff account creation
+router.post('/staff', verifyToken, isAdmin, async (req, res) => {
+  try {
+    let { username, email, password, displayName, role } = req.body;
+    if (username) username = username.trim().toLowerCase();
+    if (email) email = email.trim().toLowerCase();
+    if (displayName) displayName = displayName.trim();
+    role = role === 'admin' ? 'admin' : 'staff';
+
+    if (!username || !email || !password || !displayName) {
+      return res.status(400).json({ error: 'Username, email, password, and display name are required' });
+    }
+
+    if (!/^[a-z0-9_.-]{3,30}$/.test(username)) {
+      return res.status(400).json({ error: 'Username must be 3-30 characters and use only letters, numbers, dot, underscore, or hyphen' });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'Staff password must be at least 8 characters long' });
+    }
+
+    const existingUsername = await User.findOne({ username });
+    if (existingUsername) return res.status(409).json({ error: 'Username already taken' });
+
+    const existingEmail = await User.findOne({ email });
+    if (existingEmail) return res.status(409).json({ error: 'Email already registered' });
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const user = await User.create({ username, email, passwordHash, displayName, role });
+
+    res.status(201).json({ staff: serializeUser(user) });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create staff account' });
+  }
+});
+
+// PUT /api/users/:id/role - Admin-only role management
+router.put('/:id/role', verifyToken, isAdmin, async (req: AuthRequest, res) => {
+  try {
+    const role = String(req.body.role || '').trim() as AppRole;
+    if (!['user', 'staff', 'admin'].includes(role)) {
+      return res.status(400).json({ error: 'Role must be user, staff, or admin' });
+    }
+
+    if (req.user?.userId === req.params.id && role !== 'admin') {
+      return res.status(400).json({ error: 'You cannot remove your own admin access' });
+    }
+
+    const user = await User.findByIdAndUpdate(req.params.id, { role }, { new: true }).select('-passwordHash -settings');
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    res.json({ user: serializeUser(user) });
+  } catch (err) {
+    res.status(400).json({ error: 'Failed to update role' });
   }
 });
 
@@ -123,15 +198,7 @@ router.put('/:id', verifyToken, async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'Your saved session no longer exists on the server. Please log in again.' });
     }
     res.json({
-      user: {
-        id: String(user._id),
-        username: user.username,
-        email: user.email,
-        displayName: user.displayName,
-        avatarUrl: user.avatarUrl,
-        subscription: user.subscription,
-        role: user.role,
-      },
+      user: serializeUser(user),
     });
   } catch (err) {
     res.status(400).json({ error: 'Failed to update user' });

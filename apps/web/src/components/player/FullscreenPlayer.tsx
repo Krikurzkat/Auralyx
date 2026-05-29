@@ -23,7 +23,6 @@ import {
 import { gsap } from 'gsap';
 import { bottomPlayerCoverRef } from '../layout/BottomPlayer';
 import DrivePlayer from './DrivePlayer';
-import FloatingOrbs from '../ui/FloatingOrbs';
 
 
 // Shared ref for tracking clicked track covers
@@ -115,10 +114,13 @@ export default function FullscreenPlayer() {
   const visualTrack = currentTrack;
   const coverUrl = getTrackCoverUrl(visualTrack);
   const lyrics = useMemo(() => (visualTrack ? getLyricsForTrack(visualTrack.id, visualTrack.lyrics) : []), [visualTrack]);
-  // Perfect sync offset (800ms look-ahead) – matches DrivePlayer
-  const { focusPosition: lyricFocusPosition, activeLyricIndex } = useFluidLyricMotion(lyrics, currentTime + 0.90, isPlaying);
+  // Keep the active lyric centered while the text motion eases.
+  const {
+    centeredFocusPosition: centeredLyricFocusPosition,
+    activeLyricIndex,
+  } = useFluidLyricMotion(lyrics, currentTime + 0.12, isPlaying);
   const lyricWindowCenter = lyrics.length > 0
-    ? Math.max(0, Math.min(lyrics.length - 1, Math.floor(lyricFocusPosition)))
+    ? Math.max(0, Math.min(lyrics.length - 1, Math.round(centeredLyricFocusPosition)))
     : -1;
   const lyricWindowStart = lyricWindowCenter >= 0 ? Math.max(0, lyricWindowCenter - 4) : 0;
   const visibleLyrics = lyrics.slice(lyricWindowStart, lyricWindowCenter >= 0 ? lyricWindowCenter + 7 : 0);
@@ -417,7 +419,7 @@ export default function FullscreenPlayer() {
   }, [visualTrack?.title]);
 
   useEffect(() => {
-    const desktopQuery = window.matchMedia('(min-width: 1024px)');
+    const desktopQuery = window.matchMedia('(min-width: 1280px)');
     const updateLyricLayout = () => setIsDesktopLyricLayout(desktopQuery.matches);
 
     updateLyricLayout();
@@ -1095,11 +1097,6 @@ export default function FullscreenPlayer() {
       {/* Bottom-to-top black gradient fade */}
       <div className="absolute inset-0 -z-10 pointer-events-none" style={{ background: 'linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 25%, rgba(0,0,0,0.4) 50%, transparent 75%)' }} />
 
-      {/* Floating Orbs - rising ember particles */}
-      <div className="absolute inset-0 -z-[5] pointer-events-none">
-        <FloatingOrbs variant={isDriveMode ? "drive" : "default"} />
-      </div>
-
       {visualTrack ? (
         <div 
           className="absolute inset-0 flex h-full w-full flex-col overflow-hidden p-4 pt-6 md:p-8"
@@ -1148,13 +1145,13 @@ export default function FullscreenPlayer() {
             </div>
           </div>
 
-          <div className="m-auto h-full w-full max-w-6xl overflow-hidden pt-0 pb-4 flex flex-col landscape:grid landscape:grid-cols-[minmax(360px,448px)_minmax(0,1fr)] landscape:gap-x-12 landscape:items-center landscape:overflow-visible lg:grid lg:grid-cols-[448px_minmax(0,1fr)] lg:gap-x-12 lg:items-center lg:justify-center relative">
+          <div className="m-auto h-full w-full max-w-6xl overflow-hidden pt-0 pb-4 flex flex-col landscape:grid landscape:grid-cols-[minmax(360px,448px)_minmax(0,1fr)] landscape:gap-x-12 landscape:items-center landscape:overflow-visible xl:grid xl:grid-cols-[448px_minmax(0,1fr)] xl:gap-x-12 xl:items-center xl:justify-center relative">
             
-            <div className="portrait:contents landscape:flex landscape:flex-col landscape:justify-center landscape:h-full landscape:col-start-1 landscape:row-start-1 landscape:min-w-0 lg:flex lg:flex-col lg:justify-center lg:h-full lg:col-start-1 lg:row-start-1">
+            <div className="portrait:contents landscape:flex landscape:flex-col landscape:justify-center landscape:h-full landscape:col-start-1 landscape:row-start-1 landscape:min-w-0 xl:flex xl:flex-col xl:justify-center xl:h-full xl:col-start-1 xl:row-start-1">
               <div className="order-1 flex w-full justify-center">
                 <div
                   ref={coverWrapperRef}
-                  className="fullscreen-cover-wrapper relative flex h-[44vw] w-[44vw] max-h-[220px] max-w-[220px] flex-shrink-0 items-center justify-center overflow-hidden rounded-[28px] shadow-2xl sm:h-[240px] sm:w-[240px] md:h-[280px] md:w-[280px] lg:h-[360px] lg:w-[360px]"
+                  className="fullscreen-cover-wrapper relative flex h-[44vw] w-[44vw] max-h-[220px] max-w-[220px] flex-shrink-0 items-center justify-center overflow-hidden rounded-[28px] shadow-2xl sm:h-[240px] sm:w-[240px] md:h-[280px] md:w-[280px] xl:h-[360px] xl:w-[360px]"
                   style={{
                     willChange: transitionState === 'opening' || transitionState === 'closing' || isDriveModeTransitioning ? 'transform, opacity' : 'auto',
                     opacity: isDriveMode ? 0 : undefined,
@@ -1185,9 +1182,9 @@ export default function FullscreenPlayer() {
                 </div>
               </div>
 
-              <div className="order-2 mt-4 flex flex-col items-center landscape:mt-6 lg:mt-8 w-full">
+              <div className="order-2 mt-4 flex flex-col items-center landscape:mt-6 xl:mt-8 w-full">
                 <div className="flex w-full max-w-2xl flex-col items-center text-center">
-                  <div ref={titleContainerRef} className="overflow-hidden w-full px-6 md:px-8 lg:px-0">
+                  <div ref={titleContainerRef} className="overflow-hidden w-full px-6 md:px-8 xl:px-0">
                     <h1 
                       ref={titleTextRef}
                       className={`fullscreen-track-title text-2xl font-bold leading-tight md:text-3xl ${
@@ -1219,7 +1216,7 @@ export default function FullscreenPlayer() {
                 </div>
               </div>
 
-              <div className="order-4 mt-4 flex w-full flex-col items-center justify-center gap-2 lg:mt-6">
+              <div className="order-4 mt-4 flex w-full flex-col items-center justify-center gap-2 xl:mt-6">
                 <div className="fullscreen-progress-bar mt-2 mb-2 shrink-0 self-stretch px-1 md:w-full md:max-w-md md:self-auto md:px-0">
                   <input
                     type="range"
@@ -1236,7 +1233,7 @@ export default function FullscreenPlayer() {
                   </div>
                 </div>
 
-                <div className="fullscreen-controls shrink-0 w-full max-w-md flex justify-center landscape:max-w-full lg:max-w-md">
+                <div className="fullscreen-controls shrink-0 w-full max-w-md flex justify-center landscape:max-w-full xl:max-w-md">
                   <div className="flex items-center justify-between sm:justify-center gap-1 sm:gap-4 w-full px-2 xs:px-4 sm:px-0">
                     <button onClick={toggleShuffle} className={`p-1 sm:p-2 transition ${shuffle ? 'text-accent' : 'text-white/50 hover:text-white'}`}>
                       <RiShuffleLine size={24} />
@@ -1264,8 +1261,8 @@ export default function FullscreenPlayer() {
               </div>
             </div>
 
-            <div className="portrait:contents landscape:flex landscape:flex-col landscape:justify-center landscape:h-full landscape:col-start-2 landscape:row-start-1 landscape:min-w-0 landscape:pl-2 lg:flex lg:flex-col lg:justify-center lg:col-start-2 lg:row-start-1 lg:min-w-0 lg:pl-0">
-              <div className="order-3 mt-6 lg:mt-8 flex w-full flex-1 flex-col items-center gap-6 min-h-0 landscape:mt-0">
+            <div className="portrait:contents landscape:flex landscape:flex-col landscape:justify-center landscape:h-full landscape:col-start-2 landscape:row-start-1 landscape:min-w-0 landscape:pl-2 xl:flex xl:flex-col xl:justify-center xl:col-start-2 xl:row-start-1 xl:min-w-0 xl:pl-0">
+              <div className="order-3 mt-6 xl:mt-8 flex w-full flex-1 flex-col items-center gap-6 min-h-0 landscape:mt-0">
                 <div
                   className="fullscreen-tabs relative z-10 flex w-full max-w-md items-center justify-between gap-3 rounded-2xl border border-white/20 bg-white/10 backdrop-blur-xl p-1.5 shadow-lg"
                   style={{
@@ -1300,7 +1297,7 @@ export default function FullscreenPlayer() {
                   </button>
                 </div>
 
-                <div className="fullscreen-lyrics-panel relative flex flex-col flex-1 w-full min-h-0 lg:items-center mt-2 -mb-12">
+                <div className="fullscreen-lyrics-panel relative flex flex-col flex-1 w-full min-h-0 xl:items-center mt-2 -mb-12">
                   
                   {/* Lyrics Container */}
                   <div
@@ -1316,7 +1313,7 @@ export default function FullscreenPlayer() {
                         <div className="absolute inset-0">
                           {visibleLyrics.map((line, index) => {
                             const actualIndex = lyricWindowStart + index;
-                            const relativePosition = actualIndex - lyricFocusPosition;
+                            const relativePosition = actualIndex - centeredLyricFocusPosition;
                             const distance = Math.abs(relativePosition);
                             const direction = relativePosition < 0 ? -1 : 1;
                             const verticalOffset = direction * Math.pow(distance, 1.05) * lyricLineGap;
@@ -1526,4 +1523,3 @@ function UpNextPopup({ track, visible, isDriveMode = false }: UpNextPopupProps) 
     </div>
   );
 }
-

@@ -1,4 +1,9 @@
 import { create } from 'zustand';
+import type { Session } from '@supabase/supabase-js';
+import { getSessionUser } from '../services/auth';
+import { isSupabaseConfigured, supabase } from '../services/supabase';
+
+export type UserRole = 'user' | 'staff' | 'admin';
 
 export interface User {
   id: string;
@@ -7,88 +12,116 @@ export interface User {
   displayName: string;
   avatarUrl?: string;
   subscription: string;
-  role: string;
+  role: UserRole;
 }
 
-type StoredUser = Partial<User> & {
-  _id?: string;
-};
+export function isAdminRole(role?: string | null) {
+  return role === 'admin';
+}
 
-function normalizeUser(value: unknown): User | null {
-  if (!value || typeof value !== 'object') return null;
-
-  const raw = value as StoredUser;
-  const id = raw.id || raw._id;
-  if (!id || !raw.username || !raw.email || !raw.displayName) return null;
-
-  return {
-    id: String(id),
-    username: String(raw.username),
-    email: String(raw.email),
-    displayName: String(raw.displayName),
-    avatarUrl: raw.avatarUrl ? String(raw.avatarUrl) : undefined,
-    subscription: raw.subscription ? String(raw.subscription) : 'free',
-    role: raw.role ? String(raw.role) : 'user',
-  };
+export function canManageContent(role?: string | null) {
+  return role === 'admin' || role === 'staff';
 }
 
 interface AuthState {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
-  login: (user: User, token: string) => void;
+  isLoading: boolean;
+  initialize: () => Promise<void>;
+  setSession: (session: Session | null) => void;
+  setLocalSession: (user: User, token: string) => void;
   updateUser: (updates: Partial<User>) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => {
-  // Try to load initial state from localStorage
-  const storedToken = localStorage.getItem('auth_token');
-  const storedUser = localStorage.getItem('auth_user');
-  let initialUser: User | null = null;
-  
-  if (storedUser) {
-    try {
-      initialUser = normalizeUser(JSON.parse(storedUser));
-    } catch (e) {
-      console.error('Failed to parse stored user data', e);
+let authSubscriptionInitialized = false;
+
+function applySession(set: (partial: Partial<AuthState>) => void, session: Session | null) {
+  const user = getSessionUser(session);
+  set({
+    user,
+    token: session?.access_token ?? null,
+    isAuthenticated: Boolean(user && session?.access_token),
+    isLoading: false,
+  });
+}
+
+export const useAuthStore = create<AuthState>((set) => ({
+  user: null,
+  token: null,
+  isAuthenticated: false,
+  isLoading: isSupabaseConfigured,
+  initialize: async () => {
+    const localToken = localStorage.getItem('auth_token');
+    const localUser = localStorage.getItem('auth_user');
+    if (localToken && localUser) {
+      try {
+        const parsedUser = JSON.parse(localUser) as User;
+        set({ user: parsedUser, token: localToken, isAuthenticated: true, isLoading: false });
+        return;
+      } catch {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth_user');
+      }
     }
-  }
 
-  const hasValidStoredSession = !!storedToken && !!initialUser;
+    if (!isSupabaseConfigured || !supabase) {
+      set({ user: null, token: null, isAuthenticated: false, isLoading: false });
+      return;
+    }
 
-  if (!hasValidStoredSession) {
+    if (!authSubscriptionInitialized) {
+      authSubscriptionInitialized = true;
+      supabase.auth.onAuthStateChange((_event, session) => {
+        applySession(set, session);
+      });
+    }
+
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.getSession();
+
+    if (error) {
+      console.error('Failed to restore Supabase session', error);
+      set({ user: null, token: null, isAuthenticated: false, isLoading: false });
+      return;
+    }
+
+    applySession(set, session);
+  },
+  setSession: (session) => {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('auth_user');
-  }
-
-  return {
-    user: hasValidStoredSession ? initialUser : null,
-    token: hasValidStoredSession ? storedToken : null,
-    isAuthenticated: hasValidStoredSession,
-    login: (user, token) => {
-      const normalizedUser = normalizeUser(user);
-      if (!normalizedUser) {
-        throw new Error('Login response was incomplete');
-      }
-
-      localStorage.setItem('auth_token', token);
-      localStorage.setItem('auth_user', JSON.stringify(normalizedUser));
-      set({ user: normalizedUser, token, isAuthenticated: true });
-    },
-    updateUser: (updates) => set((state) => {
+    applySession(set, session);
+  },
+  setLocalSession: (user, token) => {
+    localStorage.setItem('auth_token', token);
+    localStorage.setItem('auth_user', JSON.stringify(user));
+    set({ user, token, isAuthenticated: true, isLoading: false });
+  },
+  updateUser: (updates) =>
+    set((state) => {
       if (!state.user) return state;
-
-      const user = normalizeUser({ ...state.user, ...updates });
-      if (!user) return state;
-
-      localStorage.setItem('auth_user', JSON.stringify(user));
-      return { user };
+      return {
+        user: {
+          ...state.user,
+          ...updates,
+        },
+      };
     }),
-    logout: () => {
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('auth_user');
-      set({ user: null, token: null, isAuthenticated: false });
-    },
-  };
-});
+  logout: async () => {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_user');
+
+    if (supabase) {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Failed to sign out of Supabase', error);
+      }
+    }
+
+    set({ user: null, token: null, isAuthenticated: false, isLoading: false });
+  },
+}));

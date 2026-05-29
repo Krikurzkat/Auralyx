@@ -72,9 +72,12 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
   // State for idle timeout to hide controls
   const [isIdle, setIsIdle] = useState(false);
   const idleTimeoutRef = useRef<number | null>(null);
-  const [isWideLyricsViewport, setIsWideLyricsViewport] = useState(() =>
-    typeof window !== 'undefined' ? window.innerWidth >= 768 : false
-  );
+  const [lyricsViewport, setLyricsViewport] = useState<'phone' | 'tablet' | 'desktop'>(() => {
+    if (typeof window === 'undefined') return 'desktop';
+    if (window.innerWidth >= 1280) return 'desktop';
+    if (window.innerWidth >= 768) return 'tablet';
+    return 'phone';
+  });
 
   const resetIdleTimer = useCallback(() => {
     setIsIdle(false);
@@ -97,7 +100,13 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
 
   useEffect(() => {
     const updateViewportFlags = () => {
-      setIsWideLyricsViewport(window.innerWidth >= 768);
+      if (window.innerWidth >= 1280) {
+        setLyricsViewport('desktop');
+      } else if (window.innerWidth >= 768) {
+        setLyricsViewport('tablet');
+      } else {
+        setLyricsViewport('phone');
+      }
     };
 
     updateViewportFlags();
@@ -109,34 +118,34 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
     () => (currentTrack ? getLyricsForTrack(currentTrack.id, currentTrack.lyrics) : []),
     [currentTrack]
   );
-  const lyricScrollAheadSeconds = isWideLyricsViewport ? 0.52 : 0.42;
-  const lyricHighlightAheadSeconds = 0.12;
-  const { fluidTime: lyricFluidTime, focusPosition: lyricFocusPosition } = useFluidLyricMotion(
+  const isTabletLyricsViewport = lyricsViewport === 'tablet';
+  const isDesktopLyricsViewport = lyricsViewport === 'desktop';
+  const lyricHighlightAheadSeconds = isDesktopLyricsViewport ? 0.12 : isTabletLyricsViewport ? 0.1 : 0.08;
+  const {
+    fluidTime: lyricFluidTime,
+    centeredFocusPosition: centeredLyricFocusPosition,
+  } = useFluidLyricMotion(
     lyrics,
-    currentTime + lyricScrollAheadSeconds,
+    currentTime + lyricHighlightAheadSeconds,
     isPlaying,
     {
-      stiffness: 48,
-      damping: 19,
-      maxVelocity: 3.8,
-      snapThreshold: 3.25,
+      stiffness: 56,
+      damping: 21,
+      maxVelocity: 6,
+      snapThreshold: 3,
     }
   );
-  const syncedLyricTime = Math.max(
-    0,
-    lyricFluidTime - lyricScrollAheadSeconds + lyricHighlightAheadSeconds
-  );
   const activeLyricIndex = useMemo(
-    () => getCurrentLyricIndex(lyrics, syncedLyricTime),
-    [lyrics, syncedLyricTime]
+    () => getCurrentLyricIndex(lyrics, lyricFluidTime),
+    [lyrics, lyricFluidTime]
   );
   const lyricWindowAnchor = lyrics.length > 0
-    ? Math.max(0, Math.min(lyrics.length - 1, Math.floor(Math.max(0, lyricFocusPosition) + 0.08)))
+    ? Math.max(0, Math.min(lyrics.length - 1, Math.round(centeredLyricFocusPosition)))
     : -1;
-  const lyricLinesBefore = isWideLyricsViewport ? 5 : 4;
-  const lyricLinesAfter = isWideLyricsViewport ? 8 : 7;
+  const lyricLinesBefore = isDesktopLyricsViewport ? 5 : 4;
+  const lyricLinesAfter = isDesktopLyricsViewport ? 8 : isTabletLyricsViewport ? 7 : 6;
   const lyricWindowCenter = lyrics.length > 0
-    ? Math.max(0, Math.min(lyrics.length - 1, Math.floor(lyricFocusPosition + 0.5)))
+    ? Math.max(0, Math.min(lyrics.length - 1, Math.round(centeredLyricFocusPosition)))
     : -1;
   const lyricWindowStart = lyricWindowAnchor >= 0 ? Math.max(0, lyricWindowAnchor - lyricLinesBefore) : 0;
   const lyricWindowEnd = lyricWindowAnchor >= 0
@@ -169,22 +178,30 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
     WebkitBackfaceVisibility: 'hidden',
     contain: 'paint',
   }), []);
-  const lyricRowHeight = isWideLyricsViewport ? 154 : 112;
-  const lyricFontSize = isWideLyricsViewport
+  const lyricRowHeight = isDesktopLyricsViewport ? 154 : isTabletLyricsViewport ? 132 : 112;
+  const lyricFontSize = isDesktopLyricsViewport
     ? 'clamp(1.4rem, 2.9vw, 2.45rem)'
+    : isTabletLyricsViewport
+      ? 'clamp(1.18rem, 3.2vw, 1.9rem)'
     : 'clamp(1.05rem, 4.8vw, 1.62rem)';
-  const lyricDenseFontSize = isWideLyricsViewport
+  const lyricDenseFontSize = isDesktopLyricsViewport
     ? 'clamp(1.08rem, 2.15vw, 1.82rem)'
+    : isTabletLyricsViewport
+      ? 'clamp(0.98rem, 2.45vw, 1.48rem)'
     : 'clamp(0.88rem, 3.9vw, 1.28rem)';
-  const lyricCompactFontSize = isWideLyricsViewport
+  const lyricCompactFontSize = isDesktopLyricsViewport
     ? 'clamp(0.96rem, 1.82vw, 1.42rem)'
+    : isTabletLyricsViewport
+      ? 'clamp(0.86rem, 2.05vw, 1.22rem)'
     : 'clamp(0.78rem, 3.35vw, 1.08rem)';
-  const lyricUltraCompactFontSize = isWideLyricsViewport
+  const lyricUltraCompactFontSize = isDesktopLyricsViewport
     ? 'clamp(0.88rem, 1.55vw, 1.18rem)'
+    : isTabletLyricsViewport
+      ? 'clamp(0.78rem, 1.78vw, 1.02rem)'
     : 'clamp(0.68rem, 2.8vw, 0.94rem)';
-  const lyricLineHeight = isWideLyricsViewport ? '1.18' : '1.22';
+  const lyricLineHeight = isDesktopLyricsViewport ? '1.18' : isTabletLyricsViewport ? '1.2' : '1.22';
   const lyricTrackOffset = lyricWindowCenter >= 0
-    ? -(lyricFocusPosition - lyricWindowStart + 0.5) * lyricRowHeight
+    ? -(centeredLyricFocusPosition - lyricWindowStart + 0.5) * lyricRowHeight
     : 0;
 
   // Intro animation for all elements - DISABLED for instant appearance
@@ -542,7 +559,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
       )}
       
       {/* Top Header - Compact */}
-      <div className={`flex items-center justify-between px-2 md:px-4 lg:px-6 pt-2 md:pt-4 pb-1 md:pb-2 shrink-0 relative z-10 transition-opacity duration-500 ${isIdle ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+      <div className={`flex items-center justify-between px-2 md:px-4 xl:px-6 pt-2 md:pt-4 pb-1 md:pb-2 shrink-0 relative z-10 transition-opacity duration-500 ${isIdle ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
         <button
           onClick={handleBack}
           className="drive-back-button inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 backdrop-blur-xl px-3 py-1.5 text-xs font-semibold text-white shadow-lg transition hover:bg-white/20 hover:border-white/30 active:scale-95"
@@ -572,12 +589,12 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
       </div>
 
       {/* Compact Album Art & Track Info - Always render, control visibility */}
-      <div className={`drive-track-info flex items-center gap-1.5 md:gap-3 px-2 md:px-4 lg:px-6 py-1.5 md:py-3 shrink-0 transition-opacity duration-300 ${showFullLyrics ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+      <div className={`drive-track-info flex items-center gap-1.5 md:gap-3 px-2 md:px-4 xl:px-6 py-1.5 md:py-3 shrink-0 transition-opacity duration-300 ${showFullLyrics ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
         <div className="relative shrink-0">
           <div 
             ref={smallCoverRef}
             id="drive-mode-cover"
-            className="h-10 w-10 xs:h-11 xs:w-11 md:h-14 md:w-14 lg:h-16 lg:w-16 overflow-hidden rounded-lg md:rounded-2xl border border-white/20 shadow-lg"
+            className="h-10 w-10 xs:h-11 xs:w-11 md:h-14 md:w-14 xl:h-16 xl:w-16 overflow-hidden rounded-lg md:rounded-2xl border border-white/20 shadow-lg"
           >
             {coverUrl ? (
               <img src={coverUrl} alt={currentTrack.title} className="h-full w-full object-cover" />
@@ -593,7 +610,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
         </div>
 
         <div className="flex-1 min-w-0">
-          <h1 className="truncate text-[11px] xs:text-xs md:text-base lg:text-lg font-bold text-white">
+          <h1 className="truncate text-[11px] xs:text-xs md:text-base xl:text-lg font-bold text-white">
             {currentTrack.title}
           </h1>
           <p className="truncate text-[9px] xs:text-[10px] md:text-sm text-white/60">
@@ -615,7 +632,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
       </div>
 
       {/* Content Area - Always render both modes, control visibility */}
-      <div className="drive-lyrics-container flex-1 relative overflow-hidden min-h-0 px-3 sm:px-5 md:px-8 lg:px-12">
+      <div className="drive-lyrics-container flex-1 relative overflow-hidden min-h-0 px-3 sm:px-5 md:px-8 xl:px-12">
         {/* Lyrics Mode */}
         <div className={`absolute inset-0 ${showFullLyrics ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
           {lyrics.length > 0 ? (
@@ -639,7 +656,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
               >
                 {visibleLyrics.map((line, index) => {
                   const actualIndex = lyricWindowStart + index;
-                  const distance = Math.abs(actualIndex - lyricFocusPosition);
+                  const distance = Math.abs(actualIndex - centeredLyricFocusPosition);
                   const focusFactor = Math.max(0, 1 - distance * 0.78);
                   const bloomFactor = Math.sin(focusFactor * Math.PI * 0.5);
                   const depthFactor = Math.min(distance / 6, 1);
@@ -648,9 +665,12 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
                   const isPastLine = actualIndex < activeLyricIndex;
                   const isReadingLine = isCurrent || distance < 0.72;
                   const lyricLength = line.text.length;
-                  const isDenseLine = lyricLength > (isWideLyricsViewport ? 58 : 36);
-                  const isVeryDenseLine = lyricLength > (isWideLyricsViewport ? 92 : 58);
-                  const isUltraDenseLine = lyricLength > (isWideLyricsViewport ? 132 : 86);
+                  const denseThreshold = isDesktopLyricsViewport ? 58 : isTabletLyricsViewport ? 48 : 36;
+                  const veryDenseThreshold = isDesktopLyricsViewport ? 92 : isTabletLyricsViewport ? 76 : 58;
+                  const ultraDenseThreshold = isDesktopLyricsViewport ? 132 : isTabletLyricsViewport ? 108 : 86;
+                  const isDenseLine = lyricLength > denseThreshold;
+                  const isVeryDenseLine = lyricLength > veryDenseThreshold;
+                  const isUltraDenseLine = lyricLength > ultraDenseThreshold;
                   const opacityBase = isPastLine ? 0.2 : 0.34;
                   const opacityValue = Math.max(opacityBase, 1 - Math.pow(Math.min(distance / 6.4, 1), 1.45));
                   const textAlpha = Math.min(1, opacityBase + bloomFactor * (isCurrent ? 0.82 : 0.62)).toFixed(3);
@@ -663,13 +683,13 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
                     : isDenseLine
                       ? lyricDenseFontSize
                       : lyricFontSize;
-                  const lineHeight = isUltraDenseLine ? (isWideLyricsViewport ? '1.14' : '1.16') : lyricLineHeight;
+                  const lineHeight = isUltraDenseLine ? (isDesktopLyricsViewport ? '1.14' : '1.16') : lyricLineHeight;
 
                   return (
                     <div
                       key={`${line.time}-${actualIndex}`}
                       aria-current={isCurrent ? 'true' : undefined}
-                      className="drive-lyric-line relative flex w-full items-center justify-center px-2 text-center md:px-10 lg:px-16"
+                      className="drive-lyric-line relative flex w-full items-center justify-center px-2 text-center md:px-10 xl:px-16"
                       style={{
                         height: `${lyricRowHeight}px`,
                         transform: `scale(${scaleValue.toFixed(3)})`,
@@ -727,11 +747,11 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
             showFullLyrics ? 'pointer-events-none' : ''
           }`}
         >
-          <div className="flex flex-col items-center gap-2 xs:gap-2.5 md:gap-4 lg:gap-6 max-w-md w-full px-3 md:px-6">
+          <div className="flex flex-col items-center gap-2 xs:gap-2.5 md:gap-4 xl:gap-6 max-w-md w-full px-3 md:px-6">
             {/* Large Album Art - Much smaller on mobile */}
             <div 
               ref={largeCoverRef}
-              className={`relative w-[min(60vw,240px,44dvh)] xs:w-[min(55vw,260px,44dvh)] sm:w-[min(50vw,300px,44dvh)] md:w-[min(45vw,340px,44dvh)] lg:w-[min(40vw,380px,44dvh)] aspect-square rounded-xl md:rounded-2xl lg:rounded-3xl overflow-hidden shadow-2xl ring-1 ring-white/10 ${showFullLyrics ? 'opacity-0' : 'opacity-100'}`}
+              className={`relative w-[min(60vw,240px,44dvh)] xs:w-[min(55vw,260px,44dvh)] sm:w-[min(50vw,300px,44dvh)] md:w-[min(45vw,340px,44dvh)] xl:w-[min(40vw,380px,44dvh)] aspect-square rounded-xl md:rounded-2xl xl:rounded-3xl overflow-hidden shadow-2xl ring-1 ring-white/10 ${showFullLyrics ? 'opacity-0' : 'opacity-100'}`}
             >
               {coverUrl ? (
                 <img src={coverUrl} alt={currentTrack.title} className="h-full w-full object-cover" />
@@ -742,17 +762,17 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
                     background: `linear-gradient(135deg, ${currentTrack.coverGradient?.[0] || '#333'}, ${currentTrack.coverGradient?.[1] || '#222'})`,
                   }}
                 >
-                  <div className="text-white/40 text-4xl xs:text-5xl md:text-6xl lg:text-8xl">♪</div>
+                  <div className="text-white/40 text-4xl xs:text-5xl md:text-6xl xl:text-8xl">♪</div>
                 </div>
               )}
             </div>
             
             {/* Track Info - Smaller text on mobile */}
             <div className={`text-center w-full px-1 transition-opacity duration-300 ${!showFullLyrics ? 'opacity-100' : 'opacity-0'}`}>
-              <h2 className="text-base xs:text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-white mb-0.5 md:mb-1 lg:mb-2 truncate leading-tight">{currentTrack.title}</h2>
-              <p className="text-xs xs:text-sm sm:text-base md:text-lg lg:text-xl text-white/60 truncate">{currentTrack.artist}</p>
+              <h2 className="text-base xs:text-lg sm:text-xl md:text-2xl xl:text-3xl font-bold text-white mb-0.5 md:mb-1 xl:mb-2 truncate leading-tight">{currentTrack.title}</h2>
+              <p className="text-xs xs:text-sm sm:text-base md:text-lg xl:text-xl text-white/60 truncate">{currentTrack.artist}</p>
               {currentTrack.album && (
-                <p className="text-[10px] xs:text-xs sm:text-sm md:text-base lg:text-lg text-white/40 mt-0.5 md:mt-1 truncate">{currentTrack.album}</p>
+                <p className="text-[10px] xs:text-xs sm:text-sm md:text-base xl:text-lg text-white/40 mt-0.5 md:mt-1 truncate">{currentTrack.album}</p>
               )}
             </div>
           </div>
@@ -760,12 +780,12 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
       </div>
 
       {/* Bottom Controls Section - Compact & Fixed */}
-      <div className={`shrink-0 px-2 md:px-4 lg:px-6 pb-2 xs:pb-3 md:pb-5 lg:pb-6 space-y-1.5 md:space-y-3 transition-opacity duration-500 ${isIdle ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+      <div className={`shrink-0 px-2 md:px-4 xl:px-6 pb-2 xs:pb-3 md:pb-5 xl:pb-6 space-y-1.5 md:space-y-3 transition-opacity duration-500 ${isIdle ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
         {/* Progress Bar */}
         <div className="drive-progress-bar w-full">
           <div
             onClick={handleSeek}
-            className="group relative h-0.5 xs:h-1 md:h-1.5 lg:h-2 cursor-pointer rounded-full bg-white/20 backdrop-blur-sm transition-all hover:h-1.5 md:hover:h-2.5"
+            className="group relative h-0.5 xs:h-1 md:h-1.5 xl:h-2 cursor-pointer rounded-full bg-white/20 backdrop-blur-sm transition-all hover:h-1.5 md:hover:h-2.5"
           >
             <div
               className="h-full rounded-full transition-all duration-100 shadow-md pointer-events-none"
@@ -782,51 +802,51 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
         </div>
 
         {/* Playback Controls Row - Much smaller on mobile */}
-        <div className="drive-controls flex items-center justify-center gap-1 xs:gap-1.5 sm:gap-2 md:gap-4 lg:gap-5">
+        <div className="drive-controls flex items-center justify-center gap-1 xs:gap-1.5 sm:gap-2 md:gap-4 xl:gap-5">
           {/* Shuffle */}
           <button
             onClick={toggleShuffle}
-            className={`flex h-7 w-7 xs:h-8 xs:w-8 sm:h-9 sm:w-9 md:h-10 md:w-10 lg:h-11 lg:w-11 items-center justify-center rounded-full border backdrop-blur-xl shadow-md transition ${
+            className={`flex h-7 w-7 xs:h-8 xs:w-8 sm:h-9 sm:w-9 md:h-10 md:w-10 xl:h-11 xl:w-11 items-center justify-center rounded-full border backdrop-blur-xl shadow-md transition ${
               shuffle 
                 ? 'bg-accent/30 border-accent/50 text-accent' 
                 : 'bg-white/10 border-white/20 text-white/60 hover:bg-white/20 hover:text-white'
             }`}
             aria-label={shuffle ? 'Shuffle on' : 'Shuffle off'}
           >
-            {shuffle ? <RiShuffleFill className="w-3 h-3 xs:w-3.5 xs:h-3.5 md:w-4 md:h-4 lg:w-[18px] lg:h-[18px]" /> : <RiShuffleLine className="w-3 h-3 xs:w-3.5 xs:h-3.5 md:w-4 md:h-4 lg:w-[18px] lg:h-[18px]" />}
+            {shuffle ? <RiShuffleFill className="w-3 h-3 xs:w-3.5 xs:h-3.5 md:w-4 md:h-4 xl:w-[18px] xl:h-[18px]" /> : <RiShuffleLine className="w-3 h-3 xs:w-3.5 xs:h-3.5 md:w-4 md:h-4 xl:w-[18px] xl:h-[18px]" />}
           </button>
 
           {/* Previous */}
           <button
             onClick={prevTrack}
-            className="flex h-9 w-9 xs:h-10 xs:w-10 sm:h-11 sm:w-11 md:h-12 md:w-12 lg:h-14 lg:w-14 items-center justify-center rounded-full bg-white/10 border border-white/20 backdrop-blur-xl text-white shadow-md transition hover:bg-white/20 active:scale-90"
+            className="flex h-9 w-9 xs:h-10 xs:w-10 sm:h-11 sm:w-11 md:h-12 md:w-12 xl:h-14 xl:w-14 items-center justify-center rounded-full bg-white/10 border border-white/20 backdrop-blur-xl text-white shadow-md transition hover:bg-white/20 active:scale-90"
             aria-label="Previous track"
           >
-            <RiSkipBackFill className="w-4 h-4 xs:w-4.5 xs:h-4.5 md:w-5 md:h-5 lg:w-6 lg:h-6" />
+            <RiSkipBackFill className="w-4 h-4 xs:w-4.5 xs:h-4.5 md:w-5 md:h-5 xl:w-6 xl:h-6" />
           </button>
 
           {/* Play/Pause */}
           <button
             onClick={togglePlay}
-            className="flex h-11 w-11 xs:h-12 xs:w-12 sm:h-14 sm:w-14 md:h-16 md:w-16 lg:h-20 lg:w-20 items-center justify-center rounded-full bg-accent text-white shadow-xl shadow-accent/30 transition hover:scale-105 active:scale-95"
+            className="flex h-11 w-11 xs:h-12 xs:w-12 sm:h-14 sm:w-14 md:h-16 md:w-16 xl:h-20 xl:w-20 items-center justify-center rounded-full bg-accent text-white shadow-xl shadow-accent/30 transition hover:scale-105 active:scale-95"
             aria-label={isPlaying ? 'Pause' : 'Play'}
           >
-            {isPlaying ? <RiPauseFill className="w-5 h-5 xs:w-6 xs:h-6 md:w-7 md:h-7 lg:w-9 lg:h-9" /> : <RiPlayFill className="ml-0.5 w-5 h-5 xs:w-6 xs:h-6 md:w-7 md:h-7 lg:w-9 lg:h-9" />}
+            {isPlaying ? <RiPauseFill className="w-5 h-5 xs:w-6 xs:h-6 md:w-7 md:h-7 xl:w-9 xl:h-9" /> : <RiPlayFill className="ml-0.5 w-5 h-5 xs:w-6 xs:h-6 md:w-7 md:h-7 xl:w-9 xl:h-9" />}
           </button>
 
           {/* Next */}
           <button
             onClick={nextTrack}
-            className="flex h-9 w-9 xs:h-10 xs:w-10 sm:h-11 sm:w-11 md:h-12 md:w-12 lg:h-14 lg:w-14 items-center justify-center rounded-full bg-white/10 border border-white/20 backdrop-blur-xl text-white shadow-md transition hover:bg-white/20 active:scale-90"
+            className="flex h-9 w-9 xs:h-10 xs:w-10 sm:h-11 sm:w-11 md:h-12 md:w-12 xl:h-14 xl:w-14 items-center justify-center rounded-full bg-white/10 border border-white/20 backdrop-blur-xl text-white shadow-md transition hover:bg-white/20 active:scale-90"
             aria-label="Next track"
           >
-            <RiSkipForwardFill className="w-4 h-4 xs:w-4.5 xs:h-4.5 md:w-5 md:h-5 lg:w-6 lg:h-6" />
+            <RiSkipForwardFill className="w-4 h-4 xs:w-4.5 xs:h-4.5 md:w-5 md:h-5 xl:w-6 xl:h-6" />
           </button>
 
           {/* Repeat */}
           <button
             onClick={cycleRepeat}
-            className={`flex h-7 w-7 xs:h-8 xs:w-8 sm:h-9 sm:w-9 md:h-10 md:w-10 lg:h-11 lg:w-11 items-center justify-center rounded-full border backdrop-blur-xl shadow-md transition ${
+            className={`flex h-7 w-7 xs:h-8 xs:w-8 sm:h-9 sm:w-9 md:h-10 md:w-10 xl:h-11 xl:w-11 items-center justify-center rounded-full border backdrop-blur-xl shadow-md transition ${
               repeat !== 'off'
                 ? 'bg-accent/30 border-accent/50 text-accent' 
                 : 'bg-white/10 border-white/20 text-white/60 hover:bg-white/20 hover:text-white'

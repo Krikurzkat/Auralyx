@@ -182,6 +182,11 @@ export default function TopBar() {
   };
 
   const hasSuggestions = suggestions && (suggestions.tracks.length > 0 || suggestions.artists.length > 0 || suggestions.albums.length > 0 || suggestions.playlists.length > 0);
+  const handleLogout = async () => {
+    await logout();
+    toast.success('Logged out successfully');
+    navigate('/login');
+  };
 
   return (
     <header
@@ -360,12 +365,12 @@ export default function TopBar() {
             </>
           ) : (
             <>
-              {user?.role === 'admin' && (
+              {user && (
                 <button 
                   onClick={() => navigate('/admin')}
                   className="hidden rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-bold tracking-wider text-white shadow-glow-sm transition hover:bg-white/20 sm:block"
                 >
-                  ADMIN
+                  {user.role === 'admin' ? 'ADMIN' : user.role === 'staff' ? 'STAFF' : 'SUBMIT'}
                 </button>
               )}
               <button
@@ -396,7 +401,7 @@ export default function TopBar() {
               >
                 {user?.displayName?.[0]?.toUpperCase() || 'U'}
               </button>
-              <button onClick={() => { logout(); toast.success('Logged out successfully'); navigate('/login'); }} className="ml-2 hidden text-xs font-medium text-dimText transition hover:text-white sm:block">
+              <button onClick={() => { void handleLogout(); }} className="ml-2 hidden text-xs font-medium text-dimText transition hover:text-white sm:block">
                 Log out
               </button>
             </>

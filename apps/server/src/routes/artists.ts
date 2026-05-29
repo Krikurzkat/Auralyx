@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { Artist } from '../db.js';
-import { verifyToken, isAdmin } from '../middleware/auth.js';
+import { verifyToken, isContentStaff } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -31,7 +31,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-router.post('/', verifyToken, isAdmin, async (req, res) => {
+router.post('/', verifyToken, isContentStaff, async (req, res) => {
   try {
     const artist = await Artist.create(req.body);
     res.status(201).json(artist);
@@ -41,7 +41,7 @@ router.post('/', verifyToken, isAdmin, async (req, res) => {
 });
 
 // POST /api/artists/find-or-create — Upsert with case-insensitive dedup
-router.post('/find-or-create', verifyToken, isAdmin, async (req, res) => {
+router.post('/find-or-create', verifyToken, isContentStaff, async (req, res) => {
   try {
     const { name, genres, avatarUrl, bio } = req.body;
     if (!name || !name.trim()) {
@@ -79,7 +79,7 @@ router.post('/find-or-create', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-router.put('/:id', verifyToken, isAdmin, async (req, res) => {
+router.put('/:id', verifyToken, isContentStaff, async (req, res) => {
   try {
     const artist = await Artist.findByIdAndUpdate(req.params.id, req.body, { new: true });
     if (!artist) return res.status(404).json({ error: 'Artist not found' });

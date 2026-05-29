@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { Album } from '../db.js';
-import { verifyToken, isAdmin } from '../middleware/auth.js';
+import { verifyToken, isContentStaff, isAdmin } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -31,7 +31,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-router.post('/', verifyToken, isAdmin, async (req, res) => {
+router.post('/', verifyToken, isContentStaff, async (req, res) => {
   try {
     const album = await Album.create(req.body);
     res.status(201).json(album);
@@ -41,7 +41,7 @@ router.post('/', verifyToken, isAdmin, async (req, res) => {
 });
 
 // POST /api/albums/find-or-create — Upsert with case-insensitive dedup by title + artist
-router.post('/find-or-create', verifyToken, isAdmin, async (req, res) => {
+router.post('/find-or-create', verifyToken, isContentStaff, async (req, res) => {
   try {
     const { title, artist, artistId, year, genre, coverUrl, type } = req.body;
     if (!title || !title.trim() || !artistId) {
@@ -84,7 +84,7 @@ router.post('/find-or-create', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-router.put('/:id', verifyToken, isAdmin, async (req, res) => {
+router.put('/:id', verifyToken, isContentStaff, async (req, res) => {
   try {
     const album = await Album.findByIdAndUpdate(req.params.id, req.body, { new: true });
     if (!album) return res.status(404).json({ error: 'Album not found' });

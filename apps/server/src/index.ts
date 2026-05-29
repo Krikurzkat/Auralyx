@@ -93,8 +93,9 @@ io.on('connection', (socket) => {
 
 // Start server
 const PORT = process.env.PORT || 3001;
-const ADMIN_EMAIL = 'admin@auralyx.com';
-const ADMIN_PASSWORD = 'admin123';
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'admin@auralyx.com').trim().toLowerCase();
+const ADMIN_USERNAME = (process.env.ADMIN_USERNAME || 'admin').trim().toLowerCase();
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 
 async function ensureDefaultAdmin() {
   const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 12);
@@ -104,6 +105,7 @@ async function ensureDefaultAdmin() {
     {
       $set: {
         email: ADMIN_EMAIL,
+        username: ADMIN_USERNAME,
         displayName: 'Super Admin',
         passwordHash,
         role: 'admin',

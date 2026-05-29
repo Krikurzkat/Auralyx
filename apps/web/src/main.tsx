@@ -88,15 +88,25 @@ const initializeTheme = () => {
 
 initializeTheme();
 
+function AuthBootstrap() {
+  const initialize = useAuthStore((state) => state.initialize);
+
+  React.useEffect(() => {
+    void initialize();
+  }, [initialize]);
+
+  return null;
+}
+
 function AdminRoute() {
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, isLoading } = useAuthStore();
+
+  if (isLoading) {
+    return null;
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
-  }
-
-  if (user?.role !== 'admin') {
-    return <Navigate to="/" replace />;
   }
 
   return <AdminPage />;
@@ -105,6 +115,7 @@ function AdminRoute() {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
+      <AuthBootstrap />
       <Toaster
         position="top-center"
         toastOptions={{

@@ -1007,6 +1007,16 @@ export default function LocalLibraryPage() {
             </div>
           </div>
         )}
+        {!importProgress.isRunning && importProgress.rejected > 0 && (
+          <div className={`rounded-2xl border border-amber-500/20 bg-amber-500/10 text-amber-100 backdrop-blur-xl ${isGalaxyS8PlusLayout ? 'mt-4 p-3 text-xs' : 'mt-6 p-4 text-sm'}`}>
+            <div className="font-bold">Upload protection blocked {importProgress.rejected} item{importProgress.rejected === 1 ? '' : 's'}.</div>
+            {importProgress.abuseFlags.length > 0 && (
+              <div className="mt-1 text-amber-100/70">
+                Reason: {importProgress.abuseFlags.join(', ').replace(/_/g, ' ')}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Tabs + Controls ── */}

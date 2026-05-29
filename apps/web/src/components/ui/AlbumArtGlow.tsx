@@ -20,20 +20,20 @@ export default function AlbumArtGlow() {
   }, [currentTrack?.coverGradient?.[0], currentTrack?.coverGradient?.[1]]);
 
   return (
-    <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden opacity-40 transition-opacity duration-1000">
+    <div className="album-art-glow pointer-events-none fixed inset-0 -z-10 overflow-hidden transition-opacity duration-1000">
       {/* Primary blob — top-left */}
       <div
-        className="absolute -top-[30%] -left-[15%] h-[80%] w-[70%] rounded-full blur-[160px] transition-[background] duration-[2500ms] ease-in-out"
+        className="album-art-glow__blob album-art-glow__blob--primary absolute rounded-full transition-[background] duration-[2500ms] ease-in-out"
         style={{ background: colors[0] }}
       />
       {/* Secondary blob — bottom-right */}
       <div
-        className="absolute -bottom-[25%] -right-[10%] h-[70%] w-[65%] rounded-full blur-[140px] transition-[background] duration-[2500ms] ease-in-out"
+        className="album-art-glow__blob album-art-glow__blob--secondary absolute rounded-full transition-[background] duration-[2500ms] ease-in-out"
         style={{ background: colors[1] }}
       />
       {/* Accent center blob for depth */}
       <div
-        className="absolute top-[40%] left-[35%] h-[40%] w-[40%] rounded-full blur-[120px] transition-[background] duration-[2500ms] ease-in-out mix-blend-screen"
+        className="album-art-glow__blob album-art-glow__blob--accent absolute rounded-full transition-[background] duration-[2500ms] ease-in-out mix-blend-screen"
         style={{ background: `color-mix(in srgb, ${colors[0]} 50%, ${colors[1]})` }}
       />
     </div>

@@ -449,7 +449,7 @@ export default function BottomPlayer() {
             </div>
 
             {/* ─── Center: Desktop Transport Controls ─── */}
-            <div className="hidden flex-col items-center md:flex lg:w-[520px] lg:shrink-0 flex-1 max-w-[520px]">
+            <div className="hidden flex-col items-center md:flex xl:w-[520px] xl:shrink-0 flex-1 max-w-[520px]">
               {/* Controls */}
               <div className="flex items-center gap-1.5">
                 <button
@@ -584,7 +584,7 @@ export default function BottomPlayer() {
             </div>
 
             {/* ─── Right: Desktop extras ─── */}
-            <div className="hidden flex-1 items-center justify-end gap-2.5 lg:flex">
+            <div className="hidden flex-1 items-center justify-end gap-2.5 xl:flex">
               <button
                 onClick={() => setIsLiked(!isLiked)}
                 className="rounded-full p-2 transition-all duration-200 hover:bg-white/[0.06] active:scale-90"

@@ -2,24 +2,27 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import toast from 'react-hot-toast';
-import { apiUrl, getNetworkErrorMessage } from '../services/api';
+import { getNetworkErrorMessage } from '../services/api';
+import { signInWithEmail, signInWithLocalApi } from '../services/auth';
+import { isSupabaseConfigured } from '../services/supabase';
 import StarParticles from '../components/ui/StarParticles';
 import AuroraBackground from '../components/ui/AuroraBackground';
 import Meteors from '../components/ui/Meteors';
 
 export default function LoginPage() {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
-  const login = useAuthStore(state => state.login);
+  const setSession = useAuthStore((state) => state.setSession);
+  const setLocalSession = useAuthStore((state) => state.setLocalSession);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmedUsername = username.trim().toLowerCase();
+    const trimmedEmail = email.trim().toLowerCase();
 
-    if (!trimmedUsername || !password) {
+    if (!trimmedEmail || !password) {
       const message = 'Please fill in all fields';
       setError(message);
       return toast.error(message);
@@ -28,20 +31,20 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(apiUrl('/api/users/login'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ username: trimmedUsername, password }),
-      });
+      if (isSupabaseConfigured) {
+        const { data, error: signInError } = await signInWithEmail(trimmedEmail, password);
+        if (!signInError && data.session) {
+          setSession(data.session);
+          const displayName = data.user?.user_metadata?.display_name || trimmedEmail.split('@')[0];
+          toast.success(`Welcome back, ${displayName}!`);
+          navigate('/');
+          return;
+        }
+      }
 
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || 'Login failed');
-      if (!data?.user || !data?.token) throw new Error('Login response was incomplete');
-
-      login(data.user, data.token);
-      toast.success(`Welcome back, ${data.user.displayName}!`);
+      const localSession = await signInWithLocalApi(trimmedEmail, password);
+      setLocalSession(localSession.user, localSession.token);
+      toast.success(`Welcome back, ${localSession.user.displayName}!`);
       navigate('/');
     } catch (err) {
       const message = getNetworkErrorMessage(err) || 'Unable to log in right now';
@@ -79,12 +82,12 @@ export default function LoginPage() {
           ) : null}
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-softText">Username</label>
+            <label className="mb-1.5 block text-sm font-medium text-softText">Email Address</label>
             <input
-              type="text"
-              value={username}
-              onChange={e => { setUsername(e.target.value); if (error) setError(''); }}
-              placeholder="your_username"
+              type="email"
+              value={email}
+              onChange={e => { setEmail(e.target.value); if (error) setError(''); }}
+              placeholder="name@example.com"
               className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-dimText outline-none transition focus:border-white/20 focus:bg-white/10"
               required
             />

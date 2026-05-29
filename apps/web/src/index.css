@@ -326,6 +326,64 @@ input[type="range"].accent-alt-track {
   animation: fade-in 0.2s ease-out;
 }
 
+/* Ambient album glow */
+.album-art-glow {
+  opacity: 0.4;
+}
+
+.album-art-glow__blob {
+  filter: blur(140px);
+  transform: translateZ(0);
+}
+
+.album-art-glow__blob--primary {
+  top: -30%;
+  left: -15%;
+  height: 80%;
+  width: 70%;
+}
+
+.album-art-glow__blob--secondary {
+  right: -10%;
+  bottom: -25%;
+  height: 70%;
+  width: 65%;
+}
+
+.album-art-glow__blob--accent {
+  top: 40%;
+  left: 35%;
+  height: 40%;
+  width: 40%;
+  filter: blur(120px);
+}
+
+.aurora-bg__blob {
+  filter: blur(130px);
+  transform: translateZ(0);
+}
+
+.aurora-bg__blob--blue {
+  top: -20%;
+  left: -10%;
+  width: 70%;
+  height: 70%;
+}
+
+.aurora-bg__blob--purple {
+  top: 20%;
+  right: -10%;
+  width: 60%;
+  height: 80%;
+}
+
+.aurora-bg__blob--indigo {
+  bottom: -20%;
+  left: 20%;
+  width: 80%;
+  height: 60%;
+}
+
 /* ─── Scrollbar Thin Utility ─── */
 .scrollbar-thin::-webkit-scrollbar {
   width: 6px;
@@ -358,7 +416,7 @@ input[type="range"].accent-alt-track {
 }
 
 /* Mobile & Tablet Performance Optimizations */
-@media (max-width: 1024px) {
+@media (max-width: 1279px) {
   /* Remove heavy blur on mobile/tablet, use mostly solid backgrounds */
   .glass, .glass-heavy, .glass-light, .glass-card {
     backdrop-filter: blur(8px) !important;
@@ -402,6 +460,61 @@ input[type="range"].accent-alt-track {
   [class*="blur-"] {
     filter: blur(8px) !important;
   }
+
+  .album-art-glow {
+    opacity: 0.32;
+  }
+
+  .album-art-glow__blob {
+    filter: blur(84px) !important;
+  }
+
+  .album-art-glow__blob--primary {
+    top: -18%;
+    left: -20%;
+    height: 58%;
+    width: 66%;
+  }
+
+  .album-art-glow__blob--secondary {
+    right: -24%;
+    bottom: -4%;
+    height: 54%;
+    width: 70%;
+  }
+
+  .album-art-glow__blob--accent {
+    top: 34%;
+    left: 30%;
+    height: 34%;
+    width: 44%;
+    filter: blur(60px) !important;
+  }
+
+  .aurora-bg__blob {
+    filter: blur(72px) !important;
+  }
+
+  .aurora-bg__blob--blue {
+    top: -10%;
+    left: -28%;
+    width: 86%;
+    height: 48%;
+  }
+
+  .aurora-bg__blob--purple {
+    top: 22%;
+    right: -32%;
+    width: 82%;
+    height: 54%;
+  }
+
+  .aurora-bg__blob--indigo {
+    bottom: -12%;
+    left: 8%;
+    width: 86%;
+    height: 44%;
+  }
 }
 
 /* Phone-specific optimizations */
@@ -426,6 +539,65 @@ input[type="range"].accent-alt-track {
   /* Disable blur completely on phones */
   [class*="blur-"] {
     filter: none !important;
+  }
+
+  .album-art-glow {
+    opacity: 0.3;
+  }
+
+  .album-art-glow__blob {
+    filter: blur(58px) !important;
+  }
+
+  .album-art-glow__blob--primary {
+    top: -12%;
+    left: -28%;
+    height: 48%;
+    width: 72%;
+  }
+
+  .album-art-glow__blob--secondary {
+    right: -36%;
+    bottom: 4%;
+    height: 46%;
+    width: 78%;
+  }
+
+  .album-art-glow__blob--accent {
+    top: 38%;
+    left: 28%;
+    height: 34%;
+    width: 54%;
+    opacity: 0.55;
+  }
+
+  .aurora-bg {
+    opacity: 0.72;
+  }
+
+  .aurora-bg__blob {
+    filter: blur(44px) !important;
+  }
+
+  .aurora-bg__blob--blue {
+    top: -8%;
+    left: -34%;
+    width: 92%;
+    height: 42%;
+  }
+
+  .aurora-bg__blob--purple {
+    top: 26%;
+    right: -40%;
+    width: 88%;
+    height: 48%;
+  }
+
+  .aurora-bg__blob--indigo {
+    bottom: -8%;
+    left: 12%;
+    width: 84%;
+    height: 38%;
   }
 }
 
@@ -465,7 +637,7 @@ input[type="range"].accent-alt-track {
   }
 }
 
-@media (min-width: 769px) and (max-width: 1024px) {
+@media (min-width: 769px) and (max-width: 1279px) {
   .mini-player-root {
     padding: 0 12px 8px;
   }
@@ -527,7 +699,7 @@ input[type="range"].accent-alt-track {
 }
 
 /* Tablet optimizations */
-@media (min-width: 769px) and (max-width: 1024px) {
+@media (min-width: 769px) and (max-width: 1279px) {
   .mini-player-card {
     backdrop-filter: blur(16px) saturate(160%) !important;
     -webkit-backdrop-filter: blur(16px) saturate(160%) !important;
@@ -602,7 +774,7 @@ input[type="range"]:hover::-webkit-slider-thumb {
 }
 
 /* Disable stagger animation on mobile for better performance */
-@media (max-width: 1024px) {
+@media (max-width: 1279px) {
   .rp-queue-item {
     transition-delay: 0ms !important;
     transition-duration: 0.2s !important;
@@ -635,7 +807,7 @@ input[type="range"]:hover::-webkit-slider-thumb {
 }
 
 /* Optimize lyric animations on mobile */
-@media (max-width: 1024px) {
+@media (max-width: 1279px) {
   .rp-lyric-line {
     will-change: auto !important;
   }
@@ -762,6 +934,36 @@ input[type="range"]:hover::-webkit-slider-thumb {
   pointer-events: none;
 }
 
+/* Tablet home hero: PC composition scaled down inside the hero card. */
+@media (min-width: 769px) and (max-width: 1279px) {
+  .home-hero-feature-grid {
+    grid-template-columns: minmax(0, 1.1fr) minmax(170px, 0.78fr) clamp(150px, 17vw, 180px);
+    column-gap: clamp(0.75rem, 1.35vw, 1rem);
+    align-items: start;
+  }
+
+  .home-hero-album-copy {
+    min-width: 0;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 980px) {
+  .home-hero-feature-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(145px, 0.72fr) 132px;
+    column-gap: 0.7rem;
+  }
+
+  .home-hero-album-copy h2,
+  .home-hero-feature-grid h1 {
+    font-size: 1.45rem;
+  }
+
+  .home-hero-album-copy p,
+  .home-hero-feature-grid p {
+    font-size: 0.68rem;
+  }
+}
+
 /* Responsive positioning for smaller screens */
 @media (max-width: 768px) {
   .upnext-popup-card {
@@ -779,7 +981,7 @@ input[type="range"]:hover::-webkit-slider-thumb {
   }
 }
 
-@media (min-width: 769px) and (max-width: 1024px) {
+@media (min-width: 769px) and (max-width: 1279px) {
   .upnext-popup-card {
     top: 70px;
     right: 16px;
