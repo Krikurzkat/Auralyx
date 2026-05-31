@@ -25,7 +25,15 @@ export function getLyricsForTrack(_trackId: string, lrcContent?: string): LyricL
   // If LRC content is provided, parse it
   if (lrcContent) {
     try {
-      return parseLRC(lrcContent);
+      const syncedLyrics = parseLRC(lrcContent);
+      if (syncedLyrics.length > 0) return syncedLyrics;
+
+      return lrcContent
+        .replace(/\r/g, '')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((text, index) => ({ time: index * 4, text }));
     } catch (error) {
       console.error('Error parsing LRC content:', error);
     }
@@ -34,4 +42,3 @@ export function getLyricsForTrack(_trackId: string, lrcContent?: string): LyricL
   // Fallback for tracks without lyrics
   return [];
 }
-

@@ -3,6 +3,13 @@ import { Track } from '../types';
 
 type AudioSlot = 0 | 1;
 const LAST_PLAYBACK_KEY = 'go_music_last_playback';
+const PLAYER_VOLUME_KEY = 'go_music_player_volume';
+const REMEMBER_LAST_PLAYBACK_KEY = 'go_music_remember_last_playback';
+const IMPORT_METADATA_MODE_KEY = 'go_music_import_metadata_mode';
+const DUPLICATE_IMPORT_BEHAVIOR_KEY = 'go_music_duplicate_import_behavior';
+const ATTACH_SIDECAR_FILES_KEY = 'go_music_attach_sidecar_files';
+const LYRICS_IMPORT_MODE_KEY = 'go_music_lyrics_import_mode';
+const LYRICS_TRANSITION_KEY = 'go_music_lyrics_transition';
 
 const _blobUrlByAudio = new WeakMap<HTMLAudioElement, string>();
 let _crossfadeAnimationFrame: number | null = null;
@@ -50,6 +57,31 @@ function getAudioDebugSnapshot(audio: HTMLAudioElement | null, label: string) {
 }
 
 export type RepeatMode = 'off' | 'all' | 'one';
+export type LyricsTransitionMode = 'smooth' | 'fade' | 'slide' | 'instant';
+export type LyricsImportMode = 'embedded' | 'sidecar';
+export type ImportMetadataMode = 'embedded-first' | 'filename-first' | 'filename-only';
+export type DuplicateImportBehavior = 'skip' | 'allow';
+
+function readNumberSetting(key: string, fallback: number) {
+  if (typeof window === 'undefined') return fallback;
+  const raw = window.localStorage.getItem(key);
+  if (raw === null) return fallback;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function readBooleanSetting(key: string, fallback: boolean) {
+  if (typeof window === 'undefined') return fallback;
+  const raw = window.localStorage.getItem(key);
+  if (raw === null) return fallback;
+  return raw === 'true';
+}
+
+function readOptionSetting<T extends string>(key: string, fallback: T, allowed: readonly T[]) {
+  if (typeof window === 'undefined') return fallback;
+  const raw = window.localStorage.getItem(key) as T | null;
+  return raw && allowed.includes(raw) ? raw : fallback;
+}
 
 interface PlayerState {
   // Current playback
@@ -73,6 +105,12 @@ interface PlayerState {
   repeat: RepeatMode;
   manualFadeDuration: number; // seconds
   autoFadeDuration: number; // seconds
+  rememberLastPlayback: boolean;
+  importMetadataMode: ImportMetadataMode;
+  duplicateImportBehavior: DuplicateImportBehavior;
+  attachSidecarFiles: boolean;
+  lyricsImportMode: LyricsImportMode;
+  lyricsTransition: LyricsTransitionMode;
 
   // UI
   isFullscreen: boolean;
@@ -104,6 +142,12 @@ interface PlayerState {
   cycleRepeat: () => void;
   setManualFadeDuration: (seconds: number) => void;
   setAutoFadeDuration: (seconds: number) => void;
+  setRememberLastPlayback: (value: boolean) => void;
+  setImportMetadataMode: (mode: ImportMetadataMode) => void;
+  setDuplicateImportBehavior: (behavior: DuplicateImportBehavior) => void;
+  setAttachSidecarFiles: (value: boolean) => void;
+  setLyricsImportMode: (mode: LyricsImportMode) => void;
+  setLyricsTransition: (mode: LyricsTransitionMode) => void;
   setFullscreenOpen: (value: boolean) => void;
   toggleFullscreen: () => void;
   toggleLyrics: () => void;
@@ -542,7 +586,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   progress: 0,
   currentTime: 0,
   duration: 0,
-  volume: 78,
+  volume: readNumberSetting(PLAYER_VOLUME_KEY, 78),
   isMuted: false,
 
   queue: [],
@@ -553,12 +597,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   shuffle: false,
   repeat: 'off',
-  manualFadeDuration: typeof window !== 'undefined' && localStorage.getItem('manualFadeDuration') !== null
-    ? Number(localStorage.getItem('manualFadeDuration'))
-    : 0,
-  autoFadeDuration: typeof window !== 'undefined' && localStorage.getItem('autoFadeDuration') !== null
-    ? Number(localStorage.getItem('autoFadeDuration'))
-    : 15,
+  manualFadeDuration: readNumberSetting('manualFadeDuration', 0),
+  autoFadeDuration: readNumberSetting('autoFadeDuration', 15),
+  rememberLastPlayback: readBooleanSetting(REMEMBER_LAST_PLAYBACK_KEY, true),
+  importMetadataMode: readOptionSetting<ImportMetadataMode>(IMPORT_METADATA_MODE_KEY, 'embedded-first', ['embedded-first', 'filename-first', 'filename-only']),
+  duplicateImportBehavior: readOptionSetting<DuplicateImportBehavior>(DUPLICATE_IMPORT_BEHAVIOR_KEY, 'skip', ['skip', 'allow']),
+  attachSidecarFiles: readBooleanSetting(ATTACH_SIDECAR_FILES_KEY, true),
+  lyricsImportMode: readOptionSetting<LyricsImportMode>(LYRICS_IMPORT_MODE_KEY, 'embedded', ['embedded', 'sidecar']),
+  lyricsTransition: readOptionSetting<LyricsTransitionMode>(LYRICS_TRANSITION_KEY, 'smooth', ['smooth', 'fade', 'slide', 'instant']),
 
   isFullscreen: false,
   isFullscreenOpen: false,
@@ -1112,6 +1158,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       inactiveAudio.volume = Math.min(inactiveAudio.volume, nextVolume);
     }
 
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(PLAYER_VOLUME_KEY, vol.toString());
+    }
     set({ volume: vol, isMuted: vol === 0 });
   },
 
@@ -1190,6 +1239,42 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       localStorage.setItem('autoFadeDuration', seconds.toString());
     }
     set({ autoFadeDuration: seconds });
+  },
+  setRememberLastPlayback: (value) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(REMEMBER_LAST_PLAYBACK_KEY, value.toString());
+    }
+    set({ rememberLastPlayback: value });
+  },
+  setImportMetadataMode: (mode) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(IMPORT_METADATA_MODE_KEY, mode);
+    }
+    set({ importMetadataMode: mode });
+  },
+  setDuplicateImportBehavior: (behavior) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(DUPLICATE_IMPORT_BEHAVIOR_KEY, behavior);
+    }
+    set({ duplicateImportBehavior: behavior });
+  },
+  setAttachSidecarFiles: (value) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(ATTACH_SIDECAR_FILES_KEY, value.toString());
+    }
+    set({ attachSidecarFiles: value });
+  },
+  setLyricsImportMode: (mode) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(LYRICS_IMPORT_MODE_KEY, mode);
+    }
+    set({ lyricsImportMode: mode });
+  },
+  setLyricsTransition: (mode) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(LYRICS_TRANSITION_KEY, mode);
+    }
+    set({ lyricsTransition: mode });
   },
   setFullscreenOpen: (value) => set({ isFullscreen: value, isFullscreenOpen: value }),
   toggleFullscreen: () => set(s => ({ isFullscreen: !s.isFullscreenOpen, isFullscreenOpen: !s.isFullscreenOpen })),

@@ -4,16 +4,15 @@ import cors from 'cors';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import dotenv from 'dotenv';
-import { connectDB, User } from './db.js';
-import bcrypt from 'bcryptjs';
+import { connectDB } from './db.js';
 import trackRoutes from './routes/tracks.js';
 import albumRoutes from './routes/albums.js';
 import artistRoutes from './routes/artists.js';
 import playlistRoutes from './routes/playlists.js';
-import userRoutes from './routes/users.js';
 import searchRoutes from './routes/search.js';
 
 dotenv.config();
+dotenv.config({ path: path.resolve('apps/server/.env'), override: false });
 
 const app = express();
 const httpServer = createServer(app);
@@ -39,7 +38,6 @@ app.use('/api/tracks', trackRoutes);
 app.use('/api/albums', albumRoutes);
 app.use('/api/artists', artistRoutes);
 app.use('/api/playlists', playlistRoutes);
-app.use('/api/users', userRoutes);
 app.use('/api/search', searchRoutes);
 
 // Socket.io — Real-time events
@@ -93,29 +91,6 @@ io.on('connection', (socket) => {
 
 // Start server
 const PORT = process.env.PORT || 3001;
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'admin@auralyx.com').trim().toLowerCase();
-const ADMIN_USERNAME = (process.env.ADMIN_USERNAME || 'admin').trim().toLowerCase();
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
-
-async function ensureDefaultAdmin() {
-  const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 12);
-
-  await User.findOneAndUpdate(
-    { email: ADMIN_EMAIL },
-    {
-      $set: {
-        email: ADMIN_EMAIL,
-        username: ADMIN_USERNAME,
-        displayName: 'Super Admin',
-        passwordHash,
-        role: 'admin',
-      },
-    },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
-
-  console.log(`[Auth] Admin account ready: ${ADMIN_EMAIL}`);
-}
 
 async function start() {
   let mongoUri = process.env.MONGODB_URI;
@@ -129,8 +104,6 @@ async function start() {
     mongoUri = mongoServer.getUri();
     await connectDB(mongoUri);
   }
-
-  await ensureDefaultAdmin();
 
   httpServer.listen(PORT, () => {
     console.log(`\n🎵 Auralyx API server running on http://localhost:${PORT}`);

@@ -35,7 +35,7 @@ export function BeatDetector() {
         <input
           ref={fileInputRef}
           type="file"
-          accept="audio/*"
+          accept=".mp3,.mpeg,audio/mpeg,audio/mp3"
           onChange={handleFileChange}
           className="hidden"
         />
@@ -89,10 +89,6 @@ export function BeatDetector() {
         <p className="font-semibold mb-2">Supported formats:</p>
         <ul className="list-disc list-inside">
           <li>MP3</li>
-          <li>WAV</li>
-          <li>OGG</li>
-          <li>M4A</li>
-          <li>FLAC</li>
         </ul>
       </div>
     </div>

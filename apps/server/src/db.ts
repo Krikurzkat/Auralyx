@@ -97,7 +97,6 @@ const userSchema = new mongoose.Schema({
   savedPlaylistIds: [String],
   subscribedPodcastIds: [String],
   recentlyPlayed: [String],
-  subscription: { type: String, enum: ['free', 'premium', 'duo', 'family', 'student'], default: 'free' },
   role: { type: String, enum: ['user', 'staff', 'admin'], default: 'user' },
   settings: {
     audioQuality: { type: String, default: 'high' },

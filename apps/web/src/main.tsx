@@ -11,16 +11,11 @@ import AlbumPage from './pages/AlbumPage';
 import ArtistPage from './pages/ArtistPage';
 import PodcastPage from './pages/PodcastPage';
 import SettingsPage from './pages/SettingsPage';
-import ProfilePage from './pages/ProfilePage';
 import LikedSongsPage from './pages/LikedSongsPage';
-import LoginPage from './pages/LoginPage';
-import SignUpPage from './pages/SignUpPage';
-import AdminPage from './pages/AdminPage';
 import LocalLibraryPage from './pages/LocalLibraryPage';
 import RecentlyPlayedPage from './pages/RecentlyPlayedPage';
 import ListeningHistoryPage from './pages/ListeningHistoryPage';
 import QueuePage from './pages/QueuePage';
-import { useAuthStore } from './stores/authStore';
 import GlobalInteractionEffects from './components/motion/GlobalInteractionEffects';
 import './index.css';
 
@@ -88,34 +83,9 @@ const initializeTheme = () => {
 
 initializeTheme();
 
-function AuthBootstrap() {
-  const initialize = useAuthStore((state) => state.initialize);
-
-  React.useEffect(() => {
-    void initialize();
-  }, [initialize]);
-
-  return null;
-}
-
-function AdminRoute() {
-  const { isAuthenticated, isLoading } = useAuthStore();
-
-  if (isLoading) {
-    return null;
-  }
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
-  return <AdminPage />;
-}
-
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
-      <AuthBootstrap />
       <Toaster
         position="top-center"
         toastOptions={{
@@ -129,8 +99,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       />
       <GlobalInteractionEffects>
         <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignUpPage />} />
+          <Route path="/login" element={<Navigate to="/local" replace />} />
+          <Route path="/signup" element={<Navigate to="/local" replace />} />
           <Route element={<AppShell />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/search" element={<SearchPage />} />
@@ -141,15 +111,15 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <Route path="/podcast/:id" element={<PodcastPage />} />
             <Route path="/podcasts" element={<SearchPage />} />
             <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/profile" element={<Navigate to="/settings" replace />} />
             <Route path="/liked" element={<LikedSongsPage />} />
             <Route path="/local" element={<LocalLibraryPage />} />
             <Route path="/recently-played" element={<RecentlyPlayedPage />} />
             <Route path="/listening-history" element={<ListeningHistoryPage />} />
             <Route path="/queue" element={<QueuePage />} />
-            <Route path="/upgrade" element={<ProfilePage />} />
-            <Route path="/admin" element={<AdminRoute />} />
-            <Route path="*" element={<HomePage />} />
+            <Route path="/upgrade" element={<Navigate to="/settings" replace />} />
+            <Route path="/admin" element={<Navigate to="/local" replace />} />
+            <Route path="*" element={<Navigate to="/local" replace />} />
           </Route>
         </Routes>
       </GlobalInteractionEffects>

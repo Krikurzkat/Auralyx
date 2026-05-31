@@ -68,6 +68,7 @@ export default function FullscreenPlayer() {
     queueIndex,
     showLyrics,
     showQueue,
+    lyricsTransition,
     togglePlay,
     nextTrack,
     prevTrack,
@@ -1330,6 +1331,26 @@ export default function FullscreenPlayer() {
                             const textColor = isCurrent ? '#ffffff' : 'rgb(128, 128, 128)';
                             const textShadow = isCurrent ? `0 0 14px var(--accent)` : 'none';
                             const scaleValue = 0.985 + (1 - 0.985) * bloomFactor - Math.min(distance * 0.05, 0.15);
+                            const transitionOffset = lyricsTransition === 'fade'
+                              ? direction * Math.min(distance, 1.2) * 24
+                              : lyricsTransition === 'instant'
+                                ? direction * Math.min(distance, 1) * 54
+                                : verticalOffset;
+                            const transitionScale = lyricsTransition === 'fade'
+                              ? 1
+                              : lyricsTransition === 'instant'
+                                ? isCurrent ? 1 : 0.96
+                                : scaleValue;
+                            const transitionOpacity = lyricsTransition === 'instant'
+                              ? isCurrent ? 1 : 0
+                              : lyricsTransition === 'fade'
+                                ? isCurrent ? 1 : Math.max(0, 1 - distance * 0.45)
+                                : opacityValue;
+                            const cssTransition = lyricsTransition === 'smooth'
+                              ? undefined
+                              : lyricsTransition === 'instant'
+                                ? 'opacity 80ms linear'
+                                : 'transform 260ms ease, opacity 220ms ease, color 180ms ease';
 
                             return (
                               <div
@@ -1340,8 +1361,8 @@ export default function FullscreenPlayer() {
                                   top: '50%',
                                   fontSize: 'clamp(1.1rem, 4.5vw, 1.5rem)',
                                   lineHeight: lyricLineHeight,
-                                  transform: `translate3d(-50%, calc(-50% + ${verticalOffset.toFixed(2)}px), 0) scale(${scaleValue.toFixed(3)})`,
-                                  opacity: opacityValue,
+                                  transform: `translate3d(-50%, calc(-50% + ${transitionOffset.toFixed(2)}px), 0) scale(${transitionScale.toFixed(3)})`,
+                                  opacity: transitionOpacity,
                                   color: textColor,
                                   textShadow,
                                   fontWeight: '700',
@@ -1356,6 +1377,7 @@ export default function FullscreenPlayer() {
                                   justifyContent: 'center',
                                   minHeight: '1.3em',
                                   maxHeight: '3.9em',
+                                  transition: cssTransition,
                                 }}
                               >
                                 {line.text || '♪'}

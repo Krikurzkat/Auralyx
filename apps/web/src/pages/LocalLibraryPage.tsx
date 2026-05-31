@@ -479,7 +479,7 @@ function EditTrackModal({
       };
       reader.readAsDataURL(file);
     } catch (error) {
-      console.error('Error uploading cover:', error);
+      console.error('Error updating local cover:', error);
       setIsUploadingCover(false);
     }
   };
@@ -567,7 +567,7 @@ function EditTrackModal({
                 className="flex items-center gap-3 rounded-2xl bg-white/10 border border-white/20 px-5 py-3 text-sm font-semibold text-white transition-all duration-300 hover:bg-white/20 hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
               >
                 <RiImageEditLine size={18} />
-                {isUploadingCover ? 'Uploading...' : 'Change Cover'}
+                {isUploadingCover ? 'Updating...' : 'Change Cover'}
               </button>
               {coverUrl && (
                 <button
@@ -888,7 +888,7 @@ export default function LocalLibraryPage() {
             <div className="relative rounded-3xl border-2 border-dashed border-accent bg-accent/10 backdrop-blur-xl px-20 py-16 text-center shadow-2xl">
               <RiUploadCloud2Line className="mx-auto mb-6 text-5xl text-accent animate-bounce" />
               <p className="text-2xl font-bold text-white mb-3">Drop your music files here</p>
-              <p className="text-base text-white/70">MP3, M4A, FLAC, WAV, OGG plus cover.jpeg supported</p>
+              <p className="text-base text-white/70">Drop music files only. Non-audio files are ignored.</p>
             </div>
           </div>
         </div>
@@ -956,7 +956,7 @@ export default function LocalLibraryPage() {
                 isGalaxyS8PlusLayout ? 'gap-1.5 px-4 py-2.5 text-[13px]' : 'gap-3 px-8 py-4 text-base'
               }`}
             >
-              <RiUploadCloud2Line size={isGalaxyS8PlusLayout ? 16 : 22} className="group-hover:scale-110 transition-transform" /> 
+              <RiUploadCloud2Line size={isGalaxyS8PlusLayout ? 16 : 22} className="group-hover:scale-110 transition-transform" />
               {isGalaxyS8PlusLayout ? 'Add' : 'Add Files'}
             </button>
             <button
@@ -974,18 +974,19 @@ export default function LocalLibraryPage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".mp3,.m4a,.wav,.ogg,.flac,.aac,.jpg,.jpeg,.png,.webp"
+            accept="audio/*,.aac,.aiff,.alac,.flac,.m4a,.mp3,.mp4,.mpeg,.oga,.ogg,.opus,.wav,.wave,.webm,.wma"
             multiple
             className="hidden"
-            onChange={e => { if (e.target.files) { importFiles(e.target.files); e.target.value = ''; } }}
+            onChange={e => { if (e.target.files && e.target.files.length > 0) { importFiles(e.target.files); e.target.value = ''; } }}
           />
           <input
             ref={folderInputRef}
             type="file"
+            accept="audio/*,.aac,.aiff,.alac,.flac,.m4a,.mp3,.mp4,.mpeg,.oga,.ogg,.opus,.wav,.wave,.webm,.wma"
             multiple
             className="hidden"
             {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
-            onChange={e => { if (e.target.files) { importFiles(e.target.files); e.target.value = ''; } }}
+            onChange={e => { if (e.target.files && e.target.files.length > 0) { importFiles(e.target.files); e.target.value = ''; } }}
           />
         </div>
 
@@ -1007,14 +1008,10 @@ export default function LocalLibraryPage() {
             </div>
           </div>
         )}
-        {!importProgress.isRunning && importProgress.rejected > 0 && (
-          <div className={`rounded-2xl border border-amber-500/20 bg-amber-500/10 text-amber-100 backdrop-blur-xl ${isGalaxyS8PlusLayout ? 'mt-4 p-3 text-xs' : 'mt-6 p-4 text-sm'}`}>
-            <div className="font-bold">Upload protection blocked {importProgress.rejected} item{importProgress.rejected === 1 ? '' : 's'}.</div>
-            {importProgress.abuseFlags.length > 0 && (
-              <div className="mt-1 text-amber-100/70">
-                Reason: {importProgress.abuseFlags.join(', ').replace(/_/g, ' ')}
-              </div>
-            )}
+        {!importProgress.isRunning && importProgress.skippedDuplicates > 0 && (
+          <div className={`rounded-2xl border border-white/10 bg-white/5 text-white/80 backdrop-blur-xl ${isGalaxyS8PlusLayout ? 'mt-4 p-3 text-xs' : 'mt-6 p-4 text-sm'}`}>
+            <div className="font-bold">Skipped {importProgress.skippedDuplicates} duplicate item{importProgress.skippedDuplicates === 1 ? '' : 's'}.</div>
+            <div className="mt-1 text-white/50">Already in your library or repeated inside this folder.</div>
           </div>
         )}
       </div>
@@ -1104,14 +1101,16 @@ export default function LocalLibraryPage() {
               <RiUploadCloud2Line className={`text-accent transition-transform group-hover:scale-110 ${isGalaxyS8PlusLayout ? 'text-2xl' : 'text-4xl'}`} />
             </div>
           </div>
-          <h3 className={`font-bold text-white ${isGalaxyS8PlusLayout ? 'mb-2 text-xl leading-tight' : 'mb-3 text-2xl'}`}>Add your first tracks</h3>
+          <h3 className={`font-bold text-white ${isGalaxyS8PlusLayout ? 'mb-2 text-xl leading-tight' : 'mb-3 text-2xl'}`}>
+            Add your first tracks
+          </h3>
           <p className={`text-white/50 ${isGalaxyS8PlusLayout ? 'mb-4 max-w-[240px] text-sm leading-snug' : 'mb-6 max-w-md text-base leading-relaxed'}`}>
             {isGalaxyS8PlusLayout
               ? 'Tap to add music from your device.'
-              : 'Drag & drop music files here, or click to browse. Your music stays entirely on your device — no uploads needed.'}
+              : 'Drag & drop music files here, or click to browse. Your music stays entirely on your device.'}
           </p>
           <div className={`flex flex-wrap justify-center ${isGalaxyS8PlusLayout ? 'gap-1.5' : 'gap-2.5'}`}>
-            {['MP3', 'FLAC', 'M4A'].map((format) => (
+            {['MP3', 'FLAC', 'M4A', 'WAV', 'OGG'].map((format) => (
               <span
                 key={format}
                 className={`rounded-full border border-white/10 bg-glass-card backdrop-blur-xl font-semibold text-white/70 ${

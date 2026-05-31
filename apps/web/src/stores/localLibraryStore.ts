@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { localDb, LocalTrack } from '../services/localDb';
 import { Playlist } from '../types';
-import { usePlayerStore } from './playerStore';
+import { usePlayerStore, type ImportMetadataMode } from './playerStore';
 
 // ─── Helpers ───
 
@@ -19,25 +19,47 @@ function stringToGradient(str: string): [string, string] {
   return [`hsl(${h1}, 65%, 45%)`, `hsl(${h2}, 55%, 55%)`];
 }
 
-const AUDIO_EXTENSIONS = new Set(['mp3', 'm4a', 'wav', 'ogg', 'flac', 'aac']);
+const AUDIO_EXTENSIONS = new Set([
+  'aac',
+  'aiff',
+  'alac',
+  'flac',
+  'm4a',
+  'mp3',
+  'mp4',
+  'mpeg',
+  'oga',
+  'ogg',
+  'opus',
+  'wav',
+  'wave',
+  'webm',
+  'wma',
+]);
+const AUDIO_MIME_TYPES = new Set([
+  'audio/aac',
+  'audio/aiff',
+  'audio/flac',
+  'audio/m4a',
+  'audio/mp4',
+  'audio/mpeg',
+  'audio/mp3',
+  'audio/oga',
+  'audio/ogg',
+  'audio/opus',
+  'audio/webm',
+  'audio/wav',
+  'audio/wave',
+  'audio/x-aiff',
+  'audio/x-flac',
+  'audio/x-m4a',
+  'audio/x-ms-wma',
+  'audio/x-wav',
+]);
 const COVER_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp']);
 const COVER_NAME_PRIORITY = ['cover', 'folder', 'front', 'album'];
-const LOCAL_IMPORT_RATE_KEY = 'auralyx.localUploadProtection.v1';
-const LOCAL_MAX_IMPORTS_PER_BATCH = 150;
-const LOCAL_MAX_IMPORTS_PER_HOUR = 200;
-const LOCAL_MAX_IMPORTS_PER_DAY = 700;
-const LOCAL_MAX_REJECTED_PER_HOUR = 60;
-const HOUR_MS = 60 * 60 * 1000;
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 type ImportableFile = File & { webkitRelativePath?: string };
-type LocalUploadCounter = {
-  hourStartedAt: number;
-  dayStartedAt: number;
-  importsThisHour: number;
-  importsToday: number;
-  rejectedThisHour: number;
-};
 
 type ScreenedLocalFile = {
   file: File;
@@ -45,7 +67,9 @@ type ScreenedLocalFile = {
 };
 
 function getFileExtension(fileName: string): string {
-  return fileName.split('.').pop()?.toLowerCase() || '';
+  const dotIndex = fileName.lastIndexOf('.');
+  if (dotIndex <= 0 || dotIndex === fileName.length - 1) return '';
+  return fileName.slice(dotIndex + 1).toLowerCase();
 }
 
 function getBaseName(fileName: string): string {
@@ -63,80 +87,26 @@ function getImportDirectory(file: ImportableFile): string {
 }
 
 function isAudioFile(file: File): boolean {
-  return AUDIO_EXTENSIONS.has(getFileExtension(file.name));
-}
-
-function getLocalUploadCounter(): LocalUploadCounter {
-  const now = Date.now();
-  const fallback: LocalUploadCounter = {
-    hourStartedAt: now,
-    dayStartedAt: now,
-    importsThisHour: 0,
-    importsToday: 0,
-    rejectedThisHour: 0,
-  };
-
-  if (typeof localStorage === 'undefined') return fallback;
-
-  try {
-    const parsed = JSON.parse(localStorage.getItem(LOCAL_IMPORT_RATE_KEY) || 'null') as Partial<LocalUploadCounter> | null;
-    const counter: LocalUploadCounter = {
-      hourStartedAt: parsed?.hourStartedAt || now,
-      dayStartedAt: parsed?.dayStartedAt || now,
-      importsThisHour: parsed?.importsThisHour || 0,
-      importsToday: parsed?.importsToday || 0,
-      rejectedThisHour: parsed?.rejectedThisHour || 0,
-    };
-
-    if (now - counter.hourStartedAt > HOUR_MS) {
-      counter.hourStartedAt = now;
-      counter.importsThisHour = 0;
-      counter.rejectedThisHour = 0;
-    }
-
-    if (now - counter.dayStartedAt > DAY_MS) {
-      counter.dayStartedAt = now;
-      counter.importsToday = 0;
-    }
-
-    return counter;
-  } catch {
-    return fallback;
-  }
-}
-
-function saveLocalUploadCounter(counter: LocalUploadCounter) {
-  if (typeof localStorage === 'undefined') return;
-  localStorage.setItem(LOCAL_IMPORT_RATE_KEY, JSON.stringify(counter));
-}
-
-function getLocalImportLimitFlags(counter: LocalUploadCounter): string[] {
-  const flags: string[] = [];
-  if (counter.importsThisHour >= LOCAL_MAX_IMPORTS_PER_HOUR) flags.push('too_many_imports_hourly');
-  if (counter.importsToday >= LOCAL_MAX_IMPORTS_PER_DAY) flags.push('too_many_imports_daily');
-  if (counter.rejectedThisHour >= LOCAL_MAX_REJECTED_PER_HOUR) flags.push('too_many_rejected_imports');
-  return flags;
-}
-
-function recordLocalImportAccepted(count: number) {
-  const counter = getLocalUploadCounter();
-  counter.importsThisHour += count;
-  counter.importsToday += count;
-  saveLocalUploadCounter(counter);
-}
-
-function recordLocalImportRejected(count: number) {
-  const counter = getLocalUploadCounter();
-  counter.rejectedThisHour += count;
-  saveLocalUploadCounter(counter);
+  const extension = getFileExtension(file.name);
+  return AUDIO_EXTENSIONS.has(extension) || AUDIO_MIME_TYPES.has(file.type) || file.type.startsWith('audio/');
 }
 
 async function hashLocalFile(file: File): Promise<string> {
-  const buffer = await file.arrayBuffer();
-  const digest = await window.crypto.subtle.digest('SHA-256', buffer);
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
+  try {
+    const buffer = await file.arrayBuffer();
+    const digest = await window.crypto.subtle.digest('SHA-256', buffer);
+    return Array.from(new Uint8Array(digest))
+      .map((byte) => byte.toString(16).padStart(2, '0'))
+      .join('');
+  } catch {
+    return [
+      'file',
+      file.name,
+      file.size,
+      file.lastModified,
+      file.type,
+    ].join(':');
+  }
 }
 
 function isCoverImageFile(file: File): boolean {
@@ -267,10 +237,88 @@ function isMissingMetadata(value?: string | null): boolean {
   );
 }
 
-function parseFilenameTemplate(fileName: string): { title: string; artist?: string; album?: string } {
+type ParsedAudioMetadata = {
+  common: { lyrics?: unknown };
+  native?: Record<string, Array<{ id?: unknown; value?: unknown }>>;
+};
+
+function hasSyncedLyricTimestamps(text: string): boolean {
+  return /\[\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?\]/.test(text);
+}
+
+function cleanLyricText(text: string): string {
+  return text
+    .replace(/\r/g, '')
+    .replace(/\u0000/g, '')
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .join('\n')
+    .trim();
+}
+
+function getLyricTextFromValue(value: unknown): string[] {
+  if (!value) return [];
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(getLyricTextFromValue);
+
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const directText = record.text ?? record.lyrics ?? record.value;
+    if (typeof directText === 'string') return [directText];
+    if (Array.isArray(directText)) return directText.flatMap(getLyricTextFromValue);
+  }
+
+  return [];
+}
+
+function isNativeLyricsTag(tagId: unknown): boolean {
+  if (typeof tagId !== 'string') return false;
+  const normalized = tagId.toLowerCase();
+  if (normalized.includes('lyricist')) return false;
+
+  return [
+    'uslt',
+    'ult',
+    'sylt',
+    'lyrics',
+    'lyric',
+    'unsyncedlyrics',
+    'unsynced lyrics',
+    'syncedlyrics',
+    'synclyrics',
+    'wm/lyrics',
+    'wm/synclyrics',
+    '©lyr',
+    '----:com.apple.itunes:lyrics',
+  ].some((key) => normalized === key || normalized.endsWith(`:${key}`));
+}
+
+function getEmbeddedLyrics(metadata: ParsedAudioMetadata): string | undefined {
+  const lyricTexts: string[] = [];
+
+  if (Array.isArray(metadata.common.lyrics)) {
+    lyricTexts.push(...metadata.common.lyrics.flatMap(getLyricTextFromValue));
+  }
+
+  Object.values(metadata.native || {}).forEach((tags) => {
+    tags.forEach((tag) => {
+      if (isNativeLyricsTag(tag.id)) {
+        lyricTexts.push(...getLyricTextFromValue(tag.value));
+      }
+    });
+  });
+
+  const cleanedTexts = Array.from(new Set(lyricTexts.map(cleanLyricText).filter(Boolean)));
+  if (cleanedTexts.length === 0) return undefined;
+
+  return cleanedTexts.find(hasSyncedLyricTimestamps) || cleanedTexts.join('\n\n');
+}
+
+function parseFilenameTemplate(fileName: string): { title: string; artist?: string; album?: string; genre?: string; year?: number } {
   const baseName = fileName
     .replace(/\.[^.]+$/, '')
     .replace(/^\s*\d{1,3}\s*[-._]\s*/, '')
+    .replace(/\s+-\s*$/, '')
     .trim();
 
   const parts = baseName
@@ -278,11 +326,40 @@ function parseFilenameTemplate(fileName: string): { title: string; artist?: stri
     .map(cleanFilenamePart)
     .filter(Boolean);
 
-  if (parts.length >= 3) {
+  const readYear = (value?: string) => {
+    const match = value?.match(/\b(19|20)\d{2}\b/);
+    if (!match) return undefined;
+    const year = Number.parseInt(match[0], 10);
+    return year >= 1900 && year <= 2100 ? year : undefined;
+  };
+
+  if (parts.length >= 5) {
+    const year = readYear(parts[parts.length - 1]);
     return {
       title: parts[0],
       artist: parts[1],
-      album: parts.slice(2).join(' - '),
+      album: parts[2],
+      genre: parts.slice(3, year ? -1 : undefined).join(' - '),
+      year,
+    };
+  }
+
+  if (parts.length === 4) {
+    const year = readYear(parts[3]);
+    return {
+      title: parts[0],
+      artist: parts[1],
+      album: parts[2],
+      genre: year ? undefined : parts[3],
+      year,
+    };
+  }
+
+  if (parts.length === 3) {
+    return {
+      title: parts[0],
+      artist: parts[1],
+      album: parts[2],
     };
   }
 
@@ -296,6 +373,27 @@ function parseFilenameTemplate(fileName: string): { title: string; artist?: stri
   return {
     title: cleanFilenamePart(baseName.replace(/[._]+/g, ' ')),
   };
+}
+
+function pickImportedText(
+  embedded: string | undefined,
+  filenameValue: string | undefined,
+  fallback: string,
+  mode: ImportMetadataMode
+): string {
+  if (mode === 'filename-only') return filenameValue || fallback;
+  if (mode === 'filename-first') return filenameValue || (!isMissingMetadata(embedded) ? embedded || fallback : fallback);
+  return isMissingMetadata(embedded) ? filenameValue || fallback : embedded || fallback;
+}
+
+function pickImportedYear(
+  embedded: number | undefined,
+  filenameValue: number | undefined,
+  mode: ImportMetadataMode
+): number | undefined {
+  if (mode === 'filename-only') return filenameValue;
+  if (mode === 'filename-first') return filenameValue || embedded;
+  return embedded || filenameValue;
 }
 
 function findReusableAlbumCover(album: string, artist: string, tracks: LocalTrack[]): string | undefined {
@@ -363,6 +461,7 @@ export interface ImportProgress {
   current: string;
   isRunning: boolean;
   rejected: number;
+  skippedDuplicates: number;
   abuseFlags: string[];
 }
 
@@ -408,7 +507,7 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
   playCounts: {},
   lastPlayed: {},
   isLoaded: false,
-  importProgress: { total: 0, done: 0, current: '', isRunning: false, rejected: 0, abuseFlags: [] },
+  importProgress: { total: 0, done: 0, current: '', isRunning: false, rejected: 0, skippedDuplicates: 0, abuseFlags: [] },
   searchQuery: '',
 
   loadLibrary: async () => {
@@ -426,7 +525,10 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
         lastPlayed: lastPlayed || {},
         isLoaded: true,
       });
-      usePlayerStore.getState().restoreLastPlayback(tracks);
+      const playerState = usePlayerStore.getState();
+      if (playerState.rememberLastPlayback) {
+        playerState.restoreLastPlayback(tracks);
+      }
     } catch (err) {
       console.error('Failed to load local library:', err);
       set({ isLoaded: true });
@@ -435,11 +537,13 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
 
   importFiles: async (files: FileList | File[]) => {
     const allFiles = Array.from(files);
-    const coverIndex = buildCoverFileIndex(allFiles);
-    const lyricIndex = buildLyricFileIndex(allFiles);
+    const playerPreferences = usePlayerStore.getState();
+    const coverIndex = playerPreferences.attachSidecarFiles ? buildCoverFileIndex(allFiles) : undefined;
+    const lyricIndex = playerPreferences.attachSidecarFiles ? buildLyricFileIndex(allFiles) : undefined;
     const coverDataUrlCache = new Map<File, Promise<string | undefined>>();
     const lyricTextCache = new Map<File, Promise<string | undefined>>();
     const getBatchCoverUrl = (file: File): Promise<string | undefined> => {
+      if (!coverIndex) return Promise.resolve(undefined);
       const coverFile = findBatchCoverFile(file, coverIndex);
       if (!coverFile) return Promise.resolve(undefined);
       let cached = coverDataUrlCache.get(coverFile);
@@ -450,6 +554,7 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
       return cached;
     };
     const getBatchLyrics = (file: File): Promise<string | undefined> => {
+      if (!lyricIndex) return Promise.resolve(undefined);
       const lyricFile = findBatchLyricFile(file, lyricIndex);
       if (!lyricFile) return Promise.resolve(undefined);
       let cached = lyricTextCache.get(lyricFile);
@@ -463,59 +568,20 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
 
     if (audioFiles.length === 0) return;
 
-    const rateCounter = getLocalUploadCounter();
-    const limitFlags = getLocalImportLimitFlags(rateCounter);
-    if (limitFlags.length > 0) {
-      recordLocalImportRejected(audioFiles.length);
-      console.warn('[LocalLibrary] Import blocked by rate limits:', limitFlags);
-      set({
-        importProgress: {
-          total: 0,
-          done: 0,
-          current: '',
-          isRunning: false,
-          rejected: audioFiles.length,
-          abuseFlags: limitFlags,
-        },
-      });
-      return;
-    }
-
-    const allowedByBatch = audioFiles.slice(0, LOCAL_MAX_IMPORTS_PER_BATCH);
-    const overflowCount = Math.max(0, audioFiles.length - allowedByBatch.length);
-    if (overflowCount > 0) {
-      recordLocalImportRejected(overflowCount);
-      console.warn(`[LocalLibrary] Skipped ${overflowCount} files over the ${LOCAL_MAX_IMPORTS_PER_BATCH}-file batch limit.`);
-    }
-
-    const remainingHour = Math.max(0, LOCAL_MAX_IMPORTS_PER_HOUR - rateCounter.importsThisHour);
-    const remainingDay = Math.max(0, LOCAL_MAX_IMPORTS_PER_DAY - rateCounter.importsToday);
-    const rateAllowedCount = Math.min(allowedByBatch.length, remainingHour, remainingDay);
-    const rateSkippedCount = allowedByBatch.length - rateAllowedCount;
-    const rateLimitedFiles = allowedByBatch.slice(0, rateAllowedCount);
-    if (rateSkippedCount > 0) {
-      recordLocalImportRejected(rateSkippedCount);
-      console.warn(`[LocalLibrary] Skipped ${rateSkippedCount} files over the current import rate limit.`);
-    }
-
     const existingHashes = new Set(get().localTracks.map((track) => track.fileHash).filter(Boolean));
     const batchHashes = new Set<string>();
     const screenedFiles: ScreenedLocalFile[] = [];
+    let duplicateCount = 0;
 
-    for (const file of rateLimitedFiles) {
-      try {
-        const fileHash = await hashLocalFile(file);
-        if (existingHashes.has(fileHash) || batchHashes.has(fileHash)) {
-          recordLocalImportRejected(1);
-          console.warn(`[LocalLibrary] Duplicate file blocked: ${file.name}`);
-          continue;
-        }
-        batchHashes.add(fileHash);
-        screenedFiles.push({ file, fileHash });
-      } catch (err) {
-        recordLocalImportRejected(1);
-        console.warn(`[LocalLibrary] Failed to hash file, skipped: ${file.name}`, err);
+    for (const file of audioFiles) {
+      const fileHash = await hashLocalFile(file);
+      if (playerPreferences.duplicateImportBehavior === 'skip' && (existingHashes.has(fileHash) || batchHashes.has(fileHash))) {
+        duplicateCount += 1;
+        console.info(`[LocalLibrary] Duplicate file skipped: ${file.name}`);
+        continue;
       }
+      batchHashes.add(fileHash);
+      screenedFiles.push({ file, fileHash });
     }
 
     if (screenedFiles.length === 0) {
@@ -525,8 +591,9 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
           done: 0,
           current: '',
           isRunning: false,
-          rejected: audioFiles.length,
-          abuseFlags: ['duplicate_or_blocked_imports'],
+          rejected: 0,
+          skippedDuplicates: duplicateCount,
+          abuseFlags: [],
         },
       });
       return;
@@ -538,10 +605,9 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
         done: 0,
         current: '',
         isRunning: true,
-        rejected: overflowCount + rateSkippedCount + (rateLimitedFiles.length - screenedFiles.length),
-        abuseFlags: overflowCount > 0 || rateSkippedCount > 0
-          ? ['batch_or_rate_limit_applied']
-          : [],
+        rejected: 0,
+        skippedDuplicates: duplicateCount,
+        abuseFlags: [],
       }
     });
 
@@ -570,25 +636,23 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
           coverUrl = `data:${pic.format};base64,${base64}`;
         }
 
-        const title = cleanFilenamePart(
-          isMissingMetadata(common.title) ? filenameMetadata.title : common.title || filenameMetadata.title
-        );
-        const artist = cleanFilenamePart(
-          isMissingMetadata(common.artist)
-            ? filenameMetadata.artist || common.albumartist || 'Unknown Artist'
-            : common.artist || common.albumartist || 'Unknown Artist'
-        );
-        const album = cleanFilenamePart(
-          isMissingMetadata(common.album) ? filenameMetadata.album || 'Unknown Album' : common.album || 'Unknown Album'
-        );
+        const title = cleanFilenamePart(pickImportedText(common.title, filenameMetadata.title, filenameMetadata.title, playerPreferences.importMetadataMode));
+        const artist = cleanFilenamePart(pickImportedText(common.artist || common.albumartist, filenameMetadata.artist, 'Unknown Artist', playerPreferences.importMetadataMode));
+        const album = cleanFilenamePart(pickImportedText(common.album, filenameMetadata.album, 'Unknown Album', playerPreferences.importMetadataMode));
+        const genre = pickImportedText(common.genre?.[0], filenameMetadata.genre, '', playerPreferences.importMetadataMode);
+        const releaseYear = pickImportedYear(common.year, filenameMetadata.year, playerPreferences.importMetadataMode);
         coverUrl = coverUrl
           || await getBatchCoverUrl(file)
           || findReusableAlbumCover(album, artist, [...get().localTracks, ...newTracks]);
-        const lyrics = await getBatchLyrics(file);
+        const embeddedLyrics = getEmbeddedLyrics(metadata);
+        const sidecarLyrics = await getBatchLyrics(file);
+        const lyrics = playerPreferences.lyricsImportMode === 'sidecar'
+          ? sidecarLyrics || embeddedLyrics
+          : embeddedLyrics || sidecarLyrics;
 
         // Check duplicate by same title+artist
         const existingTracks = get().localTracks;
-        const isDuplicate = existingTracks.some(
+        const isDuplicate = playerPreferences.duplicateImportBehavior === 'skip' && existingTracks.some(
           t => t.title === title && t.artist === artist && t.album === album
         );
         if (isDuplicate) continue;
@@ -601,17 +665,17 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
           album,
           albumId: `local_album_${slugifyLocalId(album, 'unknown')}`,
           duration: format.duration ? Math.round(format.duration) : Math.round(await getAudioDuration(file)),
-          genre: common.genre?.[0] || '',
-          releaseDate: common.year ? String(common.year) : '',
+          genre,
+          releaseDate: releaseYear ? String(releaseYear) : '',
           lyrics,
           plays: 0,
           explicit: false,
           coverUrl,
           coverGradient: stringToGradient(title + artist),
           fileHash,
-          uploadStatus: 'quarantined',
+          uploadStatus: 'approved',
           visibility: 'private',
-          moderationFlags: ['local_import_quarantined'],
+          moderationFlags: ['local_import'],
           blob: file,
           isLocal: true,
           addedAt: Date.now(),
@@ -625,6 +689,7 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
         const title = filenameMetadata.title;
         const artist = filenameMetadata.artist || 'Unknown Artist';
         const album = filenameMetadata.album || 'Unknown Album';
+        const releaseYear = filenameMetadata.year;
         const coverUrl = await getBatchCoverUrl(file)
           || findReusableAlbumCover(album, artist, [...get().localTracks, ...newTracks]);
         const lyrics = await getBatchLyrics(file);
@@ -636,15 +701,17 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
           album,
           albumId: `local_album_${slugifyLocalId(album, 'unknown')}`,
           duration: Math.round(await getAudioDuration(file)),
+          genre: filenameMetadata.genre || '',
+          releaseDate: releaseYear ? String(releaseYear) : '',
           lyrics,
           plays: 0,
           explicit: false,
           coverUrl,
           coverGradient: stringToGradient(title + artist),
           fileHash,
-          uploadStatus: 'quarantined',
+          uploadStatus: 'approved',
           visibility: 'private',
-          moderationFlags: ['local_import_quarantined', 'metadata_parse_failed'],
+          moderationFlags: ['local_import', 'metadata_parse_failed'],
           blob: file,
           isLocal: true,
           addedAt: Date.now(),
@@ -653,8 +720,6 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
         newTracks.push(track);
       }
     }
-
-    recordLocalImportAccepted(newTracks.length);
 
     set(s => ({
       localTracks: [...s.localTracks, ...newTracks],

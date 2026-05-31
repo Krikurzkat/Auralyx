@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import ContentCard from '../components/cards/ContentCard';
 import { usePlayerStore } from '../stores/playerStore';
 import { useLocalLibraryStore } from '../stores/localLibraryStore';
-import type { LocalTrack } from '../services/localDb';
+import type { Track } from '../types';
 import { clickedTrackCoverRef } from '../components/player/FullscreenPlayer';
 import { RiAlbumLine, RiPlayFill, RiTimeLine, RiFireLine, RiMusic2Line, RiFolderMusicLine, RiUserLine, RiBarChartBoxLine, RiTrophyLine, RiHeadphoneLine, RiArrowLeftSLine, RiArrowRightSLine } from 'react-icons/ri';
 import NebulaDust from '../components/ui/NebulaDust';
@@ -21,6 +21,16 @@ type SpotlightAlbum = {
   trackCount: number;
 };
 
+function mergeUniqueTracks(...groups: Track[][]): Track[] {
+  const seen = new Set<string>();
+  return groups.flat().filter((track) => {
+    const key = track.id || track._id;
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export default function HomePage() {
   const navigate = useNavigate();
   const { playTrack, currentTrack, setFullscreenOpen } = usePlayerStore();
@@ -33,13 +43,20 @@ export default function HomePage() {
     if (!isLoaded) loadLibrary();
   }, [isLoaded, loadLibrary]);
 
-  const topListenedTracks = useMemo(() => getMostPlayed(3), [getMostPlayed]);
-  const recentTracks = useMemo(() => getRecentlyPlayed(8), [getRecentlyPlayed]);
+  const allTracks = useMemo(() => mergeUniqueTracks(localTracks), [localTracks]);
+  const topListenedTracks = useMemo(
+    () => getMostPlayed(3),
+    [getMostPlayed, localTracks]
+  );
+  const recentTracks = useMemo(
+    () => getRecentlyPlayed(8),
+    [getRecentlyPlayed, localTracks]
+  );
   const userPlaylists = useMemo(() => localPlaylists.slice(0, 5), [localPlaylists]);
   const spotlightAlbums = useMemo<SpotlightAlbum[]>(() => {
     const albumMap = new Map<string, SpotlightAlbum>();
 
-    localTracks.forEach((track) => {
+    allTracks.forEach((track) => {
       const albumTitle = track.album || 'Unknown Album';
       const albumId = track.albumId || albumTitle;
       const key = `${albumId}-${albumTitle}`;
@@ -74,7 +91,7 @@ export default function HomePage() {
       if (b.plays !== a.plays) return b.plays - a.plays;
       return b.trackCount - a.trackCount;
     }).slice(0, 8);
-  }, [localTracks, playCounts]);
+  }, [allTracks, playCounts]);
   const [spotlightAlbumIndex, setSpotlightAlbumIndex] = useState(0);
   const [spotlightCoverIndex, setSpotlightCoverIndex] = useState(0);
   const mostPlayedAlbum = spotlightAlbums[spotlightAlbumIndex] || null;
@@ -135,7 +152,7 @@ export default function HomePage() {
 
     // Total listening time (sum of all track durations)
     const totalMinutes = Math.floor(
-      localTracks.reduce((sum, track) => sum + track.duration, 0) / 60
+      allTracks.reduce((sum, track) => sum + track.duration, 0) / 60
     );
 
     // Calculate streak (consecutive days with plays)
@@ -166,7 +183,7 @@ export default function HomePage() {
 
     // Top genre based on play counts (most played genre)
     const genrePlayCounts: Record<string, number> = {};
-    localTracks.forEach(track => {
+    allTracks.forEach(track => {
       if (track.genre) {
         const plays = playCounts[track.id] || 0;
         genrePlayCounts[track.genre] = (genrePlayCounts[track.genre] || 0) + plays;
@@ -183,7 +200,7 @@ export default function HomePage() {
     } else {
       // Fallback: most common genre in library
       const genreCounts: Record<string, number> = {};
-      localTracks.forEach(track => {
+      allTracks.forEach(track => {
         if (track.genre) {
           genreCounts[track.genre] = (genreCounts[track.genre] || 0) + 1;
         }
@@ -196,15 +213,15 @@ export default function HomePage() {
       totalMinutes,
       streak,
       topGenre,
-      totalTracks: localTracks.length,
+      totalTracks: allTracks.length,
     };
-  }, [localTracks, lastPlayed, playCounts]);
+  }, [allTracks, lastPlayed, playCounts]);
 
   // Aggregate popular artists based on local tracks
   const popularArtists = useMemo(() => {
     const artistCounts: Record<string, number> = {};
     const artistImages: Record<string, [string, string]> = {};
-    localTracks.forEach(t => {
+    allTracks.forEach(t => {
       artistCounts[t.artist] = (artistCounts[t.artist] || 0) + 1;
       if (!artistImages[t.artist] && t.coverGradient) {
         artistImages[t.artist] = t.coverGradient;
@@ -219,7 +236,7 @@ export default function HomePage() {
         trackCount: count,
         gradient: artistImages[name] || ['#333', '#222'],
       }));
-  }, [localTracks]);
+  }, [allTracks]);
 
   const heroRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -238,7 +255,7 @@ export default function HomePage() {
     });
   }, { scope: heroRef, dependencies: [isLoaded] });
 
-  const handleJumpBackInPlay = (track: LocalTrack, button: HTMLButtonElement) => {
+  const handleJumpBackInPlay = (track: Track, button: HTMLButtonElement) => {
     const coverElement = button.querySelector('.jump-back-cover') as HTMLElement | null;
     if (coverElement) {
       clickedTrackCoverRef.current = coverElement;
@@ -256,7 +273,7 @@ export default function HomePage() {
     );
 
     if (currentTrack?.id !== track.id) {
-      playTrack(track, localTracks);
+      playTrack(track, allTracks);
     }
 
     window.setTimeout(() => {
@@ -355,8 +372,8 @@ export default function HomePage() {
           {/* Particle Nebula Dust */}
           <NebulaDust id="hero-nebula" />
 
-          <div className="home-hero-feature-grid relative z-10 grid gap-4 md:grid-cols-[minmax(0,1fr)_300px_180px] xl:grid-cols-[minmax(0,1fr)_300px_250px]">
-            <div ref={contentRef} className="max-w-lg space-y-3">
+          <div className="home-hero-feature-grid relative z-10 grid gap-4 md:grid-cols-[minmax(0,1fr)_300px_180px] xl:grid-cols-[minmax(0,1fr)_280px_270px] xl:gap-8">
+            <div ref={contentRef} className="max-w-lg space-y-3 md:border-r md:border-white/15 md:pr-5 xl:pr-8">
               <div className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/15 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-accent backdrop-blur-sm shadow-lg">
                 <RiFireLine size={12} className="animate-pulse" />
                 Total Music Library
@@ -370,7 +387,7 @@ export default function HomePage() {
               </p>
               <div className="flex flex-wrap gap-3 pointer-events-auto">
                 <button
-                  onClick={() => { if (topListenedTracks[0]) playTrack(topListenedTracks[0], localTracks); }}
+                  onClick={() => { if (topListenedTracks[0]) playTrack(topListenedTracks[0], allTracks); }}
                   disabled={topListenedTracks.length === 0}
                   className="group flex items-center gap-2 rounded-full bg-theme-gradient px-5 py-2.5 text-sm md:px-4 md:py-2 md:text-xs xl:px-5 xl:py-2.5 xl:text-sm font-bold text-white transition-all hover:scale-[1.05] hover:shadow-glow-lg active:scale-95 disabled:opacity-50 disabled:hover:scale-100 shadow-glow"
                 >
@@ -386,7 +403,7 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div className="home-hero-album-copy hidden items-start justify-start md:flex xl:translate-x-16">
+            <div className="home-hero-album-copy hidden items-start justify-start md:flex xl:translate-x-4">
               <div className="space-y-3">
                 <div className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/15 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-accent backdrop-blur-sm shadow-lg">
                   <RiAlbumLine size={12} />
@@ -412,7 +429,7 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div className="home-hero-album-cover hidden items-center justify-end md:flex">
+            <div className="home-hero-album-cover hidden items-center justify-end md:flex xl:translate-x-3">
               <div className="group relative aspect-square w-full max-w-[180px] overflow-hidden rounded-[22px] border border-white/10 bg-white/5 text-left shadow-2xl shadow-black/40 transition-all hover:scale-[1.02] hover:border-accent/30 xl:max-w-[250px]">
                 <button
                   onClick={() => {
@@ -497,7 +514,7 @@ export default function HomePage() {
             {topListenedTracks.map((track, index) => (
               <button
                 key={track.id}
-                onClick={() => playTrack(track, localTracks)}
+                onClick={() => playTrack(track, allTracks)}
                 className="group rounded-xl bg-black/50 p-2.5 text-left backdrop-blur-xl transition-all hover:bg-black/70 hover:scale-[1.03] border border-white/10 hover:border-white/20 shadow-xl hover:shadow-2xl"
               >
                 <div className="flex items-center gap-2.5">
@@ -577,7 +594,7 @@ export default function HomePage() {
                     <RiMusic2Line size={14} className="text-white/70" />
                     <span className="text-[10px] font-bold uppercase tracking-wider text-white/70">Library</span>
                   </div>
-                  <div className="text-3xl font-black text-white mb-1">{localTracks.length}</div>
+                  <div className="text-3xl font-black text-white mb-1">{allTracks.length}</div>
                   <div className="text-xs text-dimText">total tracks</div>
                 </div>
 

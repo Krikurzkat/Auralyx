@@ -52,6 +52,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
     cycleRepeat,
     queue,
     queueIndex,
+    lyricsTransition,
   } = usePlayerStore();
 
   const { likedTrackIds, toggleLike } = useLibraryStore();
@@ -684,6 +685,22 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
                       ? lyricDenseFontSize
                       : lyricFontSize;
                   const lineHeight = isUltraDenseLine ? (isDesktopLyricsViewport ? '1.14' : '1.16') : lyricLineHeight;
+                  const transitionScale = lyricsTransition === 'fade'
+                    ? 1
+                    : lyricsTransition === 'instant'
+                      ? isCurrent ? 1 : 0.96
+                      : scaleValue;
+                  const transitionOpacity = lyricsTransition === 'instant'
+                    ? isCurrent ? 1 : 0
+                    : lyricsTransition === 'fade'
+                      ? isCurrent ? 1 : Math.max(opacityBase, 1 - Math.min(distance, 2.8) * 0.34)
+                      : opacityValue;
+                  const slideShift = lyricsTransition === 'slide' ? (isCurrent ? 0 : isPastLine ? -10 : 10) : 0;
+                  const cssTransition = lyricsTransition === 'smooth'
+                    ? undefined
+                    : lyricsTransition === 'instant'
+                      ? 'opacity 80ms linear'
+                      : 'transform 260ms ease, opacity 220ms ease';
 
                   return (
                     <div
@@ -692,10 +709,11 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
                       className="drive-lyric-line relative flex w-full items-center justify-center px-2 text-center md:px-10 xl:px-16"
                       style={{
                         height: `${lyricRowHeight}px`,
-                        transform: `scale(${scaleValue.toFixed(3)})`,
-                        opacity: opacityValue,
+                        transform: `translate3d(0, ${slideShift}px, 0) scale(${transitionScale.toFixed(3)})`,
+                        opacity: transitionOpacity,
                         zIndex: isReadingLine ? 12 : Math.max(1, 10 - Math.round(distance)),
                         willChange: 'transform, opacity',
+                        transition: cssTransition,
                       }}
                     >
                       <div

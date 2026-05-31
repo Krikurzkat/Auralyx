@@ -116,6 +116,5 @@ export interface User {
   playlistIds?: string[];
   topArtistIds?: string[];
   topTrackIds?: string[];
-  subscription?: string;
   role?: string;
 }

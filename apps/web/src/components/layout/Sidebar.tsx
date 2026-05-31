@@ -23,6 +23,7 @@ import SidebarParticles from '../ui/SidebarParticles';
 
 const navItems = [
   { path: '/', label: 'Home', icon: RiHome5Line, iconActive: RiHome5Fill },
+  { path: '/local', label: 'Music', icon: RiHardDriveLine, iconActive: RiHardDriveLine },
   { path: '/search', label: 'Search', icon: RiSearchLine, iconActive: RiSearchFill },
   { path: '/library', label: 'Your Library', icon: RiMusic2Line, iconActive: RiMusic2Fill },
 ];
@@ -81,7 +82,6 @@ export default function Sidebar() {
         </div>
         <div>
           <div className="text-base font-bold tracking-tight">Auralyx</div>
-          <div className="text-[10px] font-semibold uppercase tracking-widest text-accent">Premium</div>
         </div>
         {/* Close button on mobile */}
         {isMobile && (
@@ -121,35 +121,6 @@ export default function Sidebar() {
           );
         })}
       </nav>
-
-      {/* ─── Music Link ─── */}
-      <div className="px-1 mb-1">
-        <NavLink
-          to="/local"
-          onClick={() => mobileSidebarOpen && toggleMobileSidebar()}
-          className={({ isActive }) =>
-            `group relative overflow-hidden flex items-center gap-3 rounded-xl px-3 py-1.5 text-xs font-medium transition-all border-l-[3px] ${
-              isActive
-                ? 'border-accent bg-[#2A2A2A] text-white'
-                : 'border-transparent text-softText hover:border-accent hover:bg-[#2A2A2A] hover:text-white'
-            }`
-          }
-        >
-          {location.pathname === '/local' && !reduceMotion && (
-            <SidebarParticles variant="active" className="absolute inset-y-0 left-0 w-24" />
-          )}
-          {location.pathname === '/local' && (
-            <span className="pointer-events-none absolute inset-y-0 left-0 w-16 bg-gradient-to-r from-accent/20 to-transparent" />
-          )}
-          <RiHardDriveLine size={18} className="relative z-10" />
-          <span className="relative z-10 flex-1">Music</span>
-          {localTracks.length > 0 && (
-            <span className="relative z-10 rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-bold text-accent">
-              {localTracks.length}
-            </span>
-          )}
-        </NavLink>
-      </div>
 
       {/* ─── Divider ─── */}
       <div className="mx-3 my-4 h-px bg-[#2A2A2A]" />

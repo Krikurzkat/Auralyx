@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-type RightPanelView = 'queue' | 'lyrics' | 'activity' | 'hidden';
+type RightPanelView = 'queue' | 'lyrics' | 'hidden';
 
 interface UIState {
   sidebarCollapsed: boolean;

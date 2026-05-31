@@ -621,7 +621,7 @@ input[type="range"].accent-alt-track {
   will-change: auto;
 }
 
-/* ─── Mini Player Premium Styles ─── */
+/* ─── Mini Player Styles ─── */
 .mini-player-root {
   padding: 0 8px max(6px, env(safe-area-inset-bottom, 6px));
   pointer-events: none;
@@ -881,7 +881,7 @@ input[type="range"]:hover::-webkit-slider-thumb {
   }
 }
 
-/* ─── Up Next Premium Dynamic Popup ─── */
+/* ─── Up Next Dynamic Popup ─── */
 .upnext-popup-card {
   position: fixed;
   top: 80px;

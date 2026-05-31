@@ -151,6 +151,20 @@ export class LocalDB {
       return null;
     }
   }
+
+  async deleteDatabase(): Promise<void> {
+    if (this.db) {
+      this.db.close();
+      this.db = null;
+    }
+
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.deleteDatabase(DB_NAME);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+      request.onblocked = () => reject(new Error('Close other Auralyx tabs before clearing local data.'));
+    });
+  }
 }
 
 export const localDb = new LocalDB();

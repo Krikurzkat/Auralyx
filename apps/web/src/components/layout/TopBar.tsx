@@ -1,8 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { RiArrowLeftSLine, RiArrowRightSLine, RiMenuLine, RiSearchLine, RiSettings4Line } from 'react-icons/ri';
 import { useUIStore } from '../../stores/uiStore';
-import { useAuthStore } from '../../stores/authStore';
-import toast from 'react-hot-toast';
 import { useState, useRef, useEffect } from 'react';
 import { Track, Artist, Album, Playlist } from '../../types';
 import { useLocalLibraryStore } from '../../stores/localLibraryStore';
@@ -13,14 +11,12 @@ export default function TopBar() {
   const navigate = useNavigate();
   const location = useLocation();
   const { searchQuery, setSearchQuery, toggleMobileSidebar } = useUIStore();
-  const { user, isAuthenticated, logout } = useAuthStore();
   const [searchFocused, setSearchFocused] = useState(false);
   const [searchHovered, setSearchHovered] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const searchShellRef = useRef<HTMLDivElement>(null);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
-  const profileButtonRef = useRef<HTMLButtonElement>(null);
 
   const [suggestions, setSuggestions] = useState<{
     tracks: Track[];
@@ -155,38 +151,7 @@ export default function TopBar() {
     });
   };
 
-  const animateProfileButton = (hovered: boolean) => {
-    const button = profileButtonRef.current;
-    if (!button) return;
-
-    gsap.to(button, {
-      scale: hovered ? 1.1 : 1,
-      y: hovered ? -2 : 0,
-      boxShadow: hovered ? '0 14px 30px rgba(232,71,10,0.28)' : '0 0px 0px rgba(232,71,10,0)',
-      duration: 0.22,
-      ease: 'power2.out',
-      overwrite: 'auto',
-      force3D: true,
-    });
-  };
-
-  const pressProfileButton = () => {
-    const button = profileButtonRef.current;
-    if (!button) return;
-    gsap.to(button, {
-      scale: 0.95,
-      duration: 0.1,
-      ease: 'power2.out',
-      overwrite: 'auto',
-    });
-  };
-
   const hasSuggestions = suggestions && (suggestions.tracks.length > 0 || suggestions.artists.length > 0 || suggestions.albums.length > 0 || suggestions.playlists.length > 0);
-  const handleLogout = async () => {
-    await logout();
-    toast.success('Logged out successfully');
-    navigate('/login');
-  };
 
   return (
     <header
@@ -348,64 +313,23 @@ export default function TopBar() {
 
         {/* Right: actions */}
         <div className={`flex items-center ${isGalaxyS8PlusLayout ? 'gap-1' : 'gap-2'}`}>
-          {!isAuthenticated ? (
-            <>
-              <button
-                onClick={() => navigate('/login')}
-                className="hidden items-center gap-1.5 rounded-full px-4 py-2 font-semibold text-softText transition hover:text-white sm:flex"
-              >
-                Log in
-              </button>
-              <button
-                onClick={() => navigate('/signup')}
-                className="hidden items-center gap-1.5 rounded-full bg-theme-gradient px-4 py-2 text-xs font-semibold text-white shadow-glow-sm transition hover:shadow-glow sm:flex"
-              >
-                Sign up
-              </button>
-            </>
-          ) : (
-            <>
-              {user && (
-                <button 
-                  onClick={() => navigate('/admin')}
-                  className="hidden rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-bold tracking-wider text-white shadow-glow-sm transition hover:bg-white/20 sm:block"
-                >
-                  {user.role === 'admin' ? 'ADMIN' : user.role === 'staff' ? 'STAFF' : 'SUBMIT'}
-                </button>
-              )}
-              <button
-                ref={settingsButtonRef}
-                data-gsap-ignore
-                onMouseEnter={() => animateSettingsButton(true)}
-                onMouseLeave={() => animateSettingsButton(false)}
-                onPointerDown={pressSettingsButton}
-                onPointerUp={() => animateSettingsButton(true)}
-                onClick={() => navigate('/settings')}
-                className={`text-softText transition hover:bg-white/5 hover:text-white ${
-                  isGalaxyS8PlusLayout ? 'min-h-[48px] min-w-[48px] rounded-xl p-3' : 'rounded-full p-2'
-                }`}
-              >
-                <RiSettings4Line size={isGalaxyS8PlusLayout ? 18 : 20} />
-              </button>
-              <button
-                ref={profileButtonRef}
-                data-gsap-ignore
-                onMouseEnter={() => animateProfileButton(true)}
-                onMouseLeave={() => animateProfileButton(false)}
-                onPointerDown={pressProfileButton}
-                onPointerUp={() => animateProfileButton(true)}
-                onClick={() => navigate('/profile')}
-                className={`flex items-center justify-center rounded-full bg-theme-gradient text-xs font-bold text-white shadow-glow-sm ${
-                  isGalaxyS8PlusLayout ? 'h-10 w-10' : 'h-8 w-8'
-                }`}
-              >
-                {user?.displayName?.[0]?.toUpperCase() || 'U'}
-              </button>
-              <button onClick={() => { void handleLogout(); }} className="ml-2 hidden text-xs font-medium text-dimText transition hover:text-white sm:block">
-                Log out
-              </button>
-            </>
-          )}
+          <span className="hidden rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-200 sm:inline-flex">
+            Offline
+          </span>
+          <button
+            ref={settingsButtonRef}
+            data-gsap-ignore
+            onMouseEnter={() => animateSettingsButton(true)}
+            onMouseLeave={() => animateSettingsButton(false)}
+            onPointerDown={pressSettingsButton}
+            onPointerUp={() => animateSettingsButton(true)}
+            onClick={() => navigate('/settings')}
+            className={`text-softText transition hover:bg-white/5 hover:text-white ${
+              isGalaxyS8PlusLayout ? 'min-h-[48px] min-w-[48px] rounded-xl p-3' : 'rounded-full p-2'
+            }`}
+          >
+            <RiSettings4Line size={isGalaxyS8PlusLayout ? 18 : 20} />
+          </button>
         </div>
       </div>
     </header>
