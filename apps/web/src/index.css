@@ -934,34 +934,50 @@ input[type="range"]:hover::-webkit-slider-thumb {
   pointer-events: none;
 }
 
-/* Tablet home hero: PC composition scaled down inside the hero card. */
+/* Tablet home hero: Simplified layout for medium screens. */
 @media (min-width: 769px) and (max-width: 1279px) {
   .home-hero-feature-grid {
-    grid-template-columns: minmax(0, 1.1fr) minmax(170px, 0.78fr) clamp(150px, 17vw, 180px);
-    column-gap: clamp(0.75rem, 1.35vw, 1rem);
+    grid-template-columns: minmax(0, 1fr) clamp(140px, 18vw, 180px);
+    column-gap: clamp(0.75rem, 1.5vw, 1.25rem);
     align-items: start;
-  }
-
-  .home-hero-album-copy {
-    min-width: 0;
   }
 }
 
 @media (min-width: 769px) and (max-width: 980px) {
   .home-hero-feature-grid {
-    grid-template-columns: minmax(0, 1fr) minmax(145px, 0.72fr) 132px;
+    grid-template-columns: minmax(0, 1fr) 132px;
     column-gap: 0.7rem;
   }
 
-  .home-hero-album-copy h2,
   .home-hero-feature-grid h1 {
     font-size: 1.45rem;
   }
 
-  .home-hero-album-copy p,
   .home-hero-feature-grid p {
     font-size: 0.68rem;
   }
+}
+
+/* Hero badge shimmer effect */
+.hero-badge-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.hero-badge-shimmer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+  animation: badge-shimmer 3s ease-in-out infinite;
+}
+
+@keyframes badge-shimmer {
+  0%, 100% { left: -100%; }
+  50% { left: 100%; }
 }
 
 /* Responsive positioning for smaller screens */

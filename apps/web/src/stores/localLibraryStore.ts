@@ -314,7 +314,7 @@ function getEmbeddedLyrics(metadata: ParsedAudioMetadata): string | undefined {
   return cleanedTexts.find(hasSyncedLyricTimestamps) || cleanedTexts.join('\n\n');
 }
 
-function parseFilenameTemplate(fileName: string): { title: string; artist?: string; album?: string; genre?: string; year?: number } {
+function parseFilenameTemplate(fileName: string, artistFrequencies?: Map<string, number>): { title: string; artist?: string; album?: string; genre?: string; year?: number } {
   const baseName = fileName
     .replace(/\.[^.]+$/, '')
     .replace(/^\s*\d{1,3}\s*[-._]\s*/, '')
@@ -355,19 +355,62 @@ function parseFilenameTemplate(fileName: string): { title: string; artist?: stri
     };
   }
 
+  const cleanForArtistCheck = (str: string) => str.replace(/\([^)]*\)|\[[^\]]*\]/g, '').trim().toLowerCase();
+
   if (parts.length === 3) {
-    return {
-      title: parts[0],
-      artist: parts[1],
-      album: parts[2],
-    };
+    let title = parts[1]; // default Artist - Title - Album
+    let artist = parts[0];
+    const album = parts[2];
+    
+    const p0Clean = cleanForArtistCheck(parts[0]);
+    const p1Clean = cleanForArtistCheck(parts[1]);
+    const p0Score = artistFrequencies?.get(p0Clean) || 0;
+    const p1Score = artistFrequencies?.get(p1Clean) || 0;
+
+    if (p1Score > p0Score) {
+      title = parts[0];
+      artist = parts[1];
+    }
+    
+    artist = artist.replace(/\s*(\(lyrics\)|\(official[^)]*\)|\[official[^\]]*\])\s*/gi, '').trim();
+    return { title, artist, album };
   }
 
   if (parts.length === 2) {
-    return {
-      title: parts[0],
-      artist: parts[1],
-    };
+    // Default to the industry standard for mp3s: Artist - Title
+    let title = parts[1];
+    let artist = parts[0];
+    
+    const p0Clean = cleanForArtistCheck(parts[0]);
+    const p1Clean = cleanForArtistCheck(parts[1]);
+    const p0Score = artistFrequencies?.get(p0Clean) || 0;
+    const p1Score = artistFrequencies?.get(p1Clean) || 0;
+
+    if (p0Score !== p1Score) {
+      if (p0Score > p1Score) {
+        title = parts[1]; // p0 is artist
+        artist = parts[0];
+      } else {
+        title = parts[0]; // p1 is artist
+        artist = parts[1];
+      }
+    } else {
+      // Heuristic 2: Title Markers
+      const titleMarkers = /\b(lyrics|official|video|audio|feat\.?|ft\.?|prod\.?|remix|edit|mix|cover|live)\b/i;
+      const part0HasMarker = titleMarkers.test(parts[0]);
+      const part1HasMarker = titleMarkers.test(parts[1]);
+
+      if (part0HasMarker && !part1HasMarker) {
+        // e.g. "Risk It All (Lyrics) - Bruno Mars" -> Title - Artist
+        title = parts[0];
+        artist = parts[1];
+      }
+    }
+
+    // Clean up artist string just in case it had (Lyrics) attached
+    artist = artist.replace(/\s*(\(lyrics\)|\(official[^)]*\)|\[official[^\]]*\])\s*/gi, '').trim();
+
+    return { title, artist };
   }
 
   return {
@@ -613,6 +656,29 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
 
     const { parseBlob } = await import('music-metadata-browser');
     const newTracks: LocalTrack[] = [];
+    
+    // Build a frequency map of potential artist strings to smartly deduce Artist vs Title
+    const artistFrequencies = new Map<string, number>();
+    // Give existing library artists a massive score weight
+    get().localTracks.forEach(t => {
+      const clean = t.artist.trim().toLowerCase();
+      if (clean && clean !== 'unknown artist') {
+        artistFrequencies.set(clean, 1000);
+      }
+    });
+    
+    // Analyze the current batch to find repeating strings (which are usually the artist name)
+    const cleanForArtistCheck = (str: string) => str.replace(/\([^)]*\)|\[[^\]]*\]/g, '').trim().toLowerCase();
+    for (const { file } of screenedFiles) {
+      const baseName = file.name.replace(/\.[^.]+$/, '').replace(/^\s*\d{1,3}\s*[-._]\s*/, '').replace(/\s+-\s*$/, '').trim();
+      const parts = baseName.split(/\s+-\s+/).map(cleanFilenamePart).filter(Boolean);
+      for (const part of parts) {
+        const clean = cleanForArtistCheck(part);
+        if (clean) {
+          artistFrequencies.set(clean, (artistFrequencies.get(clean) || 0) + 1);
+        }
+      }
+    }
 
     for (let i = 0; i < screenedFiles.length; i++) {
       const { file, fileHash } = screenedFiles[i];
@@ -624,7 +690,7 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
       try {
         const metadata = await parseBlob(file);
         const { common, format } = metadata;
-        const filenameMetadata = parseFilenameTemplate(file.name);
+        const filenameMetadata = parseFilenameTemplate(file.name, artistFrequencies);
 
         // Extract cover art
         let coverUrl: string | undefined;
@@ -685,7 +751,7 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
         newTracks.push(track);
       } catch {
         // Fallback: add with basic metadata derived from filename
-        const filenameMetadata = parseFilenameTemplate(file.name);
+        const filenameMetadata = parseFilenameTemplate(file.name, artistFrequencies);
         const title = filenameMetadata.title;
         const artist = filenameMetadata.artist || 'Unknown Artist';
         const album = filenameMetadata.album || 'Unknown Album';

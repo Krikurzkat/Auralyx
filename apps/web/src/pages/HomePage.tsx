@@ -358,194 +358,197 @@ export default function HomePage() {
 
       {/* Hero Banner - Enhanced */}
       <section className="hidden items-start gap-4 md:grid md:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[1.5fr_0.5fr]">
-        <div ref={heroRef} className="group relative min-h-[360px] overflow-hidden rounded-[24px] bg-gradient-to-br from-[#1A1A1A] via-[#1F1F1F] to-[#151515] p-5 shadow-2xl border border-white/5 flex flex-col justify-between gap-4 xl:min-h-[280px] xl:p-4">
+        <div ref={heroRef} className="group relative overflow-hidden rounded-[24px] bg-gradient-to-br from-[#111113] via-[#18181C] to-[#121215] shadow-2xl border border-white/[0.06]">
+          {/* Animated accent edge line */}
+          <div className="absolute left-0 top-0 bottom-0 w-[3px] z-20 rounded-l-[24px] overflow-hidden">
+            <div className="h-full w-full bg-theme-gradient opacity-60" />
+          </div>
+
           {/* Animated Background Blobs */}
           <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-            <div className="absolute left-[-15%] top-[-20%] h-[380px] w-[380px] rounded-full bg-accent/40 blur-[100px] animate-pulse-glow" />
-            <div className="absolute right-[-10%] top-[8%] h-[320px] w-[320px] rounded-full bg-accentAlt/30 blur-[90px] animate-pulse-glow" style={{ animationDelay: '1s' }} />
-            <div className="absolute bottom-[-25%] left-[35%] h-[280px] w-[280px] rounded-full bg-white/15 blur-[80px] animate-pulse-glow" style={{ animationDelay: '2s' }} />
+            <div className="absolute left-[-12%] top-[-18%] h-[340px] w-[340px] rounded-full bg-gradient-from/30 blur-[110px] animate-pulse-glow" />
+            <div className="absolute right-[15%] top-[5%] h-[280px] w-[280px] rounded-full bg-gradient-to/20 blur-[100px] animate-pulse-glow" style={{ animationDelay: '1.2s' }} />
+            <div className="absolute bottom-[-20%] left-[40%] h-[240px] w-[240px] rounded-full bg-purple-500/10 blur-[90px] animate-pulse-glow" style={{ animationDelay: '2.4s' }} />
           </div>
           
-          {/* Gradient Overlay */}
-          <div className="absolute inset-0 z-0 bg-gradient-to-r from-black/90 via-black/50 to-transparent pointer-events-none" />
+          {/* Gradient Overlays */}
+          <div className="absolute inset-0 z-0 bg-gradient-to-r from-black/80 via-black/40 to-transparent pointer-events-none" />
+          <div className="absolute inset-0 z-0 bg-gradient-to-t from-black/30 via-transparent to-black/20 pointer-events-none" />
 
           {/* Particle Nebula Dust */}
           <NebulaDust id="hero-nebula" />
 
-          <div className="home-hero-feature-grid relative z-10 grid gap-4 md:grid-cols-[minmax(0,1fr)_300px_180px] xl:grid-cols-[minmax(0,1fr)_280px_270px] xl:gap-8">
-            <div ref={contentRef} className="max-w-lg space-y-3 md:border-r md:border-white/15 md:pr-5 xl:pr-8">
-              <div className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/15 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-accent backdrop-blur-sm shadow-lg">
-                <RiFireLine size={12} className="animate-pulse" />
-                Total Music Library
-              </div>
-              <h1 className="text-3xl font-black leading-[0.98] md:text-[1.85rem] xl:text-[2.15rem] text-white tracking-tight drop-shadow-2xl">
-                Most Listened <br/>
-                <span className="text-gradient">Music</span>
-              </h1>
-              <p className="max-w-md text-sm md:text-xs xl:text-sm text-white/90 leading-snug font-medium">
-                Experience the pinnacle of offline listening. Dive into your most popular, frequently played music tracks available exclusively on your Total Music platform.
-              </p>
-              <div className="flex flex-wrap gap-3 pointer-events-auto">
-                <button
-                  onClick={() => { if (topListenedTracks[0]) playTrack(topListenedTracks[0], allTracks); }}
-                  disabled={topListenedTracks.length === 0}
-                  className="group flex items-center gap-2 rounded-full bg-theme-gradient px-5 py-2.5 text-sm md:px-4 md:py-2 md:text-xs xl:px-5 xl:py-2.5 xl:text-sm font-bold text-white transition-all hover:scale-[1.05] hover:shadow-glow-lg active:scale-95 disabled:opacity-50 disabled:hover:scale-100 shadow-glow"
-                >
-                  <RiPlayFill size={18} className="group-hover:scale-110 transition-transform" /> 
-                  Play Most Listened
-                </button>
-                <button
-                  onClick={() => navigate('/local')}
-                  className="group rounded-full border-2 border-white/30 bg-white/10 px-5 py-2.5 text-sm md:px-4 md:py-2 md:text-xs xl:px-5 xl:py-2.5 xl:text-sm font-semibold text-white backdrop-blur-xl transition-all hover:bg-white/20 hover:border-white/50 hover:scale-[1.05] active:scale-95 shadow-lg"
-                >
-                  Open Library
-                </button>
-              </div>
-            </div>
-
-            <div className="home-hero-album-copy hidden items-start justify-start md:flex xl:translate-x-4">
-              <div className="space-y-3">
-                <div className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/15 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-accent backdrop-blur-sm shadow-lg">
-                  <RiAlbumLine size={12} />
-                  Best Album
+          {/* Two-zone layout: Left content | Right track list */}
+          <div className="relative z-10 flex">
+            {/* Left Zone — Hero content + Album spotlight */}
+            <div className="flex-1 min-w-0 p-5 xl:p-6 flex flex-col justify-between gap-5">
+              <div className="home-hero-feature-grid grid gap-4 md:grid-cols-[minmax(0,1fr)_180px] xl:grid-cols-[minmax(0,1fr)_270px] xl:gap-6 items-start">
+                <div ref={contentRef} className="max-w-lg space-y-3">
+                  <div className="hero-badge-shimmer inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-accent backdrop-blur-sm">
+                    <RiFireLine size={12} className="animate-pulse" />
+                    Your Music Library
+                  </div>
+                  <h1 className="text-3xl font-black leading-[1.02] md:text-[1.85rem] xl:text-[2.5rem] text-white tracking-tight">
+                    Most Listened <br/>
+                    <span className="text-gradient">Music</span>
+                  </h1>
+                  <p className="max-w-md text-sm md:text-xs xl:text-[0.9rem] text-white/70 leading-relaxed font-medium">
+                    Dive into your most popular, frequently played tracks from your offline music library.
+                  </p>
+                  <div className="flex flex-wrap gap-3 pointer-events-auto pt-1">
+                    <button
+                      onClick={() => { if (topListenedTracks[0]) playTrack(topListenedTracks[0], allTracks); }}
+                      disabled={topListenedTracks.length === 0}
+                      className="group/btn flex items-center gap-2 rounded-full bg-theme-gradient px-5 py-2.5 text-sm md:px-4 md:py-2 md:text-xs xl:px-6 xl:py-2.5 xl:text-sm font-bold text-white transition-all hover:scale-[1.05] hover:shadow-glow-lg active:scale-95 disabled:opacity-50 disabled:hover:scale-100 shadow-glow"
+                    >
+                      <RiPlayFill size={18} className="group-hover/btn:scale-110 transition-transform" /> 
+                      Play Top Track
+                    </button>
+                    <button
+                      onClick={() => navigate('/local')}
+                      className="rounded-full border border-white/20 bg-white/[0.06] px-5 py-2.5 text-sm md:px-4 md:py-2 md:text-xs xl:px-6 xl:py-2.5 xl:text-sm font-semibold text-white/90 backdrop-blur-xl transition-all hover:bg-white/15 hover:border-white/35 hover:scale-[1.05] active:scale-95"
+                    >
+                      Open Library
+                    </button>
+                  </div>
                 </div>
-                <h2 className="max-w-[260px] text-left text-3xl font-black leading-[0.98] text-white tracking-tight drop-shadow-2xl md:text-[1.85rem] xl:text-[2.15rem]">
-                  <span className="whitespace-nowrap">Most Listened</span> <br />
-                  <span className="text-gradient">Album</span>
-                </h2>
-                <p className="max-w-[250px] text-sm md:text-xs xl:text-sm font-medium leading-snug text-white/85">
-                  Your top album based on repeat plays and listening history across your local music library.
-                </p>
-                {mostPlayedAlbum && (
-                  <div className="flex max-w-[250px] flex-wrap gap-2 pt-1">
-                    <div className="rounded-full border border-accent/25 bg-accent/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-accent">
-                      {mostPlayedAlbum.plays} play{mostPlayedAlbum.plays === 1 ? '' : 's'}
-                    </div>
-                    <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white/70">
-                      {mostPlayedAlbum.trackCount} track{mostPlayedAlbum.trackCount === 1 ? '' : 's'}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
 
-            <div className="home-hero-album-cover hidden items-center justify-end md:flex xl:translate-x-3">
-              <div className="group relative aspect-square w-full max-w-[180px] overflow-hidden rounded-[22px] border border-white/10 bg-white/5 text-left shadow-2xl shadow-black/40 transition-all hover:scale-[1.02] hover:border-accent/30 xl:max-w-[250px]">
-                <button
-                  onClick={() => {
-                    if (mostPlayedAlbum) navigate(`/album/${encodeURIComponent(mostPlayedAlbum.id)}`);
-                  }}
-                  disabled={!mostPlayedAlbum}
-                  className="absolute inset-0 h-full w-full text-left disabled:pointer-events-none"
-                  aria-label={mostPlayedAlbum ? `Open ${mostPlayedAlbum.title}` : 'Open most listened album'}
-                >
-                  {activeAlbumCoverUrl ? (
-                    <img
-                      key={activeAlbumCoverUrl}
-                      src={activeAlbumCoverUrl}
-                      alt={mostPlayedAlbum?.title || 'Most Listened Album'}
-                      className="h-full w-full object-cover transition duration-500 ease-out group-hover:scale-[1.03]"
-                    />
-                  ) : (
-                    <div
-                      className="h-full w-full"
-                      style={{
-                        background: `linear-gradient(135deg, ${mostPlayedAlbum?.coverGradient?.[0] || '#6d28d9'}, ${mostPlayedAlbum?.coverGradient?.[1] || '#0f766e'})`,
+                {/* Album Cover — visible on all md+ screens, next to text */}
+                <div className="home-hero-album-cover hidden items-start justify-end md:flex">
+                  <div className="group/album relative aspect-square w-full max-w-[160px] overflow-hidden rounded-[18px] border border-white/10 bg-white/5 text-left shadow-2xl shadow-black/50 transition-all hover:scale-[1.03] hover:border-accent/25 xl:max-w-[240px] xl:rounded-[22px]">
+                    <button
+                      onClick={() => {
+                        if (mostPlayedAlbum) navigate(`/album/${encodeURIComponent(mostPlayedAlbum.id)}`);
                       }}
-                    />
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/5 to-white/10" />
-                  <div className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/20 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-accent backdrop-blur-md shadow-glow-sm">
-                    <RiAlbumLine size={11} />
-                    Album
-                  </div>
-                  <div className="absolute bottom-3 left-3 right-3 min-w-0">
-                    <div className="truncate text-sm font-black text-white transition-colors group-hover:text-accent">{mostPlayedAlbum?.title || 'Most Listened'}</div>
-                    <div className="truncate text-[11px] text-white/65">{mostPlayedAlbum?.artist || 'Total Music Library'}</div>
-                    {mostPlayedAlbum && (
-                      <div className="mt-0.5 text-[10px] font-semibold text-white/35">
-                        {mostPlayedAlbum.plays} play{mostPlayedAlbum.plays === 1 ? '' : 's'}
+                      disabled={!mostPlayedAlbum}
+                      className="absolute inset-0 h-full w-full text-left disabled:pointer-events-none"
+                      aria-label={mostPlayedAlbum ? `Open ${mostPlayedAlbum.title}` : 'Open most listened album'}
+                    >
+                      {activeAlbumCoverUrl ? (
+                        <img
+                          key={activeAlbumCoverUrl}
+                          src={activeAlbumCoverUrl}
+                          alt={mostPlayedAlbum?.title || 'Most Listened Album'}
+                          className="h-full w-full object-cover transition duration-500 ease-out group-hover/album:scale-[1.05]"
+                        />
+                      ) : (
+                        <div
+                          className="h-full w-full"
+                          style={{
+                            background: `linear-gradient(135deg, ${mostPlayedAlbum?.coverGradient?.[0] || '#6d28d9'}, ${mostPlayedAlbum?.coverGradient?.[1] || '#0f766e'})`,
+                          }}
+                        />
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-white/[0.06]" />
+                      <div className="absolute left-2.5 top-2.5 inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-black/40 px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.14em] text-accent backdrop-blur-md xl:left-3 xl:top-3 xl:px-2.5 xl:py-1 xl:text-[9px]">
+                        <RiAlbumLine size={10} />
+                        Top Album
+                      </div>
+                      <div className="absolute bottom-2.5 left-2.5 right-2.5 min-w-0 xl:bottom-3 xl:left-3 xl:right-3">
+                        <div className="truncate text-xs font-black text-white transition-colors group-hover/album:text-accent xl:text-sm">{mostPlayedAlbum?.title || 'Most Listened'}</div>
+                        <div className="truncate text-[10px] text-white/55 xl:text-[11px]">{mostPlayedAlbum?.artist || 'Total Music Library'}</div>
+                        {mostPlayedAlbum && (
+                          <div className="mt-0.5 flex items-center gap-1.5">
+                            <span className="text-[9px] font-semibold text-accent/70">{mostPlayedAlbum.plays} play{mostPlayedAlbum.plays === 1 ? '' : 's'}</span>
+                            <span className="text-[9px] text-white/30">·</span>
+                            <span className="text-[9px] font-semibold text-white/35">{mostPlayedAlbum.trackCount} track{mostPlayedAlbum.trackCount === 1 ? '' : 's'}</span>
+                          </div>
+                        )}
+                      </div>
+                    </button>
+
+                    {spotlightAlbums.length > 1 && (
+                      <div className="pointer-events-none absolute inset-x-2 top-1/2 z-20 flex -translate-y-1/2 items-center justify-between opacity-0 transition-opacity duration-300 group-hover/album:opacity-100">
+                        <button
+                          type="button"
+                          onClick={() => changeSpotlightAlbum(-1)}
+                          className="pointer-events-auto flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-black/50 text-white shadow-lg backdrop-blur-md transition hover:bg-black/70 hover:text-accent active:scale-90"
+                          aria-label="Previous album cover"
+                        >
+                          <RiArrowLeftSLine size={18} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => changeSpotlightAlbum(1)}
+                          className="pointer-events-auto flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-black/50 text-white shadow-lg backdrop-blur-md transition hover:bg-black/70 hover:text-accent active:scale-90"
+                          aria-label="Next album cover"
+                        >
+                          <RiArrowRightSLine size={18} />
+                        </button>
+                      </div>
+                    )}
+
+                    {mostPlayedAlbum && mostPlayedAlbum.coverUrls.length > 1 && (
+                      <div className="pointer-events-none absolute bottom-2.5 right-2.5 z-20 flex max-w-[60px] gap-1 xl:bottom-3 xl:right-3">
+                        {mostPlayedAlbum.coverUrls.slice(0, 4).map((coverUrl, index) => (
+                          <span
+                            key={`${coverUrl}-${index}`}
+                            className={`h-1.5 rounded-full transition-all ${
+                              index === spotlightCoverIndex % mostPlayedAlbum.coverUrls.length
+                                ? 'w-3.5 bg-accent'
+                                : 'w-1.5 bg-white/40'
+                            }`}
+                          />
+                        ))}
                       </div>
                     )}
                   </div>
-                </button>
+                </div>
+              </div>
+            </div>
 
-                {spotlightAlbums.length > 1 && (
-                  <div className="pointer-events-none absolute inset-x-2 top-1/2 z-20 flex -translate-y-1/2 items-center justify-between opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                    <button
-                      type="button"
-                      onClick={() => changeSpotlightAlbum(-1)}
-                      className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-black/45 text-white shadow-lg backdrop-blur-md transition hover:bg-black/70 hover:text-accent active:scale-95"
-                      aria-label="Previous album cover"
-                    >
-                      <RiArrowLeftSLine size={22} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => changeSpotlightAlbum(1)}
-                      className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-black/45 text-white shadow-lg backdrop-blur-md transition hover:bg-black/70 hover:text-accent active:scale-95"
-                      aria-label="Next album cover"
-                    >
-                      <RiArrowRightSLine size={22} />
-                    </button>
-                  </div>
-                )}
+            {/* Vertical Divider */}
+            <div className="hidden md:flex w-px self-stretch my-4 bg-gradient-to-b from-transparent via-white/10 to-transparent flex-shrink-0" />
 
-                {mostPlayedAlbum && mostPlayedAlbum.coverUrls.length > 1 && (
-                  <div className="pointer-events-none absolute bottom-3 right-3 z-20 flex max-w-[72px] gap-1">
-                    {mostPlayedAlbum.coverUrls.slice(0, 4).map((coverUrl, index) => (
-                      <span
-                        key={`${coverUrl}-${index}`}
-                        className={`h-1.5 rounded-full transition-all ${
-                          index === spotlightCoverIndex % mostPlayedAlbum.coverUrls.length
-                            ? 'w-4 bg-accent'
-                            : 'w-1.5 bg-white/45'
-                        }`}
-                      />
-                    ))}
+            {/* Right Zone — Top Tracks list */}
+            <div className="hidden md:flex flex-col w-[220px] xl:w-[260px] flex-shrink-0 p-4 xl:p-5 gap-2.5">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-accent/15">
+                  <RiBarChartBoxLine size={12} className="text-accent" />
+                </div>
+                <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/60">Top Tracks</span>
+              </div>
+              <div className="flex flex-col gap-2 flex-1">
+                {topListenedTracks.map((track, index) => (
+                  <button
+                    key={track.id}
+                    onClick={() => playTrack(track, allTracks)}
+                    className="group/track flex items-center gap-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] p-2 text-left transition-all hover:scale-[1.02] border border-transparent hover:border-white/10"
+                  >
+                    <div className="relative flex-shrink-0">
+                      {track.coverUrl ? (
+                        <img
+                          src={track.coverUrl}
+                          alt={track.title}
+                          className="h-10 w-10 rounded-lg object-cover shadow-md"
+                        />
+                      ) : (
+                        <div
+                          className="h-10 w-10 rounded-lg shadow-md"
+                          style={{ background: `linear-gradient(135deg, ${track.coverGradient?.[0] || '#333'}, ${track.coverGradient?.[1] || '#222'})` }}
+                        />
+                      )}
+                      <div className="absolute -top-1 -left-1 flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[8px] font-black text-white shadow-sm">
+                        {index + 1}
+                      </div>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-xs font-bold text-white group-hover/track:text-accent transition-colors">{track.title}</div>
+                      <div className="truncate text-[10px] text-white/50">{track.artist}</div>
+                    </div>
+                    <div className="flex-shrink-0 opacity-0 group-hover/track:opacity-100 transition-opacity">
+                      <RiPlayFill size={14} className="text-accent" />
+                    </div>
+                  </button>
+                ))}
+                {topListenedTracks.length === 0 && (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center py-4 gap-2">
+                    <RiFolderMusicLine size={24} className="text-white/20" />
+                    <span className="text-[11px] text-white/40 leading-snug">Start playing to see your top tracks here</span>
                   </div>
                 )}
               </div>
             </div>
-          </div>
-          
-          {/* Top Tracks Cards - Enhanced */}
-          <div className="grid gap-2.5 md:grid-cols-3 relative z-10">
-            {topListenedTracks.map((track, index) => (
-              <button
-                key={track.id}
-                onClick={() => playTrack(track, allTracks)}
-                className="group rounded-xl bg-black/50 p-2.5 text-left backdrop-blur-xl transition-all hover:bg-black/70 hover:scale-[1.03] border border-white/10 hover:border-white/20 shadow-xl hover:shadow-2xl"
-              >
-                <div className="flex items-center gap-2.5">
-                  {track.coverUrl ? (
-                    <img
-                      src={track.coverUrl}
-                      alt={track.title}
-                      className="h-10 w-10 flex-shrink-0 rounded-lg object-cover shadow-lg group-hover:shadow-glow-sm transition-shadow"
-                    />
-                  ) : (
-                    <div
-                      className="h-10 w-10 flex-shrink-0 rounded-lg shadow-lg group-hover:shadow-glow-sm transition-shadow"
-                      style={{ background: `linear-gradient(135deg, ${track.coverGradient?.[0] || '#333'}, ${track.coverGradient?.[1] || '#222'})` }}
-                    />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-accent mb-0.5">
-                      Top {index + 1}
-                    </div>
-                    <div className="truncate text-xs font-bold text-white group-hover:text-accent transition-colors">{track.title}</div>
-                    <div className="truncate text-[11px] text-white/70">{track.artist}</div>
-                  </div>
-                </div>
-              </button>
-            ))}
-            {topListenedTracks.length === 0 && (
-              <div className="rounded-xl bg-black/50 p-4 text-sm text-white/70 backdrop-blur-xl md:col-span-3 border border-white/10 flex items-center gap-3">
-                <RiFolderMusicLine size={26} className="text-white/40" />
-                <span>Your most listened music will appear here once you start playing.</span>
-              </div>
-            )}
           </div>
         </div>
 
