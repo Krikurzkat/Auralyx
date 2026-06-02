@@ -28,4 +28,14 @@ if (fs.existsSync(metadataFile)) {
   }
 }
 
+const musicModuleFile = path.join(__dirname, '..', 'node_modules', 'react-native-track-player', 'android', 'src', 'main', 'java', 'com', 'doublesymmetry', 'trackplayer', 'module', 'MusicModule.kt');
+
+if (fs.existsSync(musicModuleFile)) {
+  let content = fs.readFileSync(musicModuleFile, 'utf8');
+  content = content.replace('callback.resolve(Arguments.fromBundle(musicService.tracks[index].originalItem))', 'callback.resolve(Arguments.fromBundle(musicService.tracks[index].originalItem ?: Bundle()))');
+  content = content.replace('musicService.tracks[musicService.getCurrentTrackIndex()].originalItem\n            )', 'musicService.tracks[musicService.getCurrentTrackIndex()].originalItem ?: Bundle()\n            )');
+  fs.writeFileSync(musicModuleFile, content);
+  console.log('Patched MusicModule.kt');
+}
+
 console.log('Done patching react-native-track-player');
