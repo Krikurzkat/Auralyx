@@ -974,7 +974,7 @@ export default function LocalLibraryPage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="audio/*,.aac,.aiff,.alac,.flac,.m4a,.mp3,.mp4,.mpeg,.oga,.ogg,.opus,.wav,.wave,.webm,.wma"
+            accept="audio/*,.aac,.aiff,.alac,.flac,.m4a,.mp3,.mp4,.mpeg,.oga,.ogg,.opus,.wav,.wave,.webm,.wma,.zip,.rar,.7z,.tar,.gz,.bz2"
             multiple
             className="hidden"
             onChange={e => { if (e.target.files && e.target.files.length > 0) { importFiles(e.target.files); e.target.value = ''; } }}
@@ -982,7 +982,7 @@ export default function LocalLibraryPage() {
           <input
             ref={folderInputRef}
             type="file"
-            accept="audio/*,.aac,.aiff,.alac,.flac,.m4a,.mp3,.mp4,.mpeg,.oga,.ogg,.opus,.wav,.wave,.webm,.wma"
+            accept="audio/*,.aac,.aiff,.alac,.flac,.m4a,.mp3,.mp4,.mpeg,.oga,.ogg,.opus,.wav,.wave,.webm,.wma,.zip,.rar,.7z,.tar,.gz,.bz2"
             multiple
             className="hidden"
             {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}

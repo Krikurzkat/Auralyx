@@ -56,6 +56,7 @@ const AUDIO_MIME_TYPES = new Set([
   'audio/x-ms-wma',
   'audio/x-wav',
 ]);
+const COMPRESSED_EXTENSIONS = new Set(['zip', 'rar', '7z', 'tar', 'gz', 'bz2']);
 const COVER_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp']);
 const COVER_NAME_PRIORITY = ['cover', 'folder', 'front', 'album'];
 
@@ -89,6 +90,64 @@ function getImportDirectory(file: ImportableFile): string {
 function isAudioFile(file: File): boolean {
   const extension = getFileExtension(file.name);
   return AUDIO_EXTENSIONS.has(extension) || AUDIO_MIME_TYPES.has(file.type) || file.type.startsWith('audio/');
+}
+
+function isCompressedFile(file: File): boolean {
+  const extension = getFileExtension(file.name);
+  return COMPRESSED_EXTENSIONS.has(extension);
+}
+
+async function extractFilesFromArchive(file: File): Promise<File[]> {
+  const extension = getFileExtension(file.name);
+  
+  // Only support ZIP files for now (jszip library)
+  if (extension !== 'zip') {
+    console.warn(`[LocalLibrary] Unsupported archive format: ${extension}. Only ZIP files are supported.`);
+    return [];
+  }
+
+  try {
+    const JSZip = (await import('jszip')).default;
+    const zip = new JSZip();
+    const zipContent = await zip.loadAsync(file);
+    const extractedFiles: File[] = [];
+
+    // Extract all files from the archive
+    for (const [relativePath, zipEntry] of Object.entries(zipContent.files)) {
+      // Skip directories
+      if (zipEntry.dir) continue;
+
+      try {
+        // Get the file as a Blob
+        const blob = await zipEntry.async('blob');
+        
+        // Get just the filename from the path
+        const fileName = relativePath.split('/').pop() || relativePath;
+        
+        // Create a File object with the extracted content
+        const extractedFile = new File([blob], fileName, {
+          type: blob.type || 'application/octet-stream',
+          lastModified: zipEntry.date?.getTime() || Date.now(),
+        });
+
+        // Add webkitRelativePath to maintain folder structure
+        Object.defineProperty(extractedFile, 'webkitRelativePath', {
+          value: relativePath,
+          writable: false,
+        });
+
+        extractedFiles.push(extractedFile);
+      } catch (err) {
+        console.error(`[LocalLibrary] Failed to extract file ${relativePath}:`, err);
+      }
+    }
+
+    console.info(`[LocalLibrary] Extracted ${extractedFiles.length} files from ${file.name}`);
+    return extractedFiles;
+  } catch (err) {
+    console.error(`[LocalLibrary] Failed to extract archive ${file.name}:`, err);
+    return [];
+  }
 }
 
 async function hashLocalFile(file: File): Promise<string> {
@@ -579,7 +638,32 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
   },
 
   importFiles: async (files: FileList | File[]) => {
-    const allFiles = Array.from(files);
+    let allFiles = Array.from(files);
+    console.info(`[LocalLibrary] Starting import with ${allFiles.length} file(s)`);
+    
+    // Log file types for debugging
+    const fileTypes = allFiles.map(f => `${f.name} (${getFileExtension(f.name)})`);
+    console.info(`[LocalLibrary] Files:`, fileTypes);
+    
+    // Extract compressed files first
+    const compressedFiles = allFiles.filter(isCompressedFile);
+    if (compressedFiles.length > 0) {
+      console.info(`[LocalLibrary] Found ${compressedFiles.length} compressed file(s), extracting...`);
+      console.info(`[LocalLibrary] Compressed files:`, compressedFiles.map(f => f.name));
+      
+      const extractedFilesArrays = await Promise.all(
+        compressedFiles.map(file => extractFilesFromArchive(file))
+      );
+      
+      const extractedFiles = extractedFilesArrays.flat();
+      console.info(`[LocalLibrary] Extracted ${extractedFiles.length} files from archives`);
+      
+      // Remove compressed files from the list and add extracted files
+      allFiles = allFiles.filter(f => !isCompressedFile(f)).concat(extractedFiles);
+      
+      console.info(`[LocalLibrary] Total files after extraction: ${allFiles.length}`);
+    }
+    
     const playerPreferences = usePlayerStore.getState();
     const coverIndex = playerPreferences.attachSidecarFiles ? buildCoverFileIndex(allFiles) : undefined;
     const lyricIndex = playerPreferences.attachSidecarFiles ? buildLyricFileIndex(allFiles) : undefined;

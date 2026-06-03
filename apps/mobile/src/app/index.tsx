@@ -19,9 +19,9 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Track, useProgress } from 'react-native-track-player';
 import EqualizerBars from '../components/EqualizerBars';
-import { usePlayerStore } from '../stores/playerStore';
+import { usePlayerProgress } from '../hooks/usePlayerProgress';
+import { type Track, usePlayerStore } from '../stores/playerStore';
 
 const HERO_IMAGE = require('../../assets/images/logo-glow.png');
 
@@ -98,7 +98,7 @@ function getPlaceholderGradient(index: number) {
 
 export default function LibraryScreen() {
   const insets = useSafeAreaInsets();
-  const progress = useProgress(250);
+  const progress = usePlayerProgress(250);
   const {
     playQueue,
     scanLocalMusic,
@@ -147,7 +147,11 @@ export default function LibraryScreen() {
   }, [isSetup, scanLocalMusic, setupPlayer]);
 
   useEffect(() => {
-    void loadMusic();
+    const startupTimer = setTimeout(() => {
+      void loadMusic();
+    }, 500);
+
+    return () => clearTimeout(startupTimer);
   }, [loadMusic]);
 
   useEffect(() => {

@@ -934,8 +934,47 @@ input[type="range"]:hover::-webkit-slider-thumb {
   pointer-events: none;
 }
 
+/* Home hero glassmorphism */
+.home-hero-glass {
+  isolation: isolate;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.065) 42%, rgba(255, 255, 255, 0.035) 100%),
+    linear-gradient(180deg, rgba(10, 10, 12, 0.54) 0%, rgba(10, 10, 12, 0.28) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(34px) saturate(170%);
+  -webkit-backdrop-filter: blur(34px) saturate(170%);
+  box-shadow:
+    0 28px 90px rgba(0, 0, 0, 0.46),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.home-hero-glass::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, 0.16) 0%, transparent 22%, transparent 72%, rgba(255, 255, 255, 0.08) 100%);
+  opacity: 0.52;
+  mix-blend-mode: screen;
+}
+
+.home-hero-copy {
+  text-shadow: 0 3px 18px rgba(0, 0, 0, 0.72);
+}
+
 /* Tablet home hero: Simplified layout for medium screens. */
 @media (min-width: 769px) and (max-width: 1279px) {
+  .home-hero-glass {
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.04) 100%),
+      rgba(10, 10, 12, 0.64);
+    backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+  }
+
   .home-hero-feature-grid {
     grid-template-columns: minmax(0, 1fr) clamp(140px, 18vw, 180px);
     column-gap: clamp(0.75rem, 1.5vw, 1.25rem);
@@ -1091,4 +1130,10 @@ input[type="range"]:hover::-webkit-slider-thumb {
 }
 .animate-meteor {
   animation: meteor 5s linear infinite;
+}
+
+/* --- Star Twinkle Animation --- */
+@keyframes twinkle {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
 }

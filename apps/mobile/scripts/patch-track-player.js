@@ -6,6 +6,10 @@ console.log('Running patch-track-player.js to fix Kotlin 2.x null safety...');
 const trackFile = path.join(__dirname, '..', 'node_modules', 'react-native-track-player', 'android', 'src', 'main', 'java', 'com', 'doublesymmetry', 'trackplayer', 'model', 'Track.kt');
 const metadataFile = path.join(__dirname, '..', 'node_modules', 'react-native-track-player', 'android', 'src', 'main', 'java', 'com', 'doublesymmetry', 'trackplayer', 'model', 'TrackMetadata.kt');
 const musicModuleFile = path.join(__dirname, '..', 'node_modules', 'react-native-track-player', 'android', 'src', 'main', 'java', 'com', 'doublesymmetry', 'trackplayer', 'module', 'MusicModule.kt');
+const shakaDistFolders = [
+  path.join(__dirname, '..', 'node_modules', 'shaka-player', 'dist'),
+  path.join(__dirname, '..', '..', '..', 'node_modules', 'shaka-player', 'dist'),
+];
 
 if (fs.existsSync(trackFile)) {
   let content = fs.readFileSync(trackFile, 'utf8');
@@ -45,6 +49,16 @@ if (fs.existsSync(musicModuleFile)) {
   );
   fs.writeFileSync(musicModuleFile, content);
   console.log('Patched MusicModule.kt');
+}
+
+for (const shakaDistFolder of shakaDistFolders) {
+  const shakaUiFile = path.join(shakaDistFolder, 'shaka-player.ui.js');
+  const shakaUiExtensionlessFile = path.join(shakaDistFolder, 'shaka-player.ui');
+
+  if (fs.existsSync(shakaUiFile) && !fs.existsSync(shakaUiExtensionlessFile)) {
+    fs.copyFileSync(shakaUiFile, shakaUiExtensionlessFile);
+    console.log(`Patched shaka-player.ui resolver shim at ${shakaUiExtensionlessFile}`);
+  }
 }
 
 console.log('Done patching react-native-track-player');

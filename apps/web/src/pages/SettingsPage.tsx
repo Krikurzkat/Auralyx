@@ -15,7 +15,6 @@ import {
   type DuplicateImportBehavior,
   type ImportMetadataMode,
   type LyricsImportMode,
-  type LyricsTransitionMode,
 } from '../stores/playerStore';
 import { localDb } from '../services/localDb';
 
@@ -60,13 +59,6 @@ const colorPalettes: ColorPalette[] = [
   { id: 'desert-sand', name: 'Desert Sand', gradient: ['#BCAAA4', '#A1887F'] },
 ];
 
-const lyricTransitions: Array<[LyricsTransitionMode, string, string]> = [
-  ['smooth', 'Smooth Focus', 'Current floating lyric motion'],
-  ['fade', 'Soft Fade', 'Gentle opacity shift between lines'],
-  ['slide', 'Slide Lift', 'Clearer vertical movement'],
-  ['instant', 'Instant', 'Minimal motion for direct reading'],
-];
-
 export default function SettingsPage() {
   const navigate = useNavigate();
   const {
@@ -78,7 +70,6 @@ export default function SettingsPage() {
     duplicateImportBehavior,
     attachSidecarFiles,
     lyricsImportMode,
-    lyricsTransition,
     setManualFadeDuration,
     setAutoFadeDuration,
     setVolume,
@@ -87,7 +78,6 @@ export default function SettingsPage() {
     setDuplicateImportBehavior,
     setAttachSidecarFiles,
     setLyricsImportMode,
-    setLyricsTransition,
   } = usePlayerStore();
   const [selectedPalette, setSelectedPalette] = useState(() => localStorage.getItem('selectedTheme') || 'sunset-fire');
   const [showAllPalettes, setShowAllPalettes] = useState(false);
@@ -352,36 +342,6 @@ export default function SettingsPage() {
               <option value="sidecar">Separate .lrc file</option>
             </select>
           </div>
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-white/5 bg-glass-card backdrop-blur-xl p-6">
-        <div className="mb-5 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-dimText">
-          <RiFileMusicLine size={16} />
-          Lyrics Transitions
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {lyricTransitions.map(([mode, label, description]) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => {
-                setLyricsTransition(mode);
-                toast.success(`${label} lyrics transition selected`);
-              }}
-              className={`rounded-xl border p-4 text-left transition ${
-                lyricsTransition === mode
-                  ? 'border-accent bg-accent/15 text-white'
-                  : 'border-white/10 bg-white/[0.03] text-softText hover:border-white/20 hover:bg-white/[0.06] hover:text-white'
-              }`}
-            >
-              <div className="mb-1 flex items-center justify-between gap-3">
-                <span className="text-sm font-semibold">{label}</span>
-                {lyricsTransition === mode && <RiCheckLine size={18} className="text-accent" />}
-              </div>
-              <div className="text-xs text-dimText">{description}</div>
-            </button>
-          ))}
         </div>
       </div>
 

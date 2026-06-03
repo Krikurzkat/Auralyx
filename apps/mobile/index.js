@@ -1,6 +1,5 @@
 import TrackPlayer from 'react-native-track-player';
-import { PlaybackService } from './src/services/PlaybackService';
 
-TrackPlayer.registerPlaybackService(() => PlaybackService);
+TrackPlayer.registerPlaybackService(() => require('./src/services/PlaybackService').PlaybackService);
 
 import 'expo-router/entry';

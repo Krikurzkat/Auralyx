@@ -1,0 +1,167 @@
+import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
+import { usePlayerStore } from '../../stores/playerStore';
+import { useUIStore } from '../../stores/uiStore';
+import { formatDuration, getLyricsForTrack } from '../../utils/formatters';
+import { RiDeleteBinLine } from 'react-icons/ri';
+import { useMemo, useEffect, useRef, useState } from 'react';
+import { useFluidLyricMotion } from '../../utils/lyricMotion';
+import RightPanelParticles from '../ui/RightPanelParticles';
+import { usePerformance } from '../../hooks/usePerformance';
+export default function RightPanel() {
+    const { currentTrack, queue, queueIndex, isPlaying, currentTime, progress, showQueue, showLyrics, removeFromQueue, playTrack, lyricsTransition } = usePlayerStore();
+    const { rightPanelView, setRightPanel, reduceMotion, toggleReduceMotion } = useUIStore();
+    const performanceSettings = usePerformance();
+    const lyricsContainerRef = useRef(null);
+    const queueContainerRef = useRef(null);
+    const activeTrackRef = useRef(null);
+    // Track previous view for directional tab transitions
+    const prevViewRef = useRef(rightPanelView);
+    const [tabTransitionClass, setTabTransitionClass] = useState('rp-tab-enter-active');
+    const tabOrder = ['queue', 'lyrics'];
+    useEffect(() => {
+        if (prevViewRef.current !== rightPanelView) {
+            const prevIdx = tabOrder.indexOf(prevViewRef.current);
+            const nextIdx = tabOrder.indexOf(rightPanelView);
+            const direction = nextIdx > prevIdx ? 'right' : 'left';
+            setTabTransitionClass(`rp-tab-enter-from-${direction}`);
+            // Force reflow then activate
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    setTabTransitionClass('rp-tab-enter-active');
+                });
+            });
+            prevViewRef.current = rightPanelView;
+        }
+    }, [rightPanelView]);
+    const lyrics = useMemo(() => {
+        return currentTrack ? getLyricsForTrack(currentTrack.id, currentTrack.lyrics) : [];
+    }, [currentTrack]);
+    // Use the fluid physics-based lyric motion system (same as FullscreenPlayer/DrivePlayer)
+    const { centeredFocusPosition: centeredLyricFocusPosition, activeLyricIndex: fluidActiveLyricIndex, } = useFluidLyricMotion(lyrics, currentTime, isPlaying);
+    // Compute a visible window of lyrics around the focus position
+    const lyricWindowCenter = lyrics.length > 0
+        ? Math.max(0, Math.min(lyrics.length - 1, Math.round(centeredLyricFocusPosition)))
+        : -1;
+    const LYRIC_WINDOW_RADIUS = 5;
+    const lyricWindowStart = lyricWindowCenter >= 0 ? Math.max(0, lyricWindowCenter - LYRIC_WINDOW_RADIUS) : 0;
+    const visibleLyrics = lyrics.slice(lyricWindowStart, lyricWindowCenter >= 0 ? lyricWindowCenter + LYRIC_WINDOW_RADIUS + 2 : 0);
+    // Get previously played tracks (completed tracks that should stay in the queue)
+    const previousTracks = queueIndex > 0 ? queue.slice(0, queueIndex) : [];
+    const upNext = queue.slice(queueIndex + 1);
+    // Auto-scroll to center the active track in queue when it is the 3rd or later track
+    useEffect(() => {
+        if (activeTrackRef.current && queueContainerRef.current) {
+            const container = queueContainerRef.current;
+            const activeItem = activeTrackRef.current;
+            if (previousTracks.length >= 2) {
+                const containerHeight = container.clientHeight;
+                const itemTop = activeItem.offsetTop;
+                const itemHeight = activeItem.clientHeight;
+                const scrollTo = itemTop - (containerHeight / 2) + (itemHeight / 2);
+                container.scrollTo({
+                    top: scrollTo,
+                    behavior: 'smooth'
+                });
+            }
+            else {
+                container.scrollTo({
+                    top: 0,
+                    behavior: 'smooth'
+                });
+            }
+        }
+    }, [currentTrack?.id, previousTracks.length]);
+    // Queue entrance animation tracking
+    const [queueMounted, setQueueMounted] = useState(false);
+    useEffect(() => {
+        if (rightPanelView === 'queue') {
+            setQueueMounted(false);
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    setQueueMounted(true);
+                });
+            });
+        }
+    }, [rightPanelView]);
+    if (!showQueue && !showLyrics)
+        return null;
+    return (_jsx("aside", { className: "hidden w-[320px] flex-shrink-0 border-l border-white/5 bg-glass-heavy backdrop-blur-2xl/60 xl:block", children: _jsxs("div", { className: "flex h-full flex-col overflow-y-auto p-4 pb-24 scrollbar-hidden", children: [_jsx("div", { className: "mb-4 flex items-center gap-1 rounded-xl bg-glass backdrop-blur-2xl/60 p-1", children: ['queue', 'lyrics'].map(view => (_jsx("button", { onClick: () => setRightPanel(view), className: `flex-1 rounded-lg px-3 py-2 text-xs font-medium capitalize transition-all duration-300 ${rightPanelView === view ? 'bg-glass-card backdrop-blur-xl text-white shadow-lg' : 'text-dimText hover:text-softText'}`, children: view }, view))) }), rightPanelView === 'queue' && (_jsx("div", { className: `rp-tab-panel ${tabTransitionClass}`, children: _jsxs("div", { className: "relative overflow-visible rounded-2xl border border-white/10", children: [_jsxs("div", { className: "pointer-events-none absolute inset-0 overflow-hidden rounded-2xl", children: [!reduceMotion && performanceSettings.enableParticles && (_jsx(RightPanelParticles, { variant: "queue", colors: currentTrack?.coverGradient })), currentTrack && performanceSettings.enableHeavyAnimations && (_jsx("div", { className: "absolute inset-0 opacity-30", children: _jsx("div", { className: "absolute w-full h-full", style: {
+                                                background: `radial-gradient(circle at 30% 50%, ${currentTrack.coverGradient?.[0] || '#666'}30, transparent 70%)`,
+                                            } }) }))] }), _jsxs("div", { className: "relative rounded-2xl bg-white/5 backdrop-blur-md p-4", children: [_jsxs("div", { className: "flex items-center justify-between mb-6", children: [_jsxs("div", { className: "flex items-center gap-3", children: [_jsx("div", { className: "w-8 h-8 rounded-xl flex items-center justify-center bg-white/10 border border-white/20", children: _jsx("span", { className: "text-sm", children: "\uD83C\uDFB5" }) }), _jsxs("div", { children: [_jsx("h3", { className: "text-xs font-black uppercase tracking-[0.15em] text-white/95", children: "Queue" }), _jsx("p", { className: "text-[10px] text-white/50", children: currentTrack ? `${previousTracks.length + upNext.length + 1} tracks` : `${upNext.length} tracks` })] })] }), isPlaying && (_jsxs("div", { className: "flex items-center gap-1 px-2 py-1 rounded-full bg-accent/15 border border-accent/30", children: [_jsx("div", { className: "w-1 h-1 rounded-full bg-accent animate-pulse", style: { animationDuration: '1.5s' } }), _jsx("span", { className: "text-[8px] font-black uppercase tracking-wider text-accent", children: "Live" })] }))] }), _jsx("div", { ref: queueContainerRef, className: "relative max-h-[500px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent", children: currentTrack || upNext.length > 0 ? (_jsxs("div", { className: "relative pl-2 pt-3", children: [_jsx("div", { className: "absolute left-[38px] top-0 bottom-0 w-0.5 bg-gradient-to-b from-accent/45 via-white/15 to-white/5" }), previousTracks.map((track, i) => {
+                                                    const staggerIdx = i;
+                                                    return (_jsx("div", { className: `relative mb-8 rp-queue-item ${queueMounted ? 'rp-queue-item-visible' : ''}`, style: { '--queue-stagger': staggerIdx }, children: _jsxs("div", { className: "relative flex items-start gap-4 group", children: [_jsxs("div", { className: "absolute left-[32px] -translate-x-1/2 top-0 -bottom-8 w-2 pointer-events-none", style: { zIndex: 0 }, children: [_jsx("div", { className: "absolute inset-0 bg-black/40" }), _jsx("div", { className: "absolute top-0 left-0 right-0", style: {
+                                                                                height: '100%',
+                                                                                background: 'linear-gradient(to bottom, var(--accent), color-mix(in srgb, var(--accent) 62%, white 12%))',
+                                                                                boxShadow: '0 0 8px color-mix(in srgb, var(--accent) 55%, transparent)'
+                                                                            } })] }), _jsxs("div", { className: "relative flex-shrink-0", children: [_jsxs("svg", { className: "absolute -inset-1 h-[72px] w-[72px] overflow-visible", style: { zIndex: 1 }, viewBox: "0 0 72 72", children: [_jsx("circle", { cx: "36", cy: "36", r: "34", stroke: "rgba(0,0,0,0.4)", strokeWidth: "3", fill: "none" }), _jsx("path", { d: "M 36 2 A 34 34 0 0 1 36 70", stroke: "color-mix(in srgb, var(--accent) 74%, white 10%)", strokeWidth: "5", fill: "none", strokeLinecap: "round", style: {
+                                                                                        filter: 'drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 42%, transparent))'
+                                                                                    } }), _jsx("path", { d: "M 36 2 A 34 34 0 0 0 36 70", stroke: "color-mix(in srgb, var(--accent) 74%, white 10%)", strokeWidth: "5", fill: "none", strokeLinecap: "round", style: {
+                                                                                        filter: 'drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 42%, transparent))'
+                                                                                    } })] }), _jsx("button", { onClick: () => playTrack(track, queue), className: "relative w-16 h-16 rounded-full overflow-hidden border-2 border-white/20 group-hover:border-accent/40 transition-all duration-300 group-hover:scale-105", style: { zIndex: 2 }, children: track.coverUrl ? (_jsx("img", { src: track.coverUrl.startsWith('/') ? `http://localhost:3001${track.coverUrl}` : track.coverUrl, alt: track.title, className: "h-full w-full object-cover" })) : (_jsx("div", { className: "h-full w-full", style: { background: `linear-gradient(135deg, ${track.coverGradient?.[0] || '#333'}, ${track.coverGradient?.[1] || '#222'})` } })) }), _jsx("div", { className: "absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black border border-black/50 bg-green-500", style: { zIndex: 3 }, children: "\u2713" })] }), _jsxs("div", { className: "flex-1 pt-2 min-w-0", children: [_jsx("div", { className: "truncate text-sm font-bold text-white mb-1", children: track.title }), _jsx("div", { className: "truncate text-xs text-white/70 mb-2", children: track.artist }), track.album && (_jsx("div", { className: "truncate text-[10px] text-white/50 mb-2", children: track.album })), _jsxs("div", { className: "flex items-center gap-2", children: [_jsx("div", { className: "flex-1 h-1 bg-white/10 rounded-full overflow-hidden", children: _jsx("div", { className: "h-full bg-accent rounded-full", style: { width: '100%' } }) }), _jsx("span", { className: "text-[10px] font-semibold text-white/50", children: formatDuration(track.duration) })] })] })] }) }, `prev-${track.id}-${i}`));
+                                                }), currentTrack && (_jsx("div", { ref: activeTrackRef, className: `relative mb-8 rp-queue-item ${queueMounted ? 'rp-queue-item-visible' : ''}`, style: { '--queue-stagger': previousTracks.length }, children: _jsxs("div", { className: "relative flex items-start gap-4 group min-h-[100px]", children: [_jsxs("div", { className: "absolute left-[32px] -translate-x-1/2 top-0 -bottom-8 w-2 pointer-events-none", style: { zIndex: 0 }, children: [_jsx("div", { className: "absolute inset-0 bg-black/40" }), _jsx("div", { className: "absolute top-0 left-0 right-0 h-[66px]", style: {
+                                                                            background: 'linear-gradient(to bottom, var(--accent), color-mix(in srgb, var(--accent) 58%, transparent))',
+                                                                            boxShadow: '0 0 12px color-mix(in srgb, var(--accent) 58%, transparent)'
+                                                                        } }), _jsx("div", { className: "absolute top-[66px] bottom-0 left-0 right-0 bg-transparent", children: _jsx("div", { className: "w-full transition-all duration-300", style: {
+                                                                                height: `${progress > 50 ? ((progress - 50) / 50) * 100 : 0}%`,
+                                                                                background: 'var(--accent)',
+                                                                                boxShadow: '0 0 18px color-mix(in srgb, var(--accent) 68%, transparent), 0 0 34px color-mix(in srgb, var(--accent) 34%, transparent), inset 0 0 8px rgba(255, 255, 255, 0.26)'
+                                                                            } }) })] }), _jsxs("div", { className: "relative flex-shrink-0", children: [_jsx("div", { className: "rp-now-playing-pulse absolute -inset-2 rounded-full" }), _jsxs("svg", { className: "absolute -inset-1 h-[72px] w-[72px] overflow-visible", style: { zIndex: 1 }, viewBox: "0 0 72 72", children: [_jsx("circle", { cx: "36", cy: "36", r: "34", stroke: "rgba(0,0,0,0.4)", strokeWidth: "3", fill: "none" }), progress > 0 && (_jsx("path", { d: `M 36 2 A 34 34 0 0 1 ${36 + 34 * Math.sin((Math.min(progress, 50) / 50) * Math.PI)} ${36 - 34 * Math.cos((Math.min(progress, 50) / 50) * Math.PI)}`, stroke: "var(--accent)", strokeWidth: "5", fill: "none", strokeLinecap: "round", className: "transition-all duration-300", style: {
+                                                                                    filter: 'drop-shadow(0 0 5px var(--accent)) drop-shadow(0 0 9px color-mix(in srgb, var(--accent) 28%, transparent))'
+                                                                                } })), progress > 0 && (_jsx("path", { d: `M 36 2 A 34 34 0 0 0 ${36 - 34 * Math.sin((Math.min(progress, 50) / 50) * Math.PI)} ${36 - 34 * Math.cos((Math.min(progress, 50) / 50) * Math.PI)}`, stroke: "var(--accent)", strokeWidth: "5", fill: "none", strokeLinecap: "round", className: "transition-all duration-300", style: {
+                                                                                    filter: 'drop-shadow(0 0 5px var(--accent)) drop-shadow(0 0 9px color-mix(in srgb, var(--accent) 28%, transparent))'
+                                                                                } }))] }), _jsx("div", { className: "rp-now-playing-cover relative w-16 h-16 rounded-full overflow-hidden border-2 border-accent/70 shadow-lg", style: { zIndex: 2 }, children: currentTrack.coverUrl ? (_jsx("img", { src: currentTrack.coverUrl.startsWith('/') ? `http://localhost:3001${currentTrack.coverUrl}` : currentTrack.coverUrl, alt: currentTrack.title, className: "h-full w-full object-cover" })) : (_jsx("div", { className: "h-full w-full", style: { background: `linear-gradient(135deg, ${currentTrack.coverGradient?.[0] || '#333'}, ${currentTrack.coverGradient?.[1] || '#222'})` } })) }), _jsx("div", { className: "absolute -bottom-1 left-1/2 z-[3] -translate-x-1/2 rounded-full border border-accent/40 bg-black/70 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.16em] text-accent shadow-lg backdrop-blur-md", children: "Now" })] }), _jsxs("div", { className: "flex-1 pt-2 min-w-0", children: [_jsxs("div", { className: "flex items-center gap-2 mb-2", children: [_jsx("div", { className: "truncate text-sm font-black text-white", children: currentTrack.title }), isPlaying && (_jsx("div", { className: "flex items-center gap-0.5 flex-shrink-0", children: [0, 1, 2].map((i) => (_jsx("div", { className: "w-0.5 bg-accent rounded-full animate-[bounce_0.8s_ease-in-out_infinite]", style: { height: `${6 + i * 2}px`, animationDelay: `${i * 0.1}s` } }, i))) }))] }), _jsx("div", { className: "truncate text-xs text-white/80", children: currentTrack.artist }), _jsxs("div", { className: "mt-2 flex items-center gap-2", children: [_jsx("span", { className: "rounded-full border border-accent/25 bg-accent/10 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.16em] text-accent", children: "Playing" }), _jsx("span", { className: "text-[10px] font-semibold text-white/40", children: formatDuration(Math.floor(currentTime)) })] })] })] }) })), upNext.map((track, i) => {
+                                                    const staggerIdx = previousTracks.length + (currentTrack ? 1 : 0) + i;
+                                                    return (_jsx("div", { className: `relative mb-8 last:mb-0 rp-queue-item ${queueMounted ? 'rp-queue-item-visible' : ''}`, style: { '--queue-stagger': staggerIdx }, children: _jsxs("div", { className: "relative flex items-start gap-4 group", children: [_jsx("div", { className: "absolute left-[32px] -translate-x-1/2 top-0 -bottom-8 w-2 pointer-events-none", style: { zIndex: 0 }, children: _jsx("div", { className: "absolute inset-0 bg-black/40" }) }), _jsxs("div", { className: "relative flex-shrink-0", children: [_jsx("svg", { className: "absolute -inset-1 h-[72px] w-[72px] overflow-visible", style: { zIndex: 1 }, viewBox: "0 0 72 72", children: _jsx("circle", { cx: "36", cy: "36", r: "34", stroke: "rgba(0,0,0,0.4)", strokeWidth: "3", fill: "none" }) }), _jsx("button", { onClick: () => playTrack(track, queue), className: "relative w-16 h-16 rounded-full overflow-hidden border-2 border-white/20 group-hover:border-accent/60 transition-all duration-300 group-hover:scale-110", style: { zIndex: 2 }, children: track.coverUrl ? (_jsx("img", { src: track.coverUrl.startsWith('/') ? `http://localhost:3001${track.coverUrl}` : track.coverUrl, alt: track.title, className: "h-full w-full object-cover" })) : (_jsx("div", { className: "h-full w-full", style: { background: `linear-gradient(135deg, ${track.coverGradient?.[0] || '#333'}, ${track.coverGradient?.[1] || '#222'})` } })) }), _jsx("div", { className: "absolute -top-1 -right-1 z-[3] flex h-5 min-w-5 items-center justify-center rounded-full border border-white/10 bg-black/70 px-1 text-[9px] font-black text-white/55 backdrop-blur-md", children: i + 1 })] }), _jsxs("div", { className: "flex-1 pt-2 min-w-0", children: [_jsx("div", { className: "truncate text-sm font-bold text-white mb-1", children: track.title }), _jsx("div", { className: "truncate text-xs text-white/70 mb-2", children: track.artist }), track.album && (_jsx("div", { className: "truncate text-[10px] text-white/50 mb-2", children: track.album })), _jsxs("div", { className: "flex items-center gap-2", children: [_jsx("div", { className: "flex-1 h-1 bg-white/10 rounded-full overflow-hidden", children: _jsx("div", { className: "h-full bg-accent/30 rounded-full", style: { width: '0%' } }) }), _jsx("span", { className: "text-[10px] font-semibold text-white/50", children: formatDuration(track.duration) })] })] }), _jsx("button", { onClick: () => removeFromQueue(queueIndex + 1 + i), className: "opacity-0 group-hover:opacity-100 mt-3 rounded-lg p-1.5 text-white/60 transition-all hover:text-white hover:bg-red-500/20 border border-transparent hover:border-red-500/30", children: _jsx(RiDeleteBinLine, { size: 14 }) })] }) }, `${track.id}-${i}`));
+                                                })] })) : (_jsx("div", { className: "relative rounded-xl overflow-hidden border border-white/10", children: _jsxs("div", { className: "bg-white/5 backdrop-blur-md p-8 text-center", children: [_jsx("div", { className: "w-16 h-16 mx-auto mb-4 rounded-xl flex items-center justify-center bg-white/10 border border-white/20", children: _jsx("span", { className: "text-3xl", children: "\uD83C\uDFB5" }) }), _jsx("h3", { className: "text-sm font-bold text-white/80 mb-2", children: "Queue is Empty" }), _jsxs("p", { className: "text-xs text-white/50 leading-relaxed", children: ["Add more tracks to keep", _jsx("br", {}), "the music flowing"] })] }) })) })] })] }) })), rightPanelView === 'lyrics' && (_jsx("div", { className: `rp-tab-panel ${tabTransitionClass}`, children: currentTrack ? (_jsxs("div", { className: "relative rounded-3xl overflow-hidden", children: [_jsxs("div", { className: "absolute inset-0 overflow-hidden", children: [!reduceMotion && performanceSettings.enableParticles && (_jsx(RightPanelParticles, { variant: "lyrics", colors: currentTrack.coverGradient })), performanceSettings.enableHeavyAnimations && (_jsxs(_Fragment, { children: [_jsx("div", { className: "absolute w-64 h-64 rounded-full opacity-30", style: {
+                                                    background: `radial-gradient(circle, ${currentTrack.coverGradient?.[0] || '#666'}, transparent)`,
+                                                    top: '-20%',
+                                                    right: '-20%',
+                                                    filter: performanceSettings.enableBlur ? `blur(${performanceSettings.maxBlurRadius}px)` : 'none',
+                                                } }), _jsx("div", { className: "absolute w-64 h-64 rounded-full opacity-20", style: {
+                                                    background: `radial-gradient(circle, ${currentTrack.coverGradient?.[1] || '#444'}, transparent)`,
+                                                    bottom: '-30%',
+                                                    left: '-20%',
+                                                    filter: performanceSettings.enableBlur ? `blur(${performanceSettings.maxBlurRadius}px)` : 'none',
+                                                } })] }))] }), _jsxs("div", { className: "relative backdrop-blur-xl bg-gradient-to-br from-white/10 via-white/5 to-transparent border border-white/20 rounded-3xl p-6 shadow-2xl", children: [_jsxs("div", { className: "mb-6 flex items-center justify-between", children: [_jsxs("div", { className: "flex items-center gap-3", children: [_jsxs("div", { className: "relative", children: [_jsx("div", { className: "w-10 h-10 rounded-xl flex items-center justify-center backdrop-blur-md border border-white/30 shadow-lg", style: {
+                                                                    background: `linear-gradient(135deg, ${currentTrack.coverGradient?.[0] || '#666'}40, ${currentTrack.coverGradient?.[1] || '#444'}20)`,
+                                                                }, children: _jsx("span", { className: "text-lg", children: "\uD83C\uDFB5" }) }), isPlaying && (_jsx("div", { className: "absolute -top-1 -right-1 w-3 h-3 rounded-full bg-accent border-2 border-black animate-pulse", style: { animationDuration: '2s' } }))] }), _jsxs("div", { children: [_jsx("h3", { className: "text-xs font-black uppercase tracking-[0.15em] text-white/95", children: "Synced Lyrics" }), _jsxs("p", { className: "text-[10px] text-white/50 mt-0.5", children: [lyrics.length, " lines"] })] })] }), isPlaying && (_jsxs("div", { className: "flex items-center gap-1 px-3 py-1.5 rounded-full bg-accent/20 border border-accent/40 backdrop-blur-md shadow-lg", children: [_jsx("div", { className: "flex gap-0.5", children: [0, 1, 2].map((i) => (_jsx("div", { className: "w-0.5 bg-accent rounded-full animate-[bounce_0.8s_ease-in-out_infinite]", style: {
+                                                                height: '8px',
+                                                                animationDelay: `${i * 0.15}s`,
+                                                            } }, i))) }), _jsx("span", { className: "text-[9px] font-black uppercase tracking-wider text-accent ml-1", children: "Live" })] }))] }), _jsx("div", { ref: lyricsContainerRef, className: "relative overflow-hidden", style: {
+                                            height: '420px',
+                                            maskImage: 'linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)',
+                                            WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)',
+                                        }, children: lyrics.length > 0 ? (_jsx("div", { className: "absolute inset-0", children: visibleLyrics.map((line, index) => {
+                                                const actualIndex = lyricWindowStart + index;
+                                                const relativePosition = actualIndex - centeredLyricFocusPosition;
+                                                const distance = Math.abs(relativePosition);
+                                                // Ultra-simplified calculations for maximum performance
+                                                const yOffset = relativePosition * 110;
+                                                const focusFactor = Math.max(0, 1 - distance * 0.8);
+                                                const opacity = 0.3 + focusFactor * 0.7;
+                                                const scale = 0.94 + focusFactor * 0.06;
+                                                const isCurrent = actualIndex === fluidActiveLyricIndex;
+                                                // Simple glow for current line only
+                                                const textShadow = isCurrent
+                                                    ? `0 0 16px var(--accent), 0 2px 8px rgba(0,0,0,0.5)`
+                                                    : '0 1px 4px rgba(0,0,0,0.4)';
+                                                return (_jsxs("div", { className: "absolute w-full left-0 px-3 text-left", style: {
+                                                        top: '50%',
+                                                        fontSize: '1.1rem',
+                                                        lineHeight: '1.4',
+                                                        transform: `translate3d(0, calc(-50% + ${yOffset}px), 0) scale(${scale})`,
+                                                        opacity,
+                                                        color: '#ffffff',
+                                                        textShadow,
+                                                        fontWeight: isCurrent ? '900' : '700',
+                                                        willChange: 'transform, opacity',
+                                                        wordWrap: 'break-word',
+                                                        overflowWrap: 'break-word',
+                                                    }, children: [isCurrent && (_jsx("div", { className: "absolute -left-1 top-1/2 -translate-y-1/2 w-[3px] rounded-full bg-accent", style: {
+                                                                height: '70%',
+                                                                boxShadow: '0 0 10px var(--accent), 0 0 20px var(--accent)',
+                                                            } })), line.text || '♪'] }, `${line.time}-${actualIndex}`));
+                                            }) })) : (_jsx("div", { className: "absolute inset-0 flex items-center justify-center", children: _jsxs("div", { className: "text-center", children: [_jsx("div", { className: "text-3xl mb-3 opacity-60", children: "\u266A" }), _jsx("p", { className: "text-sm text-white/40", children: "No lyrics available" })] }) })) })] })] })) : (_jsx("div", { className: "relative rounded-3xl overflow-hidden", children: _jsxs("div", { className: "backdrop-blur-xl bg-gradient-to-br from-white/10 via-white/5 to-transparent border border-white/20 rounded-3xl p-12 text-center shadow-2xl", children: [_jsx("div", { className: "w-20 h-20 mx-auto mb-5 rounded-2xl flex items-center justify-center backdrop-blur-md border border-white/30 shadow-xl", style: {
+                                        background: 'linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05))',
+                                    }, children: _jsx("span", { className: "text-4xl", children: "\uD83C\uDFB5" }) }), _jsx("h3", { className: "text-base font-bold text-white/80 mb-2", children: "No Lyrics Available" }), _jsx("p", { className: "text-sm text-white/50", children: "Play a song to see synced lyrics" })] }) })) })), _jsx("div", { className: "mt-auto pt-8", children: _jsxs("div", { className: "rounded-xl bg-glass backdrop-blur-2xl/40 p-3", children: [_jsxs("label", { className: "flex cursor-pointer items-center justify-between text-sm", children: [_jsx("span", { className: "text-softText font-medium", children: "Reduce Motion (3D)" }), _jsxs("div", { className: "relative", children: [_jsx("input", { type: "checkbox", className: "sr-only", checked: reduceMotion, onChange: toggleReduceMotion }), _jsx("div", { className: `block h-5 w-9 rounded-full transition-colors ${reduceMotion ? 'bg-accent' : 'bg-white/10'}` }), _jsx("div", { className: `dot absolute left-1 top-1 h-3 w-3 rounded-full bg-white transition-transform ${reduceMotion ? 'translate-x-4' : ''}` })] })] }), _jsx("p", { className: "mt-1.5 text-[10px] text-dimText leading-tight", children: "Disables 3D visualizers and particle effects to save battery and reduce motion." })] }) })] }) }));
+}

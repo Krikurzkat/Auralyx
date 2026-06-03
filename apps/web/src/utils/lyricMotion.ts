@@ -152,7 +152,7 @@ export function useMomentumValue(
 
     const step = (frameAt: number) => {
       const state = motionRef.current;
-      
+
       if (immediate) {
         state.value = state.target;
         state.velocity = 0;
@@ -205,20 +205,22 @@ export function useFluidLyricMotion(
   const fluidTime = useFluidPlaybackTime(currentTime, isPlaying);
   const targetFocus = useMemo(() => getContinuousLyricFocus(lyrics, fluidTime), [lyrics, fluidTime]);
   const focusPosition = useMomentumValue(targetFocus, {
-    stiffness: options.stiffness ?? 42,
-    damping: options.damping ?? 17,
-    precision: options.precision ?? 0.0004,
-    maxVelocity: options.maxVelocity ?? 4.5,
+    stiffness: options.stiffness ?? 120,
+    damping: options.damping ?? 45,
+    precision: options.precision ?? 0.005,
+    maxVelocity: options.maxVelocity ?? 20,
     snapThreshold: options.snapThreshold ?? 4,
     immediate: !isPlaying,
   });
 
-  const activeLyricIndex = useMemo(() => getCurrentLyricIndex(lyrics, fluidTime), [lyrics, fluidTime]);
+  // Use raw currentTime for active lyric detection — no spring delay
+  // Add 200ms look-ahead to compensate for browser timeupdate event latency and perception delay
+  const activeLyricIndex = useMemo(() => getCurrentLyricIndex(lyrics, currentTime + 0.2), [lyrics, currentTime]);
   const centeredFocusPosition = useMomentumValue(activeLyricIndex < 0 ? targetFocus : activeLyricIndex, {
-    stiffness: options.stiffness ?? 54,
-    damping: options.damping ?? 20,
-    precision: options.precision ?? 0.0004,
-    maxVelocity: options.maxVelocity ?? 7,
+    stiffness: options.stiffness ?? 150,
+    damping: options.damping ?? 50,
+    precision: options.precision ?? 0.005,
+    maxVelocity: options.maxVelocity ?? 25,
     snapThreshold: options.snapThreshold ?? 4,
     immediate: !isPlaying,
   });

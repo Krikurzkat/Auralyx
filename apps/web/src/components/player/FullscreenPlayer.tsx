@@ -68,7 +68,6 @@ export default function FullscreenPlayer() {
     queueIndex,
     showLyrics,
     showQueue,
-    lyricsTransition,
     togglePlay,
     nextTrack,
     prevTrack,
@@ -119,7 +118,7 @@ export default function FullscreenPlayer() {
   const {
     centeredFocusPosition: centeredLyricFocusPosition,
     activeLyricIndex,
-  } = useFluidLyricMotion(lyrics, currentTime + 0.12, isPlaying);
+  } = useFluidLyricMotion(lyrics, currentTime, isPlaying);
   const lyricWindowCenter = lyrics.length > 0
     ? Math.max(0, Math.min(lyrics.length - 1, Math.round(centeredLyricFocusPosition)))
     : -1;
@@ -148,6 +147,7 @@ export default function FullscreenPlayer() {
     WebkitBackfaceVisibility: 'hidden',
     contain: 'paint',
   }), [startColor, endColor]);
+  
   const fullscreenGlassStyle = useMemo<CSSProperties>(() => ({
     background: 'linear-gradient(180deg, rgba(4, 4, 6, 0.78) 0%, rgba(6, 6, 8, 0.84) 45%, rgba(0, 0, 0, 0.9) 100%)',
     willChange: 'opacity',
@@ -161,20 +161,24 @@ export default function FullscreenPlayer() {
   const isLiked = visualTrack ? likedTrackIds.has(visualTrack.id) : false;
   const lyricLineGap = isDesktopLyricLayout ? 72 : 56;
   const lyricLineHeight = isDesktopLyricLayout ? '1.42' : '1.3';
+  const fullscreenLyricsMask = 'linear-gradient(to bottom, transparent 0%, transparent 22%, black 29%, black 96%, transparent 100%)';
+  const fullscreenQueueMask = 'linear-gradient(to bottom, transparent 0%, black 3%, black 98%, transparent 100%)';
+  const isMobileFullscreenLayout = layoutProfile === 'android' || layoutProfile === 'iphone';
   const fullscreenTabsTopOffset = useMemo(() => {
     switch (layoutProfile) {
       case 'desktop':
-        return 32;
+        return 150;
       case 'tablet':
-        return 18;
+        return 120;
       case 'android':
-        return 6;
       case 'iphone':
-        return 2;
+        return 0;
       default:
         return 0;
     }
   }, [layoutProfile]);
+  const fullscreenQueueHeaderTopOffset = isMobileFullscreenLayout ? 4 : Math.max(56, fullscreenTabsTopOffset - 20);
+  const fullscreenQueueListTopOffset = fullscreenQueueHeaderTopOffset + 34;
 
   const animateModeToggle = (button: HTMLButtonElement | null, hovered: boolean, active: boolean) => {
     if (!button) return;
@@ -1263,7 +1267,7 @@ export default function FullscreenPlayer() {
             </div>
 
             <div className="portrait:contents landscape:flex landscape:flex-col landscape:justify-center landscape:h-full landscape:col-start-2 landscape:row-start-1 landscape:min-w-0 landscape:pl-2 xl:flex xl:flex-col xl:justify-center xl:col-start-2 xl:row-start-1 xl:min-w-0 xl:pl-0">
-              <div className="order-3 mt-6 xl:mt-8 flex w-full flex-1 flex-col items-center gap-6 min-h-0 landscape:mt-0">
+              <div className="order-3 mt-3 flex w-full flex-1 flex-col items-center gap-3 min-h-0 md:mt-6 md:gap-6 landscape:mt-0 xl:mt-8">
                 <div
                   className="fullscreen-tabs relative z-10 flex w-full max-w-md items-center justify-between gap-3 rounded-2xl border border-white/20 bg-white/10 backdrop-blur-xl p-1.5 shadow-lg"
                   style={{
@@ -1309,75 +1313,44 @@ export default function FullscreenPlayer() {
                       transform: 'translateZ(0)',
                     }}
                   >
-                    <div className="relative w-full flex-1 max-w-3xl mx-auto" style={{ maskImage: 'linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%)' }}>
+                    <div
+                      className="relative w-full flex-1 max-w-3xl mx-auto"
+                      style={{
+                        maskImage: fullscreenLyricsMask,
+                        WebkitMaskImage: fullscreenLyricsMask,
+                      }}
+                    >
                       {lyrics.length > 0 ? (
                         <div className="absolute inset-0">
                           {visibleLyrics.map((line, index) => {
                             const actualIndex = lyricWindowStart + index;
                             const relativePosition = actualIndex - centeredLyricFocusPosition;
                             const distance = Math.abs(relativePosition);
-                            const direction = relativePosition < 0 ? -1 : 1;
-                            const verticalOffset = direction * Math.pow(distance, 1.05) * lyricLineGap;
                             
-                            // Scale down less aggressively to keep them readable when tighter
-                            const focusFactor = Math.max(0, 1 - distance);
-                            const bloomFactor = Math.sin(focusFactor * Math.PI / 2);
-                            const baseOpacity = Math.max(0, 1 - distance * 0.22);
-                            const opacityValue = baseOpacity + bloomFactor * (1 - baseOpacity);
-                            
-                            // Simplify for performance: no blur filter. Transition color from gray to white.
-                            // Strictly use grey for non-active lines and white + shadow for active line
+                            // Minimal calculations - maximum performance
+                            const yOffset = relativePosition * lyricLineGap;
+                            const focusFactor = 1 - Math.min(distance, 1);
+                            const opacity = 0.3 + focusFactor * 0.7;
                             const isCurrent = actualIndex === activeLyricIndex;
-                            const textColor = isCurrent ? '#ffffff' : 'rgb(128, 128, 128)';
-                            const textShadow = isCurrent ? `0 0 14px var(--accent)` : 'none';
-                            const scaleValue = 0.985 + (1 - 0.985) * bloomFactor - Math.min(distance * 0.05, 0.15);
-                            const transitionOffset = lyricsTransition === 'fade'
-                              ? direction * Math.min(distance, 1.2) * 24
-                              : lyricsTransition === 'instant'
-                                ? direction * Math.min(distance, 1) * 54
-                                : verticalOffset;
-                            const transitionScale = lyricsTransition === 'fade'
-                              ? 1
-                              : lyricsTransition === 'instant'
-                                ? isCurrent ? 1 : 0.96
-                                : scaleValue;
-                            const transitionOpacity = lyricsTransition === 'instant'
-                              ? isCurrent ? 1 : 0
-                              : lyricsTransition === 'fade'
-                                ? isCurrent ? 1 : Math.max(0, 1 - distance * 0.45)
-                                : opacityValue;
-                            const cssTransition = lyricsTransition === 'smooth'
-                              ? undefined
-                              : lyricsTransition === 'instant'
-                                ? 'opacity 80ms linear'
-                                : 'transform 260ms ease, opacity 220ms ease, color 180ms ease';
+                            
+                            // Simple glow for current line only
+                            const glowColor = visualTrack?.coverGradient?.[0] || '#E8470A';
 
                             return (
                               <div
                                 key={`${line.time}-${actualIndex}`}
-                                data-lyric-line
-                                className="fullscreen-lyric-line-wrapper absolute w-full max-w-3xl left-1/2 -translate-x-1/2 px-8 text-center font-bold"
+                                className="absolute w-full max-w-3xl left-1/2 px-8 text-center font-bold"
                                 style={{
                                   top: '50%',
                                   fontSize: 'clamp(1.1rem, 4.5vw, 1.5rem)',
                                   lineHeight: lyricLineHeight,
-                                  transform: `translate3d(-50%, calc(-50% + ${transitionOffset.toFixed(2)}px), 0) scale(${transitionScale.toFixed(3)})`,
-                                  opacity: transitionOpacity,
-                                  color: textColor,
-                                  textShadow,
+                                  transform: `translate3d(-50%, calc(-50% + ${yOffset}px), 0)`,
+                                  opacity,
+                                  color: '#ffffff',
+                                  textShadow: isCurrent ? `0 0 16px ${glowColor}, 0 0 8px ${glowColor}80` : 'none',
                                   fontWeight: '700',
-                                  zIndex: Math.max(1, 10 - Math.round(distance)),
-                                  willChange: 'transform, opacity, color',
-                                  wordWrap: 'break-word',
-                                  overflowWrap: 'break-word',
-                                  hyphens: 'auto',
-                                  whiteSpace: 'normal',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  minHeight: '1.3em',
-                                  maxHeight: '3.9em',
-                                  transition: cssTransition,
+                                  willChange: 'transform, opacity',
+                                  pointerEvents: 'none',
                                 }}
                               >
                                 {line.text || '♪'}
@@ -1400,15 +1373,16 @@ export default function FullscreenPlayer() {
                   {/* Queue Container */}
                   <div
                     ref={queueContainerRef}
-                    className="absolute inset-0 flex flex-col max-w-3xl mx-auto w-full h-full overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 [webkit-overflow-scrolling:touch] pb-12"
+                    className="absolute inset-0 flex flex-col max-w-3xl mx-auto w-full h-full overflow-hidden pb-12"
                     style={{ 
                       willChange: tabTransitionTlRef.current ? 'transform, opacity, filter' : 'auto',
                       transform: 'translateZ(0)',
-                      maskImage: 'linear-gradient(to bottom, transparent 0%, black 5%, black 95%, transparent 100%)',
-                      WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 5%, black 95%, transparent 100%)'
                     }}
                   >
-                    <div className="queue-metadata mb-2 flex items-center justify-between shrink-0 px-2 pt-1">
+                    <div
+                      className="queue-metadata absolute left-0 right-0 z-10 flex items-center justify-between shrink-0 px-2 pt-1"
+                      style={{ top: `${fullscreenQueueHeaderTopOffset}px` }}
+                    >
                       <h2 className="text-xs font-bold uppercase tracking-[0.18em] text-white/60">Up Next</h2>
                       <div className="flex items-end gap-1">
                         {[0, 1, 2, 3].map((bar) => (
@@ -1425,41 +1399,50 @@ export default function FullscreenPlayer() {
                       </div>
                     </div>
 
-                    <div className="space-y-1.2 w-full pt-0.9">
-                      {visibleUpcomingTracks.length > 0 ? (
-                        visibleUpcomingTracks.map((track, index) => {
-                          const queuedCoverUrl = getTrackCoverUrl(track);
-                          return (
-                            <button
-                              key={`${track.id}-${index}`}
-                              onClick={() => handleTrackClick(track, index)}
-                              className="queue-item flex w-full items-center gap-3 rounded-2xl px-2.5 py-2.5 text-left transition hover:bg-white/10 border border-transparent hover:border-white/5"
-                            >
-                              {queuedCoverUrl ? (
-                                <img
-                                  src={queuedCoverUrl}
-                                  alt={track.title}
-                                  className="h-10 w-10 shrink-0 rounded-xl object-cover"
-                                />
-                              ) : (
-                                <div
-                                  className="h-10 w-10 shrink-0 rounded-xl"
-                                  style={{ background: `linear-gradient(135deg, ${track.coverGradient?.[0] || '#333333'}, ${track.coverGradient?.[1] || '#222222'})` }}
-                                />
-                              )}
-                              <div className="min-w-0 flex-1">
-                                <div className="truncate text-[13px] font-semibold leading-tight text-white">{track.title}</div>
-                                <div className="truncate text-[11px] text-white/50">{track.artist}</div>
-                              </div>
-                              <span className="shrink-0 text-[11px] font-semibold text-right text-white/40">{`#${index + 1}`}</span>
-                            </button>
-                          );
-                        })
-                      ) : (
-                        <div className="queue-empty-state mt-8 rounded-2xl bg-white/5 p-6 text-sm text-white/50 text-center max-w-md mx-auto border border-white/10 backdrop-blur-md">
-                          No tracks queued after this one.
-                        </div>
-                      )}
+                    <div
+                      className="absolute inset-x-0 bottom-0 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 [webkit-overflow-scrolling:touch] px-0 pb-12"
+                      style={{
+                        top: `${fullscreenQueueListTopOffset}px`,
+                        maskImage: fullscreenQueueMask,
+                        WebkitMaskImage: fullscreenQueueMask,
+                      }}
+                    >
+                      <div className="space-y-1.2 w-full pt-0.9">
+                        {visibleUpcomingTracks.length > 0 ? (
+                          visibleUpcomingTracks.map((track, index) => {
+                            const queuedCoverUrl = getTrackCoverUrl(track);
+                            return (
+                              <button
+                                key={`${track.id}-${index}`}
+                                onClick={() => handleTrackClick(track, index)}
+                                className="queue-item flex w-full items-center gap-3 rounded-2xl px-2.5 py-2.5 text-left transition hover:bg-white/10 border border-transparent hover:border-white/5"
+                              >
+                                {queuedCoverUrl ? (
+                                  <img
+                                    src={queuedCoverUrl}
+                                    alt={track.title}
+                                    className="h-10 w-10 shrink-0 rounded-xl object-cover"
+                                  />
+                                ) : (
+                                  <div
+                                    className="h-10 w-10 shrink-0 rounded-xl"
+                                    style={{ background: `linear-gradient(135deg, ${track.coverGradient?.[0] || '#333333'}, ${track.coverGradient?.[1] || '#222222'})` }}
+                                  />
+                                )}
+                                <div className="min-w-0 flex-1">
+                                  <div className="truncate text-[13px] font-semibold leading-tight text-white">{track.title}</div>
+                                  <div className="truncate text-[11px] text-white/50">{track.artist}</div>
+                                </div>
+                                <span className="shrink-0 text-[11px] font-semibold text-right text-white/40">{`#${index + 1}`}</span>
+                              </button>
+                            );
+                          })
+                        ) : (
+                          <div className="queue-empty-state mt-8 rounded-2xl bg-white/5 p-6 text-sm text-white/50 text-center max-w-md mx-auto border border-white/10 backdrop-blur-md">
+                            No tracks queued after this one.
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

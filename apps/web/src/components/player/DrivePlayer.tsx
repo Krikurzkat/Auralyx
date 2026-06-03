@@ -66,7 +66,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
   const hasAnimatedRef = useRef(false);
   const previousShowFullLyricsRef = useRef<boolean | null>(null); // Track previous state
   const driveModeTransitionRetryRef = useRef<number | null>(null);
-  
+
   // State for compact/full lyrics mode
   const [showFullLyrics, setShowFullLyrics] = useState(false);
 
@@ -121,7 +121,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
   );
   const isTabletLyricsViewport = lyricsViewport === 'tablet';
   const isDesktopLyricsViewport = lyricsViewport === 'desktop';
-  const lyricHighlightAheadSeconds = isDesktopLyricsViewport ? 0.12 : isTabletLyricsViewport ? 0.1 : 0.08;
+  const lyricHighlightAheadSeconds = isDesktopLyricsViewport ? 0 : isTabletLyricsViewport ? 0 : 0;
   const {
     fluidTime: lyricFluidTime,
     centeredFocusPosition: centeredLyricFocusPosition,
@@ -136,9 +136,10 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
       snapThreshold: 3,
     }
   );
+  // Use raw currentTime for active lyric detection (no spring delay)
   const activeLyricIndex = useMemo(
-    () => getCurrentLyricIndex(lyrics, lyricFluidTime),
-    [lyrics, lyricFluidTime]
+    () => getCurrentLyricIndex(lyrics, currentTime),
+    [lyrics, currentTime]
   );
   const lyricWindowAnchor = lyrics.length > 0
     ? Math.max(0, Math.min(lyrics.length - 1, Math.round(centeredLyricFocusPosition)))
@@ -179,30 +180,32 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
     WebkitBackfaceVisibility: 'hidden',
     contain: 'paint',
   }), []);
+  
   const lyricRowHeight = isDesktopLyricsViewport ? 154 : isTabletLyricsViewport ? 132 : 112;
   const lyricFontSize = isDesktopLyricsViewport
     ? 'clamp(1.4rem, 2.9vw, 2.45rem)'
     : isTabletLyricsViewport
       ? 'clamp(1.18rem, 3.2vw, 1.9rem)'
-    : 'clamp(1.05rem, 4.8vw, 1.62rem)';
+      : 'clamp(1.05rem, 4.8vw, 1.62rem)';
   const lyricDenseFontSize = isDesktopLyricsViewport
     ? 'clamp(1.08rem, 2.15vw, 1.82rem)'
     : isTabletLyricsViewport
       ? 'clamp(0.98rem, 2.45vw, 1.48rem)'
-    : 'clamp(0.88rem, 3.9vw, 1.28rem)';
+      : 'clamp(0.88rem, 3.9vw, 1.28rem)';
   const lyricCompactFontSize = isDesktopLyricsViewport
     ? 'clamp(0.96rem, 1.82vw, 1.42rem)'
     : isTabletLyricsViewport
       ? 'clamp(0.86rem, 2.05vw, 1.22rem)'
-    : 'clamp(0.78rem, 3.35vw, 1.08rem)';
+      : 'clamp(0.78rem, 3.35vw, 1.08rem)';
   const lyricUltraCompactFontSize = isDesktopLyricsViewport
     ? 'clamp(0.88rem, 1.55vw, 1.18rem)'
     : isTabletLyricsViewport
       ? 'clamp(0.78rem, 1.78vw, 1.02rem)'
-    : 'clamp(0.68rem, 2.8vw, 0.94rem)';
+      : 'clamp(0.68rem, 2.8vw, 0.94rem)';
   const lyricLineHeight = isDesktopLyricsViewport ? '1.18' : isTabletLyricsViewport ? '1.2' : '1.22';
+  const referenceTrackFocus = lyricsTransition === 'smooth' ? centeredLyricFocusPosition : activeLyricIndex;
   const lyricTrackOffset = lyricWindowCenter >= 0
-    ? -(centeredLyricFocusPosition - lyricWindowStart + 0.5) * lyricRowHeight
+    ? -(referenceTrackFocus - lyricWindowStart + 0.5) * lyricRowHeight
     : 0;
 
   // Intro animation for all elements - DISABLED for instant appearance
@@ -248,7 +251,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
       window.clearTimeout(driveModeTransitionRetryRef.current);
       driveModeTransitionRetryRef.current = null;
     }
-    
+
     // Only animate if we have fullscreen rect and we're in compact mode
     if (!largeCover || !fullscreenRect || showFullLyrics) {
       // Clear the callback if it exists
@@ -268,7 +271,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
     let retryCount = 0;
     const startTransition = () => {
       const driveRect = largeCover.getBoundingClientRect();
-      
+
       if (driveRect.width === 0 || driveRect.height === 0) {
         retryCount += 1;
         if (retryCount > 10) {
@@ -283,7 +286,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
         driveModeTransitionRetryRef.current = window.setTimeout(startTransition, 50);
         return;
       }
-      
+
       animateCoverTransition(largeCover, fullscreenRect, driveRect);
     };
 
@@ -297,14 +300,14 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
       gsap.killTweensOf(largeCover);
     };
   }, [showFullLyrics]); // Re-run when showFullLyrics changes
-  
+
   const animateCoverTransition = (largeCover: HTMLDivElement, fullscreenRect: CoverTransitionRect, driveRect: DOMRect) => {
     // Calculate initial position (from fullscreen)
     const initialX = fullscreenRect.left - driveRect.left;
     const initialY = fullscreenRect.top - driveRect.top;
     const initialScaleX = fullscreenRect.width / driveRect.width;
     const initialScaleY = fullscreenRect.height / driveRect.height;
-    
+
     // Set initial state at fullscreen position
     gsap.set(largeCover, {
       x: initialX,
@@ -316,7 +319,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
       autoAlpha: 1,
       willChange: 'transform, opacity',
     });
-    
+
     // Animate to Drive Mode position
     gsap.to(largeCover, {
       x: 0,
@@ -329,7 +332,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
         gsap.set(largeCover, { clearProps: 'all' });
         driveModeTransitionRetryRef.current = null;
         delete (window as DriveTransitionWindow).__fullscreenCoverRect;
-        
+
         // Clear the transition flag in parent
         const parentWindow = (window.parent || window) as DriveTransitionWindow;
         if (parentWindow.__clearDriveModeTransition) {
@@ -358,36 +361,36 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
       previousShowFullLyricsRef.current = showFullLyrics;
       return;
     }
-    
+
     // Skip if state hasn't actually changed
     if (previousShowFullLyricsRef.current === showFullLyrics) {
       return;
     }
-    
+
     // Update the previous state
     previousShowFullLyricsRef.current = showFullLyrics;
-    
+
     const largeCover = largeCoverRef.current;
     const smallCover = smallCoverRef.current;
-    
+
     if (!currentTrack) return;
-    
+
     if (showFullLyrics) {
       // Switching to lyrics mode: animate large cover to small cover position
       if (!largeCover || !smallCover) return;
-      
+
       gsap.killTweensOf([largeCover, smallCover]);
       gsap.set([largeCover, smallCover], { clearProps: 'all' });
-      
+
       const largeRect = prevRectsRef.current.large || largeCover.getBoundingClientRect();
       const smallRect = smallCover.getBoundingClientRect();
-      
+
       // Ensure both elements are visible and have valid dimensions
       if (largeRect.width === 0 || smallRect.width === 0) return;
-      
+
       // Make large cover visible on top of everything during animation
-      gsap.set(largeCover, { 
-        opacity: 1, 
+      gsap.set(largeCover, {
+        opacity: 1,
         zIndex: 200,
         position: 'fixed',
         left: largeRect.left,
@@ -395,10 +398,10 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
         width: largeRect.width,
         height: largeRect.height,
       });
-      
+
       // Hide small cover initially
       gsap.set(smallCover, { opacity: 0 });
-      
+
       // Animate large cover to small cover position
       gsap.to(largeCover, {
         left: smallRect.left,
@@ -417,22 +420,22 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
     } else {
       // Switching to compact mode: animate small cover to large cover position
       if (!largeCover || !smallCover) return;
-      
+
       gsap.killTweensOf([largeCover, smallCover]);
       gsap.set([largeCover, smallCover], { clearProps: 'all' });
-      
+
       const largeRect = largeCover.getBoundingClientRect();
       const smallRect = prevRectsRef.current.small || smallCover.getBoundingClientRect();
-      
+
       // Ensure both elements have valid dimensions
       if (largeRect.width === 0 || smallRect.width === 0) return;
-      
+
       // Hide track info during animation
       const trackInfo = largeCover.parentElement?.querySelector('.text-center') as HTMLElement;
       if (trackInfo) {
         gsap.set(trackInfo, { opacity: 0 });
       }
-      
+
       // Make large cover visible and position it at small cover location
       gsap.set(largeCover, {
         opacity: 1,
@@ -444,10 +447,10 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
         height: smallRect.height,
         borderRadius: '16px',
       });
-      
+
       // Hide small cover
       gsap.set(smallCover, { opacity: 0 });
-      
+
       // Animate large cover back to its original position
       gsap.to(largeCover, {
         left: largeRect.left,
@@ -461,7 +464,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
           // Reset and let CSS handle visibility
           gsap.set(largeCover, { clearProps: 'all' });
           gsap.set(smallCover, { clearProps: 'all' });
-          
+
           // Show track info after animation completes
           if (trackInfo) {
             gsap.to(trackInfo, { opacity: 1, duration: 0.3, ease: 'power2.out' });
@@ -479,18 +482,18 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
 
   const handleBack = () => {
     if (isAnimatingBackRef.current) return;
-    
+
     const largeCover = largeCoverRef.current;
     if (!largeCover) {
       onClose();
       return;
     }
-    
+
     isAnimatingBackRef.current = true;
-    
+
     // Get current Drive Mode large cover position
     const driveRect = largeCover.getBoundingClientRect();
-    
+
     // Store Drive Mode position for FullscreenPlayer to animate from
     (window as DriveTransitionWindow).__driveModeBackRect = {
       top: driveRect.top,
@@ -498,7 +501,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
       width: driveRect.width,
       height: driveRect.height,
     };
-    
+
     // Fade out Drive Player UI before closing
     const container = containerRef.current;
     if (container) {
@@ -541,8 +544,8 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
   };
 
   return (
-    <div 
-      ref={containerRef} 
+    <div
+      ref={containerRef}
       className={`${isEmbedded ? 'absolute' : 'fixed h-screen w-screen'} inset-0 z-50 flex flex-col overflow-hidden text-white`}
       onMouseMove={resetIdleTimer}
       onTouchStart={resetIdleTimer}
@@ -553,12 +556,13 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
       {!isEmbedded && (
         <div className="absolute inset-0 -z-20" style={driveBackgroundStyle} />
       )}
-      
+
       {/* Glassmorphism layer kept lightweight to avoid repaint flicker */}
       {!isEmbedded && (
         <div className="absolute inset-0 -z-10" style={driveGlassStyle} />
       )}
-      
+
+
       {/* Top Header - Compact */}
       <div className={`flex items-center justify-between px-2 md:px-4 xl:px-6 pt-2 md:pt-4 pb-1 md:pb-2 shrink-0 relative z-10 transition-opacity duration-500 ${isIdle ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
         <button
@@ -569,7 +573,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
           <RiArrowLeftLine size={18} />
           <span>Back</span>
         </button>
-        
+
         <span className="drive-mode-label text-xs font-bold uppercase tracking-widest text-white/80 hidden xs:inline">
           Drive Mode
         </span>
@@ -577,11 +581,10 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
         {/* Lyrics Toggle Button */}
         <button
           onClick={toggleFullLyrics}
-          className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold shadow-lg backdrop-blur-xl transition-all duration-300 ${
-            showFullLyrics
-              ? 'border-accent/50 bg-accent/30 text-accent hover:bg-accent/40'
-              : 'border-white/20 bg-white/10 text-white hover:bg-white/20 hover:border-white/30'
-          }`}
+          className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold shadow-lg backdrop-blur-xl transition-all duration-300 ${showFullLyrics
+            ? 'border-accent/50 bg-accent/30 text-accent hover:bg-accent/40'
+            : 'border-white/20 bg-white/10 text-white hover:bg-white/20 hover:border-white/30'
+            }`}
           aria-label="Toggle lyrics view"
         >
           {showFullLyrics ? <RiImageLine size={18} /> : <RiMusic2Line size={18} />}
@@ -592,7 +595,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
       {/* Compact Album Art & Track Info - Always render, control visibility */}
       <div className={`drive-track-info flex items-center gap-1.5 md:gap-3 px-2 md:px-4 xl:px-6 py-1.5 md:py-3 shrink-0 transition-opacity duration-300 ${showFullLyrics ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
         <div className="relative shrink-0">
-          <div 
+          <div
             ref={smallCoverRef}
             id="drive-mode-cover"
             className="h-10 w-10 xs:h-11 xs:w-11 md:h-14 md:w-14 xl:h-16 xl:w-16 overflow-hidden rounded-lg md:rounded-2xl border border-white/20 shadow-lg"
@@ -645,100 +648,61 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
               }}
             >
               <div
-                aria-hidden="true"
-                className="drive-lyric-reading-lane pointer-events-none absolute left-1/2 top-1/2 h-[132px] w-full max-w-6xl -translate-x-1/2 -translate-y-1/2"
-              />
-              <div
                 className="drive-lyric-track absolute left-0 right-0 top-1/2 flex flex-col items-center"
                 style={{
                   transform: `translate3d(0, ${lyricTrackOffset.toFixed(2)}px, 0)`,
                   willChange: 'transform',
+                  transition: lyricsTransition === 'smooth' || lyricsTransition === 'instant' ? undefined : 'transform 90ms ease-out',
                 }}
               >
                 {visibleLyrics.map((line, index) => {
                   const actualIndex = lyricWindowStart + index;
-                  const distance = Math.abs(actualIndex - centeredLyricFocusPosition);
-                  const focusFactor = Math.max(0, 1 - distance * 0.78);
-                  const bloomFactor = Math.sin(focusFactor * Math.PI * 0.5);
-                  const depthFactor = Math.min(distance / 6, 1);
-                  const scaleValue = 0.9 + bloomFactor * 0.12 - depthFactor * 0.025;
+                  const relativePosition = actualIndex - centeredLyricFocusPosition;
+                  const distance = Math.abs(relativePosition);
+                  
+                  // Ultra-simplified calculations for maximum performance
+                  const focusFactor = Math.max(0, 1 - distance * 0.7);
+                  const opacity = 0.25 + focusFactor * 0.75;
+                  const scale = 0.95 + focusFactor * 0.05;
                   const isCurrent = actualIndex === activeLyricIndex;
-                  const isPastLine = actualIndex < activeLyricIndex;
-                  const isReadingLine = isCurrent || distance < 0.72;
+                  
+                  // Adaptive font size based on text length
                   const lyricLength = line.text.length;
-                  const denseThreshold = isDesktopLyricsViewport ? 58 : isTabletLyricsViewport ? 48 : 36;
-                  const veryDenseThreshold = isDesktopLyricsViewport ? 92 : isTabletLyricsViewport ? 76 : 58;
-                  const ultraDenseThreshold = isDesktopLyricsViewport ? 132 : isTabletLyricsViewport ? 108 : 86;
-                  const isDenseLine = lyricLength > denseThreshold;
-                  const isVeryDenseLine = lyricLength > veryDenseThreshold;
-                  const isUltraDenseLine = lyricLength > ultraDenseThreshold;
-                  const opacityBase = isPastLine ? 0.2 : 0.34;
-                  const opacityValue = Math.max(opacityBase, 1 - Math.pow(Math.min(distance / 6.4, 1), 1.45));
-                  const textAlpha = Math.min(1, opacityBase + bloomFactor * (isCurrent ? 0.82 : 0.62)).toFixed(3);
-                  const textColor = `rgba(255, 255, 255, ${textAlpha})`;
-                  const textShadow = bloomFactor > 0.08
-                    ? `0 0 ${Math.round(8 + bloomFactor * 16)}px color-mix(in srgb, var(--accent) ${Math.round(18 + bloomFactor * 28)}%, transparent), 0 4px 18px rgba(0,0,0,0.74)`
-                    : '0 3px 14px rgba(0,0,0,0.78)';
-                  const lineFontSize = isVeryDenseLine
-                    ? isUltraDenseLine ? lyricUltraCompactFontSize : lyricCompactFontSize
-                    : isDenseLine
-                      ? lyricDenseFontSize
-                      : lyricFontSize;
-                  const lineHeight = isUltraDenseLine ? (isDesktopLyricsViewport ? '1.14' : '1.16') : lyricLineHeight;
-                  const transitionScale = lyricsTransition === 'fade'
-                    ? 1
-                    : lyricsTransition === 'instant'
-                      ? isCurrent ? 1 : 0.96
-                      : scaleValue;
-                  const transitionOpacity = lyricsTransition === 'instant'
-                    ? isCurrent ? 1 : 0
-                    : lyricsTransition === 'fade'
-                      ? isCurrent ? 1 : Math.max(opacityBase, 1 - Math.min(distance, 2.8) * 0.34)
-                      : opacityValue;
-                  const slideShift = lyricsTransition === 'slide' ? (isCurrent ? 0 : isPastLine ? -10 : 10) : 0;
-                  const cssTransition = lyricsTransition === 'smooth'
-                    ? undefined
-                    : lyricsTransition === 'instant'
-                      ? 'opacity 80ms linear'
-                      : 'transform 260ms ease, opacity 220ms ease';
+                  const fontSize = lyricLength > 100 
+                    ? lyricUltraCompactFontSize 
+                    : lyricLength > 70 
+                      ? lyricCompactFontSize 
+                      : lyricLength > 50 
+                        ? lyricDenseFontSize 
+                        : lyricFontSize;
+                  
+                  // Simple glow for current line only
+                  const textShadow = isCurrent
+                    ? `0 0 12px var(--accent), 0 0 6px var(--accent), 0 4px 16px rgba(0,0,0,0.7)`
+                    : '0 3px 12px rgba(0,0,0,0.75)';
 
                   return (
                     <div
                       key={`${line.time}-${actualIndex}`}
-                      aria-current={isCurrent ? 'true' : undefined}
-                      className="drive-lyric-line relative flex w-full items-center justify-center px-2 text-center md:px-10 xl:px-16"
+                      className="relative flex w-full items-center justify-center px-2 text-center md:px-10 xl:px-16"
                       style={{
                         height: `${lyricRowHeight}px`,
-                        transform: `translate3d(0, ${slideShift}px, 0) scale(${transitionScale.toFixed(3)})`,
-                        opacity: transitionOpacity,
-                        zIndex: isReadingLine ? 12 : Math.max(1, 10 - Math.round(distance)),
+                        transform: `scale(${scale})`,
+                        opacity,
                         willChange: 'transform, opacity',
-                        transition: cssTransition,
                       }}
                     >
                       <div
-                        aria-hidden="true"
-                        className="drive-lyric-line-glow pointer-events-none absolute left-1/2 top-1/2 h-24 w-full max-w-5xl -translate-x-1/2 -translate-y-1/2"
+                        className="relative w-full font-bold"
                         style={{
-                          opacity: bloomFactor * 0.17,
-                          transform: `translate3d(-50%, -50%, 0) scaleX(${(0.68 + bloomFactor * 0.26).toFixed(3)})`,
-                          background: 'linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--accent) 34%, rgba(255,255,255,0.1)) 50%, transparent 100%)',
-                        }}
-                      />
-                      <div
-                        className="drive-lyric-text relative w-full font-bold"
-                        style={{
-                          maxWidth: isVeryDenseLine ? 'min(95vw, 1040px)' : 'min(92vw, 980px)',
-                          fontSize: lineFontSize,
-                          lineHeight,
-                          letterSpacing: '0',
-                          color: textColor,
+                          maxWidth: 'min(95vw, 1040px)',
+                          fontSize,
+                          lineHeight: lyricLineHeight,
+                          color: '#ffffff',
                           textShadow,
-                          fontWeight: isReadingLine ? '900' : '700',
-                          textWrap: 'balance',
+                          fontWeight: isCurrent ? '900' : '700',
                           overflowWrap: 'anywhere',
                           wordBreak: 'break-word',
-                          hyphens: 'auto',
                         }}
                       >
                         {line.text || 'Instrumental break'}
@@ -760,14 +724,13 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
         </div>
 
         {/* Compact Mode - Large Album Art */}
-        <div 
-          className={`large-cover-container absolute inset-0 flex items-center justify-center ${
-            showFullLyrics ? 'pointer-events-none' : ''
-          }`}
+        <div
+          className={`large-cover-container absolute inset-0 flex items-center justify-center ${showFullLyrics ? 'pointer-events-none' : ''
+            }`}
         >
           <div className="flex flex-col items-center gap-2 xs:gap-2.5 md:gap-4 xl:gap-6 max-w-md w-full px-3 md:px-6">
             {/* Large Album Art - Much smaller on mobile */}
-            <div 
+            <div
               ref={largeCoverRef}
               className={`relative w-[min(60vw,240px,44dvh)] xs:w-[min(55vw,260px,44dvh)] sm:w-[min(50vw,300px,44dvh)] md:w-[min(45vw,340px,44dvh)] xl:w-[min(40vw,380px,44dvh)] aspect-square rounded-xl md:rounded-2xl xl:rounded-3xl overflow-hidden shadow-2xl ring-1 ring-white/10 ${showFullLyrics ? 'opacity-0' : 'opacity-100'}`}
             >
@@ -784,7 +747,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
                 </div>
               )}
             </div>
-            
+
             {/* Track Info - Smaller text on mobile */}
             <div className={`text-center w-full px-1 transition-opacity duration-300 ${!showFullLyrics ? 'opacity-100' : 'opacity-0'}`}>
               <h2 className="text-base xs:text-lg sm:text-xl md:text-2xl xl:text-3xl font-bold text-white mb-0.5 md:mb-1 xl:mb-2 truncate leading-tight">{currentTrack.title}</h2>
@@ -807,7 +770,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
           >
             <div
               className="h-full rounded-full transition-all duration-100 shadow-md pointer-events-none"
-              style={{ 
+              style={{
                 width: `${progressPercent}%`,
                 background: `linear-gradient(to right, var(--gradient-from), var(--gradient-to))`
               }}
@@ -824,11 +787,10 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
           {/* Shuffle */}
           <button
             onClick={toggleShuffle}
-            className={`flex h-7 w-7 xs:h-8 xs:w-8 sm:h-9 sm:w-9 md:h-10 md:w-10 xl:h-11 xl:w-11 items-center justify-center rounded-full border backdrop-blur-xl shadow-md transition ${
-              shuffle 
-                ? 'bg-accent/30 border-accent/50 text-accent' 
-                : 'bg-white/10 border-white/20 text-white/60 hover:bg-white/20 hover:text-white'
-            }`}
+            className={`flex h-7 w-7 xs:h-8 xs:w-8 sm:h-9 sm:w-9 md:h-10 md:w-10 xl:h-11 xl:w-11 items-center justify-center rounded-full border backdrop-blur-xl shadow-md transition ${shuffle
+              ? 'bg-accent/30 border-accent/50 text-accent'
+              : 'bg-white/10 border-white/20 text-white/60 hover:bg-white/20 hover:text-white'
+              }`}
             aria-label={shuffle ? 'Shuffle on' : 'Shuffle off'}
           >
             {shuffle ? <RiShuffleFill className="w-3 h-3 xs:w-3.5 xs:h-3.5 md:w-4 md:h-4 xl:w-[18px] xl:h-[18px]" /> : <RiShuffleLine className="w-3 h-3 xs:w-3.5 xs:h-3.5 md:w-4 md:h-4 xl:w-[18px] xl:h-[18px]" />}
@@ -864,11 +826,10 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
           {/* Repeat */}
           <button
             onClick={cycleRepeat}
-            className={`flex h-7 w-7 xs:h-8 xs:w-8 sm:h-9 sm:w-9 md:h-10 md:w-10 xl:h-11 xl:w-11 items-center justify-center rounded-full border backdrop-blur-xl shadow-md transition ${
-              repeat !== 'off'
-                ? 'bg-accent/30 border-accent/50 text-accent' 
-                : 'bg-white/10 border-white/20 text-white/60 hover:bg-white/20 hover:text-white'
-            }`}
+            className={`flex h-7 w-7 xs:h-8 xs:w-8 sm:h-9 sm:w-9 md:h-10 md:w-10 xl:h-11 xl:w-11 items-center justify-center rounded-full border backdrop-blur-xl shadow-md transition ${repeat !== 'off'
+              ? 'bg-accent/30 border-accent/50 text-accent'
+              : 'bg-white/10 border-white/20 text-white/60 hover:bg-white/20 hover:text-white'
+              }`}
             aria-label={`Repeat ${repeat}`}
           >
             {getRepeatIcon()}
@@ -878,7 +839,7 @@ export default function DrivePlayer({ onClose, isEmbedded = false }: DrivePlayer
       </div>
 
       {/* Up Next stays outside the auto-hiding controls container. */}
-      <UpNextPopup 
+      <UpNextPopup
         track={upNextTrack}
         laterTrack={andLaterTrack}
         visible={Boolean(upNextTrack) && progressPercent >= 73}
@@ -941,9 +902,8 @@ function UpNextPopup({ track, laterTrack = null, visible, cycleEnabled = false, 
           return (
             <div
               key={`${isLaterSlot ? 'later' : 'next'}-${queuedTrack.id}`}
-              className={`absolute inset-0 flex items-center gap-3 transition-all duration-500 ease-out ${
-                isActive ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
-              }`}
+              className={`absolute inset-0 flex items-center gap-3 transition-all duration-500 ease-out ${isActive ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
+                }`}
               aria-hidden={!isActive}
             >
               {queuedTrack.coverUrl ? (

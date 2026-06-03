@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import TrackPlayer, { State, Capability, Track, RepeatMode } from 'react-native-track-player';
 import * as MediaLibrary from 'expo-media-library';
 
+export type { Track } from 'react-native-track-player';
+
 interface PlayerState {
   isSetup: boolean;
   isPlaying: boolean;
@@ -16,17 +18,15 @@ interface PlayerState {
   scanLocalMusic: () => Promise<Track[]>;
 }
 
-export const usePlayerStore = create<PlayerState>((set, get) => ({
-  isSetup: false,
-  isPlaying: false,
-  currentTrack: null,
-  queue: [],
+let playerSetupPromise: Promise<boolean> | null = null;
 
-  setupPlayer: async () => {
-    let isSetup = false;
+async function ensurePlayerSetup() {
+  if (playerSetupPromise) return playerSetupPromise;
+
+  playerSetupPromise = (async () => {
     try {
       await TrackPlayer.getCurrentTrack();
-      isSetup = true;
+      return true;
     } catch {
       try {
         await TrackPlayer.setupPlayer();
@@ -41,17 +41,33 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           compactCapabilities: [Capability.Play, Capability.Pause, Capability.SkipToNext],
         });
         await TrackPlayer.setRepeatMode(RepeatMode.Queue);
-        isSetup = true;
+        return true;
       } catch (error) {
         console.warn('Track player setup failed', error);
+        playerSetupPromise = null;
+        return false;
       }
     }
+  })();
+
+  return playerSetupPromise;
+}
+
+export const usePlayerStore = create<PlayerState>((set, get) => ({
+  isSetup: false,
+  isPlaying: false,
+  currentTrack: null,
+  queue: [],
+
+  setupPlayer: async () => {
+    const isSetup = await ensurePlayerSetup();
     set({ isSetup });
   },
 
   playTrack: async (track) => {
     const { isSetup, setupPlayer } = get();
     if (!isSetup) await setupPlayer();
+    if (!get().isSetup) return;
     
     await TrackPlayer.reset();
     await TrackPlayer.add([track]);
@@ -62,6 +78,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   playQueue: async (tracks, startIndex = 0) => {
     const { isSetup, setupPlayer } = get();
     if (!isSetup) await setupPlayer();
+    if (!get().isSetup || tracks.length === 0) return;
 
     await TrackPlayer.reset();
     await TrackPlayer.add(tracks);
@@ -71,6 +88,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   togglePlayback: async () => {
+    if (!get().isSetup) return;
     const state = await TrackPlayer.getState();
     if (state === State.Playing) {
       await TrackPlayer.pause();
@@ -82,10 +100,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   skipToNext: async () => {
+    if (!get().isSetup) return;
     await TrackPlayer.skipToNext();
   },
 
   skipToPrevious: async () => {
+    if (!get().isSetup) return;
     await TrackPlayer.skipToPrevious();
   },
 

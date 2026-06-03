@@ -15,10 +15,21 @@ export function parseLRC(lrcContent: string): LyricLine[] {
   // Match common LRC variants:
   // [mm:ss], [mm:ss.x], [mm:ss.xx], [mm:ss.xxx], [mm:ss:xx], [hh:mm:ss.xx]
   const timeRegex = /\[(?:(\d+):)?(\d{1,2}):(\d{1,2})(?:[.:](\d{1,3}))?\]/g;
+  const offsetRegex = /\[offset:([+-]?\d+)\]/i;
+  
+  let globalOffset = 0;
 
   for (const line of lines) {
     const trimmedLine = line.trim();
     if (!trimmedLine) continue;
+
+    // Check for global offset tag
+    const offsetMatch = offsetRegex.exec(trimmedLine);
+    if (offsetMatch) {
+      // Positive offset means lyrics appear sooner, so subtract from timestamp
+      // Negative offset means lyrics appear later, so add to timestamp (handled by minus minus)
+      globalOffset = parseInt(offsetMatch[1], 10) / 1000;
+    }
 
     // Find all timestamps in the line
     const timestamps: number[] = [];
@@ -33,7 +44,7 @@ export function parseLRC(lrcContent: string): LyricLine[] {
         : 0;
 
       const timeInSeconds = hours * 3600 + minutes * 60 + seconds + fraction;
-      timestamps.push(timeInSeconds);
+      timestamps.push(timeInSeconds - globalOffset);
     }
 
     // Extract the text after all timestamps

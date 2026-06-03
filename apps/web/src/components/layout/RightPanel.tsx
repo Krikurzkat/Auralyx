@@ -8,7 +8,7 @@ import RightPanelParticles from '../ui/RightPanelParticles';
 import { usePerformance } from '../../hooks/usePerformance';
 
 export default function RightPanel() {
-  const { currentTrack, queue, queueIndex, isPlaying, currentTime, progress, showQueue, showLyrics, removeFromQueue, playTrack } = usePlayerStore();
+  const { currentTrack, queue, queueIndex, isPlaying, currentTime, progress, showQueue, showLyrics, removeFromQueue, playTrack, lyricsTransition } = usePlayerStore();
   const { rightPanelView, setRightPanel, reduceMotion, toggleReduceMotion } = useUIStore();
   const performanceSettings = usePerformance();
 
@@ -47,7 +47,7 @@ export default function RightPanel() {
     activeLyricIndex: fluidActiveLyricIndex,
   } = useFluidLyricMotion(
     lyrics,
-    currentTime + 0.12,
+    currentTime,
     isPlaying
   );
 
@@ -497,60 +497,41 @@ export default function RightPanel() {
                           const actualIndex = lyricWindowStart + index;
                           const relativePosition = actualIndex - centeredLyricFocusPosition;
                           const distance = Math.abs(relativePosition);
-                          const direction = relativePosition < 0 ? -1 : 1;
-
-                          // Kinetic vertical offset: Significantly increased spacing to accommodate multi-line wrapped text
-                          // at the larger font size, ensuring lines never overlap.
-                          const verticalOffset = direction * Math.pow(distance, 1.15) * 110;
-
-                          // Scale breathing: bloom toward the focused line
-                          const focusFactor = Math.max(0, 1 - distance);
-                          const bloomFactor = Math.sin(focusFactor * Math.PI / 2);
-
-                          // Opacity bloom
-                          const baseOpacity = Math.max(0, 1 - distance * 0.28);
-                          const opacityValue = baseOpacity + bloomFactor * (1 - baseOpacity);
-
-                          // Scale
-                          const scaleValue = 0.92 + 0.08 * bloomFactor - Math.min(distance * 0.04, 0.12);
-
-                          // Horizontal slide for active line
-                          const horizontalShift = bloomFactor * 6;
-
-                          // Active line detection
+                          
+                          // Ultra-simplified calculations for maximum performance
+                          const yOffset = relativePosition * 110;
+                          const focusFactor = Math.max(0, 1 - distance * 0.8);
+                          const opacity = 0.3 + focusFactor * 0.7;
+                          const scale = 0.94 + focusFactor * 0.06;
                           const isCurrent = actualIndex === fluidActiveLyricIndex;
-
-                          // Color + glow
-                          const textColor = isCurrent ? '#ffffff' : `rgba(255, 255, 255, ${0.35 + focusFactor * 0.25})`;
+                          
+                          // Simple glow for current line only
                           const textShadow = isCurrent
                             ? `0 0 16px var(--accent), 0 2px 8px rgba(0,0,0,0.5)`
-                            : `0 1px 4px rgba(0,0,0,${0.3 + distance * 0.1})`;
+                            : '0 1px 4px rgba(0,0,0,0.4)';
 
                           return (
                             <div
                               key={`${line.time}-${actualIndex}`}
-                              className="rp-lyric-line absolute w-full left-0 px-3 text-left"
+                              className="absolute w-full left-0 px-3 text-left"
                               style={{
                                 top: '50%',
                                 fontSize: '1.1rem',
                                 lineHeight: '1.4',
-                                transform: `translate3d(${horizontalShift.toFixed(1)}px, calc(-50% + ${verticalOffset.toFixed(1)}px), 0) scale(${scaleValue.toFixed(3)})`,
-                                opacity: opacityValue,
-                                color: textColor,
+                                transform: `translate3d(0, calc(-50% + ${yOffset}px), 0) scale(${scale})`,
+                                opacity,
+                                color: '#ffffff',
                                 textShadow,
                                 fontWeight: isCurrent ? '900' : '700',
-                                letterSpacing: isCurrent ? '0.015em' : '0',
-                                zIndex: Math.max(1, 10 - Math.round(distance)),
-                                willChange: 'transform, opacity, color',
+                                willChange: 'transform, opacity',
                                 wordWrap: 'break-word',
                                 overflowWrap: 'break-word',
-                                whiteSpace: 'normal',
                               }}
                             >
                               {/* Accent glow bar for active line */}
                               {isCurrent && (
                                 <div
-                                  className="absolute -left-1 top-1/2 -translate-y-1/2 w-[3px] rounded-full bg-accent rp-lyric-glow-bar"
+                                  className="absolute -left-1 top-1/2 -translate-y-1/2 w-[3px] rounded-full bg-accent"
                                   style={{
                                     height: '70%',
                                     boxShadow: '0 0 10px var(--accent), 0 0 20px var(--accent)',

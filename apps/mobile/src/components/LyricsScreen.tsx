@@ -1,11 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 import { View, FlatList, StyleSheet } from 'react-native';
-import { useProgress } from 'react-native-track-player';
 import Animated, { 
   useAnimatedStyle, 
   withTiming, 
   withSpring 
 } from 'react-native-reanimated';
+import { usePlayerProgress } from '../hooks/usePlayerProgress';
 
 export interface LyricLine {
   text: string;
@@ -51,7 +51,7 @@ const LyricItem = React.memo(({ line, isActive, isNear }: { line: LyricLine, isA
 
 export default function LyricsScreen({ lyrics }: LyricsScreenProps) {
   // 4. Highlight Sync Delay: using useProgress(50) for higher frequency updates
-  const { position } = useProgress(50);
+  const { position } = usePlayerProgress(50);
   const lyricsRef = useRef<FlatList>(null);
 
   // Add a 300ms look-ahead offset to compensate for rendering and perception delays

@@ -1,0 +1,78 @@
+import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
+import { useState, useEffect, useMemo } from 'react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { RiHome5Fill, RiHome5Line, RiSearchLine, RiSearchFill, RiMusic2Line, RiMusic2Fill, RiHeartLine, RiHeartFill, RiTimeLine, RiListUnordered, RiPlayList2Line, RiPlayListFill, RiAddLine, RiArrowDownSLine, RiArrowUpSLine, RiUserAddLine, RiCloseLine, RiHardDriveLine, } from 'react-icons/ri';
+import { useLibraryStore } from '../../stores/libraryStore';
+import { useUIStore } from '../../stores/uiStore';
+import { useLocalLibraryStore } from '../../stores/localLibraryStore';
+import SidebarParticles from '../ui/SidebarParticles';
+const navItems = [
+    { path: '/', label: 'Home', icon: RiHome5Line, iconActive: RiHome5Fill },
+    { path: '/local', label: 'Music', icon: RiHardDriveLine, iconActive: RiHardDriveLine },
+    { path: '/search', label: 'Search', icon: RiSearchLine, iconActive: RiSearchFill },
+    { path: '/library', label: 'Your Library', icon: RiMusic2Line, iconActive: RiMusic2Fill },
+];
+/* ─── Component ─── */
+export default function Sidebar() {
+    const location = useLocation();
+    const navigate = useNavigate();
+    const { likedTrackIds } = useLibraryStore();
+    const { mobileSidebarOpen, toggleMobileSidebar, reduceMotion } = useUIStore();
+    const { localTracks, localPlaylists, isLoaded, loadLibrary } = useLocalLibraryStore();
+    useEffect(() => {
+        if (!isLoaded)
+            loadLibrary();
+    }, [isLoaded, loadLibrary]);
+    const [artistsExpanded, setArtistsExpanded] = useState(true);
+    const userPlaylists = localPlaylists
+        .slice()
+        .sort((left, right) => left.title.localeCompare(right.title));
+    const followedArtistList = useMemo(() => {
+        const artistSet = new Set();
+        const artists = [];
+        localTracks.forEach(t => {
+            if (!artistSet.has(t.artist)) {
+                artistSet.add(t.artist);
+                artists.push({
+                    id: t.artist,
+                    name: t.artist,
+                    avatarGradient: t.coverGradient || ['#333', '#222']
+                });
+            }
+        });
+        return artists.slice(0, 10); // Just show top 10 local artists
+    }, [localTracks]);
+    const likedCount = likedTrackIds.size;
+    /** Builds the full sidebar content for desktop (vertical genres, all artists). */
+    const sidebarContent = (isMobile) => (_jsxs("div", { className: "flex h-full flex-col", children: [_jsxs("div", { className: "mb-5 flex items-center gap-3 px-3", children: [_jsxs("div", { className: "relative h-12 w-12 flex-shrink-0 overflow-visible", children: [!reduceMotion && (_jsx(SidebarParticles, { variant: "logo", className: "absolute -inset-2" })), _jsx("div", { className: "absolute inset-1 rounded-2xl bg-accent/10 blur-md" }), _jsx("img", { src: "/logo.png", alt: "Auralyx Logo", className: "relative z-10 h-10 w-10 object-contain" })] }), _jsx("div", { children: _jsx("div", { className: "text-base font-bold tracking-tight", children: "Auralyx" }) }), isMobile && (_jsx("button", { onClick: toggleMobileSidebar, className: "ml-auto rounded-lg p-1.5 text-softText transition hover:bg-white/5 hover:text-white", children: _jsx(RiCloseLine, { size: 20 }) }))] }), _jsx("nav", { className: "space-y-0.5 px-1", children: navItems.map(item => {
+                    const isActive = location.pathname === item.path;
+                    const Icon = isActive ? item.iconActive : item.icon;
+                    return (_jsxs(NavLink, { to: item.path, onClick: () => mobileSidebarOpen && toggleMobileSidebar(), className: `group relative overflow-hidden flex items-center gap-3 rounded-xl px-3 py-1.5 text-xs font-medium transition-all ${isActive
+                            ? 'border-l-[3px] border-accent bg-[#2A2A2A] text-white'
+                            : 'border-l-[3px] border-transparent text-softText hover:border-accent hover:bg-[#2A2A2A] hover:text-white'}`, children: [isActive && !reduceMotion && (_jsx(SidebarParticles, { variant: "active", className: "absolute inset-y-0 left-0 w-24" })), isActive && (_jsx("span", { className: "pointer-events-none absolute inset-y-0 left-0 w-16 bg-gradient-to-r from-accent/20 to-transparent" })), _jsx(Icon, { size: 18, className: "relative z-10" }), _jsx("span", { className: "relative z-10", children: item.label })] }, item.path));
+                }) }), _jsx("div", { className: "mx-3 my-4 h-px bg-[#2A2A2A]" }), _jsxs("nav", { className: "space-y-0.5 px-1", children: [_jsx(SidebarLink, { path: "/liked", label: "Liked Songs", icon: RiHeartLine, iconActive: RiHeartFill, badge: likedCount > 0 ? likedCount : undefined, currentPath: location.pathname, reduceMotion: reduceMotion, onNavigate: () => mobileSidebarOpen && toggleMobileSidebar() }), _jsx(SidebarLink, { path: "/recently-played", label: "Recently Played", icon: RiTimeLine, currentPath: location.pathname, reduceMotion: reduceMotion, onNavigate: () => mobileSidebarOpen && toggleMobileSidebar() }), _jsx(SidebarLink, { path: "/listening-history", label: "Listening History", icon: RiListUnordered, currentPath: location.pathname, reduceMotion: reduceMotion, onNavigate: () => mobileSidebarOpen && toggleMobileSidebar() }), _jsx(SidebarLink, { path: "/queue", label: "Queue", icon: RiPlayList2Line, currentPath: location.pathname, reduceMotion: reduceMotion, onNavigate: () => mobileSidebarOpen && toggleMobileSidebar() })] }), _jsx("div", { className: "mx-3 my-4 h-px bg-[#2A2A2A]" }), _jsxs("div", { className: "flex-1 overflow-y-auto sidebar-scroll px-1", children: [_jsxs("div", { className: "mb-3", children: [_jsxs("button", { onClick: () => setArtistsExpanded(e => !e), className: "flex w-full items-center justify-between px-3 py-1.5", children: [_jsx("span", { className: "text-[11px] font-semibold uppercase tracking-wider text-softText", children: "Artists" }), artistsExpanded ? (_jsx(RiArrowUpSLine, { size: 16, className: "text-softText" })) : (_jsx(RiArrowDownSLine, { size: 16, className: "text-softText" }))] }), _jsx("div", { className: `collapse-section ${artistsExpanded ? 'expanded' : 'collapsed'}`, style: { maxHeight: artistsExpanded ? '600px' : '0' }, children: _jsxs("div", { className: "space-y-0.5", children: [(isMobile ? followedArtistList.slice(0, 4) : followedArtistList).map(artist => {
+                                            const avatarGradient = artist.avatarGradient || ['#333', '#222'];
+                                            return (_jsxs("button", { onClick: () => {
+                                                    navigate(`/artist/${artist.id}`);
+                                                    if (mobileSidebarOpen)
+                                                        toggleMobileSidebar();
+                                                }, className: "flex w-full items-center gap-3 rounded-xl px-3 py-1.5 text-xs transition-all border-l-[3px] border-transparent hover:border-accent hover:bg-[#2A2A2A]", children: [_jsx("div", { className: "h-7 w-7 flex-shrink-0 rounded-full", style: { background: `linear-gradient(135deg, ${avatarGradient[0]}, ${avatarGradient[1]})` } }), _jsx("span", { className: "flex-1 truncate text-left text-white", children: artist.name }), _jsx("span", { className: "h-2 w-2 flex-shrink-0 rounded-full bg-accent" })] }, artist.id));
+                                        }), isMobile && followedArtistList.length > 4 && (_jsxs("button", { onClick: () => { navigate('/library?filter=artists'); toggleMobileSidebar(); }, className: "w-full px-3 py-2 text-left text-xs font-medium text-accent transition hover:text-gradient-to", children: ["See All (", followedArtistList.length, ")"] })), _jsxs("button", { onClick: () => {
+                                                navigate('/search');
+                                                if (mobileSidebarOpen)
+                                                    toggleMobileSidebar();
+                                            }, className: "flex w-full items-center gap-3 rounded-xl px-3 py-1.5 text-xs text-softText transition hover:bg-[#2A2A2A] hover:text-white", children: [_jsx("div", { className: "flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-[#444]", children: _jsx(RiUserAddLine, { size: 14 }) }), _jsx("span", { children: "Follow More" })] })] }) })] }), _jsx("div", { className: "mx-3 my-3 h-px bg-[#2A2A2A]" }), _jsxs("div", { className: "mb-6", children: [_jsxs("div", { className: "flex items-center justify-between px-3 py-1.5", children: [_jsxs("div", { className: "flex items-center gap-2", children: [_jsx(RiPlayListFill, { size: 14, className: "text-softText" }), _jsx("span", { className: "text-[11px] font-semibold uppercase tracking-wider text-softText", children: "Playlists" })] }), _jsx("button", { className: "rounded-lg p-1 text-softText transition hover:bg-white/5 hover:text-white", children: _jsx(RiAddLine, { size: 16 }) })] }), userPlaylists.length === 0 ? (_jsx("div", { className: "px-3 py-4 text-center text-xs text-dimText", children: "No playlists yet" })) : (_jsx("div", { className: "space-y-0.5", children: userPlaylists.map(pl => {
+                                    const coverGradient = pl.coverGradient || ['#333', '#222'];
+                                    return (_jsxs(NavLink, { to: `/playlist/${pl.id}`, onClick: () => mobileSidebarOpen && toggleMobileSidebar(), className: ({ isActive }) => `flex items-center gap-3 rounded-xl px-3 py-1.5 text-xs transition-all border-l-[3px] ${isActive
+                                            ? 'border-accent bg-[#2A2A2A] text-white'
+                                            : 'border-transparent text-softText hover:border-accent hover:bg-[#2A2A2A] hover:text-white'}`, children: [pl.coverUrl ? (_jsx("img", { src: pl.coverUrl, alt: pl.title, className: "h-7 w-7 flex-shrink-0 rounded-lg object-cover" })) : (_jsx("div", { className: "h-7 w-7 flex-shrink-0 rounded-lg", style: { background: `linear-gradient(135deg, ${coverGradient[0]}, ${coverGradient[1]})` } })), _jsx("span", { className: "truncate", children: pl.title })] }, pl.id));
+                                }) }))] })] })] }));
+    return (_jsxs(_Fragment, { children: [_jsx("aside", { className: "hidden w-[260px] flex-shrink-0 border-r border-[#2A2A2A] bg-[#1A1A1A] px-2 py-5 xl:flex xl:flex-col", children: sidebarContent(false) }), mobileSidebarOpen && (_jsxs(_Fragment, { children: [_jsx("div", { className: "fixed inset-0 z-40 bg-black/60 backdrop-blur-sm xl:hidden", onClick: toggleMobileSidebar }), _jsx("aside", { className: "fixed inset-y-0 left-0 z-50 w-[280px] animate-slide-in-left bg-[#1A1A1A] px-2 py-5 xl:hidden", children: sidebarContent(true) })] }))] }));
+}
+function SidebarLink({ path, label, icon: Icon, iconActive: IconActive, badge, currentPath, reduceMotion, onNavigate }) {
+    const isActive = currentPath === path;
+    const ResolvedIcon = isActive && IconActive ? IconActive : Icon;
+    return (_jsxs(NavLink, { to: path, onClick: onNavigate, className: `group relative overflow-hidden flex items-center justify-between rounded-xl px-3 py-1.5 text-xs transition-all border-l-[3px] ${isActive
+            ? 'border-accent bg-[#2A2A2A] text-white'
+            : 'border-transparent text-softText hover:border-accent hover:bg-[#2A2A2A] hover:text-white'}`, children: [isActive && !reduceMotion && (_jsx(SidebarParticles, { variant: "active", className: "absolute inset-y-0 left-0 w-24" })), isActive && (_jsx("span", { className: "pointer-events-none absolute inset-y-0 left-0 w-16 bg-gradient-to-r from-accent/20 to-transparent" })), _jsxs("span", { className: "relative z-10 flex items-center gap-3", children: [_jsx(ResolvedIcon, { size: 18 }), _jsx("span", { children: label })] }), badge !== undefined && badge > 0 && (_jsx("span", { className: "relative z-10 rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold text-white", children: badge }))] }));
+}

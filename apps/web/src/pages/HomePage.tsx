@@ -358,22 +358,27 @@ export default function HomePage() {
 
       {/* Hero Banner - Enhanced */}
       <section className="hidden items-start gap-4 md:grid md:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[1.5fr_0.5fr]">
-        <div ref={heroRef} className="group relative overflow-hidden rounded-[24px] bg-gradient-to-br from-[#111113] via-[#18181C] to-[#121215] shadow-2xl border border-white/[0.06]">
+        <div
+          ref={heroRef}
+          className="home-hero-glass group relative overflow-hidden rounded-[28px]"
+        >
+          <div className="pointer-events-none absolute inset-px z-0 rounded-[27px] border border-white/[0.06]" />
+          <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_18%_8%,rgba(255,255,255,0.16),transparent_34%),radial-gradient(circle_at_78%_18%,rgba(255,255,255,0.08),transparent_28%)]" />
           {/* Animated accent edge line */}
-          <div className="absolute left-0 top-0 bottom-0 w-[3px] z-20 rounded-l-[24px] overflow-hidden">
-            <div className="h-full w-full bg-theme-gradient opacity-60" />
+          <div className="absolute left-0 top-0 bottom-0 w-[3px] z-20 rounded-l-[28px] overflow-hidden">
+            <div className="h-full w-full bg-theme-gradient opacity-70" />
           </div>
 
           {/* Animated Background Blobs */}
           <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-            <div className="absolute left-[-12%] top-[-18%] h-[340px] w-[340px] rounded-full bg-gradient-from/30 blur-[110px] animate-pulse-glow" />
-            <div className="absolute right-[15%] top-[5%] h-[280px] w-[280px] rounded-full bg-gradient-to/20 blur-[100px] animate-pulse-glow" style={{ animationDelay: '1.2s' }} />
-            <div className="absolute bottom-[-20%] left-[40%] h-[240px] w-[240px] rounded-full bg-purple-500/10 blur-[90px] animate-pulse-glow" style={{ animationDelay: '2.4s' }} />
+            <div className="absolute left-[-12%] top-[-18%] h-[340px] w-[340px] rounded-full bg-gradient-from/20 blur-[110px] animate-pulse-glow" />
+            <div className="absolute right-[15%] top-[5%] h-[280px] w-[280px] rounded-full bg-gradient-to/15 blur-[100px] animate-pulse-glow" style={{ animationDelay: '1.2s' }} />
+            <div className="absolute bottom-[-20%] left-[40%] h-[240px] w-[240px] rounded-full bg-purple-500/12 blur-[90px] animate-pulse-glow" style={{ animationDelay: '2.4s' }} />
           </div>
           
           {/* Gradient Overlays */}
-          <div className="absolute inset-0 z-0 bg-gradient-to-r from-black/80 via-black/40 to-transparent pointer-events-none" />
-          <div className="absolute inset-0 z-0 bg-gradient-to-t from-black/30 via-transparent to-black/20 pointer-events-none" />
+          <div className="absolute inset-0 z-0 bg-gradient-to-r from-black/34 via-black/12 to-white/[0.04] pointer-events-none" />
+          <div className="absolute inset-0 z-0 bg-gradient-to-t from-black/18 via-transparent to-white/[0.05] pointer-events-none" />
 
           {/* Particle Nebula Dust */}
           <NebulaDust id="hero-nebula" />
@@ -383,16 +388,16 @@ export default function HomePage() {
             {/* Left Zone — Hero content + Album spotlight */}
             <div className="flex-1 min-w-0 p-5 xl:p-6 flex flex-col justify-between gap-5">
               <div className="home-hero-feature-grid grid gap-4 md:grid-cols-[minmax(0,1fr)_180px] xl:grid-cols-[minmax(0,1fr)_270px] xl:gap-6 items-start">
-                <div ref={contentRef} className="max-w-lg space-y-3">
-                  <div className="hero-badge-shimmer inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-accent backdrop-blur-sm">
+                <div ref={contentRef} className="home-hero-copy max-w-lg space-y-3">
+                  <div className="hero-badge-shimmer inline-flex items-center gap-2 rounded-full border border-accent/35 bg-black/30 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-accent backdrop-blur-md">
                     <RiFireLine size={12} className="animate-pulse" />
                     Your Music Library
                   </div>
-                  <h1 className="text-3xl font-black leading-[1.02] md:text-[1.85rem] xl:text-[2.5rem] text-white tracking-tight">
+                  <h1 className="text-3xl font-black leading-[1.02] md:text-[1.85rem] xl:text-[2.5rem] text-white tracking-tight drop-shadow-[0_3px_18px_rgba(0,0,0,0.8)]">
                     Most Listened <br/>
                     <span className="text-gradient">Music</span>
                   </h1>
-                  <p className="max-w-md text-sm md:text-xs xl:text-[0.9rem] text-white/70 leading-relaxed font-medium">
+                  <p className="max-w-md text-sm md:text-xs xl:text-[0.9rem] text-white/[0.82] leading-relaxed font-semibold drop-shadow-[0_2px_10px_rgba(0,0,0,0.85)]">
                     Dive into your most popular, frequently played tracks from your offline music library.
                   </p>
                   <div className="flex flex-wrap gap-3 pointer-events-auto pt-1">
@@ -415,7 +420,7 @@ export default function HomePage() {
 
                 {/* Album Cover — visible on all md+ screens, next to text */}
                 <div className="home-hero-album-cover hidden items-start justify-end md:flex">
-                  <div className="group/album relative aspect-square w-full max-w-[160px] overflow-hidden rounded-[18px] border border-white/10 bg-white/5 text-left shadow-2xl shadow-black/50 transition-all hover:scale-[1.03] hover:border-accent/25 xl:max-w-[240px] xl:rounded-[22px]">
+                  <div className="group/album relative aspect-square w-full max-w-[160px] overflow-hidden rounded-[18px] border border-white/[0.18] bg-black/20 text-left shadow-2xl shadow-black/50 ring-1 ring-white/[0.06] backdrop-blur-xl transition-all hover:scale-[1.03] hover:border-accent/35 xl:max-w-[240px] xl:rounded-[22px]">
                     <button
                       onClick={() => {
                         if (mostPlayedAlbum) navigate(`/album/${encodeURIComponent(mostPlayedAlbum.id)}`);
@@ -439,19 +444,19 @@ export default function HomePage() {
                           }}
                         />
                       )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-white/[0.06]" />
-                      <div className="absolute left-2.5 top-2.5 inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-black/40 px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.14em] text-accent backdrop-blur-md xl:left-3 xl:top-3 xl:px-2.5 xl:py-1 xl:text-[9px]">
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/88 via-black/24 to-black/12" />
+                      <div className="absolute left-2.5 top-2.5 inline-flex items-center gap-1.5 rounded-full border border-accent/35 bg-black/60 px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.14em] text-accent shadow-lg backdrop-blur-md xl:left-3 xl:top-3 xl:px-2.5 xl:py-1 xl:text-[9px]">
                         <RiAlbumLine size={10} />
                         Top Album
                       </div>
                       <div className="absolute bottom-2.5 left-2.5 right-2.5 min-w-0 xl:bottom-3 xl:left-3 xl:right-3">
-                        <div className="truncate text-xs font-black text-white transition-colors group-hover/album:text-accent xl:text-sm">{mostPlayedAlbum?.title || 'Most Listened'}</div>
-                        <div className="truncate text-[10px] text-white/55 xl:text-[11px]">{mostPlayedAlbum?.artist || 'Total Music Library'}</div>
+                        <div className="truncate text-xs font-black text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] transition-colors group-hover/album:text-accent xl:text-sm">{mostPlayedAlbum?.title || 'Most Listened'}</div>
+                        <div className="truncate text-[10px] font-semibold text-white/75 drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)] xl:text-[11px]">{mostPlayedAlbum?.artist || 'Total Music Library'}</div>
                         {mostPlayedAlbum && (
                           <div className="mt-0.5 flex items-center gap-1.5">
-                            <span className="text-[9px] font-semibold text-accent/70">{mostPlayedAlbum.plays} play{mostPlayedAlbum.plays === 1 ? '' : 's'}</span>
+                            <span className="text-[9px] font-bold text-accent">{mostPlayedAlbum.plays} play{mostPlayedAlbum.plays === 1 ? '' : 's'}</span>
                             <span className="text-[9px] text-white/30">·</span>
-                            <span className="text-[9px] font-semibold text-white/35">{mostPlayedAlbum.trackCount} track{mostPlayedAlbum.trackCount === 1 ? '' : 's'}</span>
+                            <span className="text-[9px] font-semibold text-white/[0.65]">{mostPlayedAlbum.trackCount} track{mostPlayedAlbum.trackCount === 1 ? '' : 's'}</span>
                           </div>
                         )}
                       </div>
@@ -506,14 +511,14 @@ export default function HomePage() {
                 <div className="flex h-6 w-6 items-center justify-center rounded-md bg-accent/15">
                   <RiBarChartBoxLine size={12} className="text-accent" />
                 </div>
-                <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/60">Top Tracks</span>
+                <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/[0.78] drop-shadow-[0_1px_6px_rgba(0,0,0,0.8)]">Top Tracks</span>
               </div>
               <div className="flex flex-col gap-2 flex-1">
                 {topListenedTracks.map((track, index) => (
                   <button
                     key={track.id}
                     onClick={() => playTrack(track, allTracks)}
-                    className="group/track flex items-center gap-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] p-2 text-left transition-all hover:scale-[1.02] border border-transparent hover:border-white/10"
+                    className="group/track flex items-center gap-2.5 rounded-xl border border-white/[0.1] bg-black/[0.24] p-2 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-xl transition-all hover:scale-[1.02] hover:border-white/[0.18] hover:bg-white/[0.11]"
                   >
                     <div className="relative flex-shrink-0">
                       {track.coverUrl ? (
@@ -533,8 +538,8 @@ export default function HomePage() {
                       </div>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-xs font-bold text-white group-hover/track:text-accent transition-colors">{track.title}</div>
-                      <div className="truncate text-[10px] text-white/50">{track.artist}</div>
+                      <div className="truncate text-xs font-bold text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.75)] transition-colors group-hover/track:text-accent">{track.title}</div>
+                      <div className="truncate text-[10px] font-medium text-white/[0.68]">{track.artist}</div>
                     </div>
                     <div className="flex-shrink-0 opacity-0 group-hover/track:opacity-100 transition-opacity">
                       <RiPlayFill size={14} className="text-accent" />
