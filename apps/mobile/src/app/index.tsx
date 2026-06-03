@@ -132,12 +132,18 @@ export default function LibraryScreen() {
 
   const loadMusic = useCallback(async () => {
     setLoading(true);
-    if (!isSetup) {
-      await setupPlayer();
+    try {
+      if (!isSetup) {
+        await setupPlayer();
+      }
+      const localTracks = await scanLocalMusic();
+      setTracks(localTracks);
+    } catch (error) {
+      console.warn('Unable to initialize mobile music library', error);
+      setTracks([]);
+    } finally {
+      setLoading(false);
     }
-    const localTracks = await scanLocalMusic();
-    setTracks(localTracks);
-    setLoading(false);
   }, [isSetup, scanLocalMusic, setupPlayer]);
 
   useEffect(() => {

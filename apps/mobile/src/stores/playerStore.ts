@@ -28,19 +28,23 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       await TrackPlayer.getCurrentTrack();
       isSetup = true;
     } catch {
-      await TrackPlayer.setupPlayer();
-      await TrackPlayer.updateOptions({
-        capabilities: [
-          Capability.Play,
-          Capability.Pause,
-          Capability.SkipToNext,
-          Capability.SkipToPrevious,
-          Capability.Stop,
-        ],
-        compactCapabilities: [Capability.Play, Capability.Pause, Capability.SkipToNext],
-      });
-      await TrackPlayer.setRepeatMode(RepeatMode.Queue);
-      isSetup = true;
+      try {
+        await TrackPlayer.setupPlayer();
+        await TrackPlayer.updateOptions({
+          capabilities: [
+            Capability.Play,
+            Capability.Pause,
+            Capability.SkipToNext,
+            Capability.SkipToPrevious,
+            Capability.Stop,
+          ],
+          compactCapabilities: [Capability.Play, Capability.Pause, Capability.SkipToNext],
+        });
+        await TrackPlayer.setRepeatMode(RepeatMode.Queue);
+        isSetup = true;
+      } catch (error) {
+        console.warn('Track player setup failed', error);
+      }
     }
     set({ isSetup });
   },
@@ -86,23 +90,28 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   scanLocalMusic: async () => {
-    const { status } = await MediaLibrary.requestPermissionsAsync();
-    if (status !== 'granted') return [];
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') return [];
 
-    let media = await MediaLibrary.getAssetsAsync({
-      mediaType: 'audio',
-      first: 100, // Load first 100 for now
-    });
+      const media = await MediaLibrary.getAssetsAsync({
+        mediaType: 'audio',
+        first: 100,
+      });
 
-    const tracks: Track[] = media.assets.map((asset, index) => ({
-      id: asset.id,
-      url: asset.uri,
-      title: asset.filename.replace(/\.[^/.]+$/, ""), // Fallback title
-      artist: 'Unknown Artist',
-      duration: asset.duration,
-      artwork: undefined, // Requires ID3 parsing for local art
-    }));
+      const tracks: Track[] = media.assets.map((asset) => ({
+        id: asset.id,
+        url: asset.uri,
+        title: asset.filename.replace(/\.[^/.]+$/, ''),
+        artist: 'Unknown Artist',
+        duration: asset.duration,
+        artwork: undefined,
+      }));
 
-    return tracks;
+      return tracks;
+    } catch (error) {
+      console.warn('Media library scan failed', error);
+      return [];
+    }
   }
 }));

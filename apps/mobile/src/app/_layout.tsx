@@ -1,11 +1,5 @@
 import { Tabs } from 'expo-router';
-import TrackPlayer from 'react-native-track-player';
-import { PlaybackService } from '../services/PlaybackService';
-import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
-
-// Register the playback service
-TrackPlayer.registerPlaybackService(() => PlaybackService);
 
 export default function Layout() {
   return (
