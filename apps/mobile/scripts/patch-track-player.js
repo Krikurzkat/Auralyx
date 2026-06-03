@@ -5,6 +5,7 @@ console.log('Running patch-track-player.js to fix Kotlin 2.x null safety...');
 
 const trackFile = path.join(__dirname, '..', 'node_modules', 'react-native-track-player', 'android', 'src', 'main', 'java', 'com', 'doublesymmetry', 'trackplayer', 'model', 'Track.kt');
 const metadataFile = path.join(__dirname, '..', 'node_modules', 'react-native-track-player', 'android', 'src', 'main', 'java', 'com', 'doublesymmetry', 'trackplayer', 'model', 'TrackMetadata.kt');
+const musicModuleFile = path.join(__dirname, '..', 'node_modules', 'react-native-track-player', 'android', 'src', 'main', 'java', 'com', 'doublesymmetry', 'trackplayer', 'module', 'MusicModule.kt');
 
 if (fs.existsSync(trackFile)) {
   let content = fs.readFileSync(trackFile, 'utf8');
@@ -28,12 +29,20 @@ if (fs.existsSync(metadataFile)) {
   }
 }
 
-const musicModuleFile = path.join(__dirname, '..', 'node_modules', 'react-native-track-player', 'android', 'src', 'main', 'java', 'com', 'doublesymmetry', 'trackplayer', 'module', 'MusicModule.kt');
-
 if (fs.existsSync(musicModuleFile)) {
   let content = fs.readFileSync(musicModuleFile, 'utf8');
-  content = content.replace('callback.resolve(Arguments.fromBundle(musicService.tracks[index].originalItem))', 'callback.resolve(Arguments.fromBundle(musicService.tracks[index].originalItem ?: Bundle()))');
-  content = content.replace('musicService.tracks[musicService.getCurrentTrackIndex()].originalItem\n            )', 'musicService.tracks[musicService.getCurrentTrackIndex()].originalItem ?: Bundle()\n            )');
+  content = content.replace(
+    'callback.resolve(Arguments.fromBundle(musicService.tracks[index].originalItem))',
+    'callback.resolve(Arguments.fromBundle(musicService.tracks[index].originalItem ?: Bundle()))',
+  );
+  content = content.replace(
+    'callback.resolve(Arguments.fromList(musicService.tracks.map { it.originalItem }))',
+    'callback.resolve(Arguments.fromList(musicService.tracks.map { it.originalItem ?: Bundle() }))',
+  );
+  content = content.replace(
+    'musicService.tracks[musicService.getCurrentTrackIndex()].originalItem\n            )',
+    'musicService.tracks[musicService.getCurrentTrackIndex()].originalItem ?: Bundle()\n            )',
+  );
   fs.writeFileSync(musicModuleFile, content);
   console.log('Patched MusicModule.kt');
 }
