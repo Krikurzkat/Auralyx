@@ -28,6 +28,14 @@ export default function Layout() {
             title: 'Now Playing',
           }}
         />
+        <Tabs.Screen
+          name="privacy"
+          options={{
+            title: 'Privacy Policy',
+            href: null,
+            tabBarStyle: { display: 'none' },
+          }}
+        />
       </Tabs>
     </>
   );

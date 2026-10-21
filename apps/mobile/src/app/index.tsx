@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'expo-router';
 import {
   ActivityIndicator,
   FlatList,
@@ -97,6 +98,7 @@ function getPlaceholderGradient(index: number) {
 }
 
 export default function LibraryScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const progress = usePlayerProgress(250);
   const {
@@ -397,7 +399,13 @@ export default function LibraryScreen() {
               <Feather name="bell" size={22} color="#FFFFFF" />
               {hasNotifications ? <View style={styles.notificationDot} /> : null}
             </TouchableOpacity>
-            <TouchableOpacity activeOpacity={0.7} style={styles.headerIconButton}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              style={styles.headerIconButton}
+              accessibilityRole="button"
+              accessibilityLabel="Privacy policy"
+              onPress={() => router.push('/privacy')}
+            >
               <Feather name="settings" size={22} color="#FFFFFF" />
             </TouchableOpacity>
             <TouchableOpacity activeOpacity={0.7} style={styles.avatar}>
