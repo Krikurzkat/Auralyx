@@ -5,7 +5,7 @@ import { usePlayerStore } from '../stores/playerStore';
 
 export default function RecentlyPlayedPage() {
   const { getRecentlyPlayed } = useLocalLibraryStore();
-  const { playTrack } = usePlayerStore();
+  const playTrack = usePlayerStore((state) => state.playTrack);
   const { localTracks } = useLocalLibraryStore();
 
   const recentTracks = useMemo(() => getRecentlyPlayed(50), [getRecentlyPlayed]);

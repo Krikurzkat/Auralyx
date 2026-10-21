@@ -5,10 +5,11 @@ import { useNavigate } from 'react-router-dom';
 import ContentCard from '../components/cards/ContentCard';
 import { usePlayerStore } from '../stores/playerStore';
 import { useLocalLibraryStore } from '../stores/localLibraryStore';
+import { usePerformance } from '../hooks/usePerformance';
 import type { Track } from '../types';
 import { clickedTrackCoverRef } from '../components/player/FullscreenPlayer';
 import { RiAlbumLine, RiPlayFill, RiTimeLine, RiFireLine, RiMusic2Line, RiFolderMusicLine, RiUserLine, RiBarChartBoxLine, RiTrophyLine, RiHeadphoneLine, RiArrowLeftSLine, RiArrowRightSLine } from 'react-icons/ri';
-import NebulaDust from '../components/ui/NebulaDust';
+import { shallow } from 'zustand/shallow';
 
 type SpotlightAlbum = {
   id: string;
@@ -31,13 +32,26 @@ function mergeUniqueTracks(...groups: Track[][]): Track[] {
   });
 }
 
+function getTrackByline(track: Track, plays: number) {
+  const artist = track.artist?.trim();
+  if (artist && !/^\d+$/.test(artist)) return artist;
+  return plays > 0 ? `${plays} ${plays === 1 ? 'play' : 'plays'}` : 'In your library';
+}
+
 export default function HomePage() {
   const navigate = useNavigate();
-  const { playTrack, currentTrack, setFullscreenOpen } = usePlayerStore();
+  const { playTrack, currentTrack, isPlaying, setFullscreenOpen } = usePlayerStore((state) => ({
+    playTrack: state.playTrack,
+    currentTrack: state.currentTrack,
+    isPlaying: state.isPlaying,
+    setFullscreenOpen: state.setFullscreenOpen,
+  }), shallow);
+  const performanceSettings = usePerformance();
   const {
     localTracks, localPlaylists, isLoaded, loadLibrary,
     getMostPlayed, getRecentlyPlayed, lastPlayed, playCounts
   } = useLocalLibraryStore();
+  const [featuredTrackIndex, setFeaturedTrackIndex] = useState(0);
 
   useEffect(() => {
     if (!isLoaded) loadLibrary();
@@ -98,6 +112,9 @@ export default function HomePage() {
   const activeAlbumCoverUrl = mostPlayedAlbum?.coverUrls[
     spotlightCoverIndex % Math.max(mostPlayedAlbum.coverUrls.length, 1)
   ] || mostPlayedAlbum?.coverUrl;
+  const featureTrack = topListenedTracks.length > 0
+    ? topListenedTracks[featuredTrackIndex % topListenedTracks.length]
+    : recentTracks[0] || allTracks[0] || null;
 
   useEffect(() => {
     setSpotlightAlbumIndex((current) => (
@@ -110,25 +127,25 @@ export default function HomePage() {
   }, [mostPlayedAlbum?.id]);
 
   useEffect(() => {
-    if (spotlightAlbums.length <= 1) return undefined;
+    if (isPlaying || spotlightAlbums.length <= 1) return undefined;
 
     const interval = window.setInterval(() => {
       setSpotlightAlbumIndex((current) => (current + 1) % spotlightAlbums.length);
     }, 9000);
 
     return () => window.clearInterval(interval);
-  }, [spotlightAlbums.length]);
+  }, [isPlaying, spotlightAlbums.length]);
 
   useEffect(() => {
     const coverCount = mostPlayedAlbum?.coverUrls.length || 0;
-    if (coverCount <= 1) return undefined;
+    if (isPlaying || coverCount <= 1) return undefined;
 
     const interval = window.setInterval(() => {
       setSpotlightCoverIndex((current) => (current + 1) % coverCount);
     }, 3600);
 
     return () => window.clearInterval(interval);
-  }, [mostPlayedAlbum?.id, mostPlayedAlbum?.coverUrls.length]);
+  }, [isPlaying, mostPlayedAlbum?.id, mostPlayedAlbum?.coverUrls.length]);
 
   const changeSpotlightAlbum = (direction: -1 | 1) => {
     if (spotlightAlbums.length <= 1) return;
@@ -305,54 +322,157 @@ export default function HomePage() {
     <div className="page-enter space-y-5 sm:space-y-8 pb-8 px-3 sm:px-4 md:px-0">
       {/* Mobile columns */}
       <section className="md:hidden">
-        <div className="rounded-2xl sm:rounded-[24px] border border-white/5 bg-gradient-to-br from-card/90 to-surface/80 p-3 sm:p-4 backdrop-blur-xl">
-          <div className="mb-3 flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/20">
-              <RiBarChartBoxLine size={16} className="text-accent" />
+        <section
+          aria-label="Featured music"
+          className="liquid-glass-surface relative isolate mb-4 overflow-hidden rounded-[24px] border border-white/10 bg-gradient-to-br from-card via-surface to-background p-3.5 shadow-xl"
+        >
+          <div
+            className="pointer-events-none absolute -right-10 -top-12 h-40 w-40 rounded-full opacity-20 blur-3xl"
+            style={{ background: featureTrack?.coverGradient?.[0] || 'var(--accent)' }}
+          />
+          <div className="relative flex min-w-0 items-center gap-3">
+            <div className="relative h-[104px] w-[104px] shrink-0 overflow-hidden rounded-2xl border border-white/15 bg-white/5 shadow-lg">
+              {featureTrack?.coverUrl ? (
+                <img src={featureTrack.coverUrl} alt={featureTrack.title || 'Featured music'} className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center" style={{ background: `linear-gradient(135deg, ${featureTrack?.coverGradient?.[0] || '#7c3aed'}, ${featureTrack?.coverGradient?.[1] || '#111827'})` }}>
+                  <RiMusic2Line size={34} className="text-white/80" />
+                </div>
+              )}
+              <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-black/55 to-transparent" />
             </div>
-            <h2 className="text-sm font-bold text-white">Your Stats</h2>
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:gap-3">
-            {/* Tracks Played Today */}
-            <div className="group rounded-2xl bg-gradient-to-br from-accent/10 to-accent/5 border border-accent/20 p-3 transition hover:border-accent/40 hover:scale-[1.02]">
-              <div className="flex items-center gap-2 mb-1">
-                <RiHeadphoneLine size={14} className="text-accent" />
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-accent/80">Today</span>
+            <div className="min-w-0 flex-1">
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <div className="inline-flex min-w-0 items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.16em] text-accent">
+                  <RiFireLine size={11} /> Most played
+                </div>
+                {topListenedTracks.length > 1 && (
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setFeaturedTrackIndex(index => (index - 1 + topListenedTracks.length) % topListenedTracks.length)}
+                      aria-label="Previous most played track"
+                      className="flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-black/20 text-white/65 transition hover:bg-white/10 hover:text-white active:scale-95"
+                    ><RiArrowLeftSLine size={16} /></button>
+                    <span className="min-w-7 text-center text-[9px] tabular-nums text-white/45">{(featuredTrackIndex % topListenedTracks.length) + 1}/{topListenedTracks.length}</span>
+                    <button
+                      type="button"
+                      onClick={() => setFeaturedTrackIndex(index => (index + 1) % topListenedTracks.length)}
+                      aria-label="Next most played track"
+                      className="flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-black/20 text-white/65 transition hover:bg-white/10 hover:text-white active:scale-95"
+                    ><RiArrowRightSLine size={16} /></button>
+                  </div>
+                )}
               </div>
-              <div className="text-xl sm:text-2xl font-black text-white">{quickStats.tracksPlayedToday}</div>
-              <div className="text-[11px] text-softText">tracks played</div>
+              <h1 className="line-clamp-2 text-[17px] font-black leading-tight text-white">
+                {featureTrack?.title || 'Your Music'}
+              </h1>
+              <p className="mt-1 truncate text-[11px] font-medium text-white/55">
+                {featureTrack ? getTrackByline(featureTrack, playCounts[featureTrack.id] || 0) : 'Your local library'}
+              </p>
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  onClick={() => featureTrack && playTrack(featureTrack, allTracks)}
+                  disabled={!featureTrack}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full bg-theme-gradient px-3.5 text-[11px] font-bold text-white shadow-glow-sm transition active:scale-95 disabled:opacity-50"
+                >
+                  <RiPlayFill size={15} /> Play
+                </button>
+                <button
+                  onClick={() => navigate('/local')}
+                  className="inline-flex h-9 items-center rounded-full border border-white/10 bg-white/5 px-3 text-[11px] font-semibold text-white/75 transition active:scale-95"
+                >
+                  Library
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div className="liquid-glass-surface rounded-2xl border border-white/5 bg-gradient-to-br from-card/90 to-surface/80 p-3 backdrop-blur-xl">
+          <div className="mb-2.5 flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15">
+              <RiBarChartBoxLine size={14} className="text-accent" />
+            </div>
+            <h2 className="text-[13px] font-bold text-white">Your Stats</h2>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {/* Tracks Played Today */}
+            <div className="liquid-glass-edge rounded-xl border border-accent/20 bg-gradient-to-br from-accent/10 to-accent/5 px-2.5 py-2">
+              <div className="mb-0.5 flex items-center gap-1.5">
+                <RiHeadphoneLine size={12} className="text-accent" />
+                <span className="text-[9px] font-semibold uppercase tracking-wider text-accent/80">Today</span>
+              </div>
+              <div className="text-lg font-black leading-tight text-white">{quickStats.tracksPlayedToday}<span className="ml-1 text-[9px] font-medium text-softText">played</span></div>
             </div>
 
             {/* Listening Streak */}
-            <div className="group rounded-2xl bg-gradient-to-br from-gradient-from/10 to-gradient-to/5 border border-gradient-to/20 p-3 transition hover:border-gradient-to/40 hover:scale-[1.02]">
-              <div className="flex items-center gap-2 mb-1">
-                <RiFireLine size={14} className="text-gradient-to" />
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-gradient-to/80">Streak</span>
+            <div className="liquid-glass-edge rounded-xl border border-gradient-to/20 bg-gradient-to-br from-gradient-from/10 to-gradient-to/5 px-2.5 py-2">
+              <div className="mb-0.5 flex items-center gap-1.5">
+                <RiFireLine size={12} className="text-gradient-to" />
+                <span className="text-[9px] font-semibold uppercase tracking-wider text-gradient-to/80">Streak</span>
               </div>
-              <div className="text-xl sm:text-2xl font-black text-white">{quickStats.streak}</div>
-              <div className="text-[11px] text-softText">day{quickStats.streak !== 1 ? 's' : ''}</div>
+              <div className="text-lg font-black leading-tight text-white">{quickStats.streak}<span className="ml-1 text-[9px] font-medium text-softText">day{quickStats.streak !== 1 ? 's' : ''}</span></div>
             </div>
 
             {/* Total Library */}
-            <div className="group rounded-2xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 p-3 transition hover:border-white/20 hover:scale-[1.02]">
-              <div className="flex items-center gap-2 mb-1">
-                <RiMusic2Line size={14} className="text-white/70" />
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-white/60">Library</span>
+            <div className="liquid-glass-edge rounded-xl border border-white/10 bg-gradient-to-br from-white/10 to-white/5 px-2.5 py-2">
+              <div className="mb-0.5 flex items-center gap-1.5">
+                <RiMusic2Line size={12} className="text-white/70" />
+                <span className="text-[9px] font-semibold uppercase tracking-wider text-white/60">Library</span>
               </div>
-              <div className="text-xl sm:text-2xl font-black text-white">{quickStats.totalTracks}</div>
-              <div className="text-[11px] text-softText">total tracks</div>
+              <div className="text-lg font-black leading-tight text-white">{quickStats.totalTracks}<span className="ml-1 text-[9px] font-medium text-softText">tracks</span></div>
             </div>
 
             {/* Top Genre */}
-            <div className="group rounded-2xl bg-gradient-to-br from-purple-500/10 to-purple-500/5 border border-purple-500/20 p-3 transition hover:border-purple-500/40 hover:scale-[1.02]">
-              <div className="flex items-center gap-2 mb-1">
-                <RiTrophyLine size={14} className="text-purple-400" />
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-purple-400/80">Top Genre</span>
+            <div className="liquid-glass-edge min-w-0 rounded-xl border border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-purple-500/5 px-2.5 py-2">
+              <div className="mb-0.5 flex items-center gap-1.5">
+                <RiTrophyLine size={12} className="text-purple-400" />
+                <span className="text-[9px] font-semibold uppercase tracking-wider text-purple-400/80">Top Genre</span>
               </div>
-              <div className="text-lg font-black text-white truncate">{quickStats.topGenre}</div>
-              <div className="text-[11px] text-softText">most played</div>
+              <div className="truncate text-[13px] font-black leading-tight text-white">{quickStats.topGenre}</div>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Mobile top tracks */}
+      <section className="md:hidden">
+        <div className="mb-2.5 flex items-center justify-between">
+          <div>
+            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-accent">Your rotation</p>
+            <h2 className="text-lg font-black text-white">Top Tracks</h2>
+          </div>
+          {topListenedTracks.length > 0 && (
+            <button onClick={() => navigate('/local')} className="rounded-full border border-white/10 px-3 py-1.5 text-[10px] font-semibold text-white/65">All tracks</button>
+          )}
+        </div>
+        <div className="liquid-glass-edge overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.035] px-2.5">
+          {topListenedTracks.length > 0 ? topListenedTracks.map((track, index) => (
+            <button
+              key={track.id}
+              onClick={() => playTrack(track, allTracks)}
+              className={`flex w-full items-center gap-2.5 py-2.5 text-left ${index < topListenedTracks.length - 1 ? 'border-b border-white/[0.06]' : ''}`}
+            >
+              <span className="w-4 shrink-0 text-center text-[10px] font-bold tabular-nums text-white/35">{String(index + 1).padStart(2, '0')}</span>
+              {track.coverUrl ? (
+                <img src={track.coverUrl} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover" />
+              ) : (
+                <div className="h-10 w-10 shrink-0 rounded-lg" style={{ background: `linear-gradient(135deg, ${track.coverGradient?.[0] || '#333'}, ${track.coverGradient?.[1] || '#222'})` }} />
+              )}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[12px] font-bold text-white">{track.title}</span>
+                <span className="mt-0.5 block truncate text-[10px] text-white/45">{getTrackByline(track, playCounts[track.id] || 0)}</span>
+              </span>
+              <span className="shrink-0 text-[10px] tabular-nums text-white/40">{Math.floor(track.duration / 60)}:{String(Math.floor(track.duration % 60)).padStart(2, '0')}</span>
+              <RiPlayFill size={14} className="ml-0.5 shrink-0 text-accent" />
+            </button>
+          )) : (
+            <button onClick={() => navigate('/local')} className="flex w-full items-center gap-3 py-4 text-left">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent"><RiMusic2Line size={18} /></span>
+              <span><span className="block text-xs font-bold text-white">Build your rotation</span><span className="text-[10px] text-white/45">Add music to see your top tracks</span></span>
+            </button>
+          )}
         </div>
       </section>
 
@@ -370,18 +490,17 @@ export default function HomePage() {
           </div>
 
           {/* Animated Background Blobs */}
-          <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-            <div className="absolute left-[-12%] top-[-18%] h-[340px] w-[340px] rounded-full bg-gradient-from/20 blur-[110px] animate-pulse-glow" />
-            <div className="absolute right-[15%] top-[5%] h-[280px] w-[280px] rounded-full bg-gradient-to/15 blur-[100px] animate-pulse-glow" style={{ animationDelay: '1.2s' }} />
-            <div className="absolute bottom-[-20%] left-[40%] h-[240px] w-[240px] rounded-full bg-purple-500/12 blur-[90px] animate-pulse-glow" style={{ animationDelay: '2.4s' }} />
-          </div>
+          {performanceSettings.enableHeavyAnimations && !isPlaying && (
+            <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+              <div className="absolute left-[-12%] top-[-18%] h-[340px] w-[340px] rounded-full bg-gradient-from/20 blur-[110px] animate-pulse-glow" />
+              <div className="absolute right-[15%] top-[5%] h-[280px] w-[280px] rounded-full bg-gradient-to/15 blur-[100px] animate-pulse-glow" style={{ animationDelay: '1.2s' }} />
+              <div className="absolute bottom-[-20%] left-[40%] h-[240px] w-[240px] rounded-full bg-purple-500/12 blur-[90px] animate-pulse-glow" style={{ animationDelay: '2.4s' }} />
+            </div>
+          )}
           
           {/* Gradient Overlays */}
           <div className="absolute inset-0 z-0 bg-gradient-to-r from-black/34 via-black/12 to-white/[0.04] pointer-events-none" />
           <div className="absolute inset-0 z-0 bg-gradient-to-t from-black/18 via-transparent to-white/[0.05] pointer-events-none" />
-
-          {/* Particle Nebula Dust */}
-          <NebulaDust id="hero-nebula" />
 
           {/* Two-zone layout: Left content | Right track list */}
           <div className="relative z-10 flex">
@@ -390,7 +509,7 @@ export default function HomePage() {
               <div className="home-hero-feature-grid grid gap-4 md:grid-cols-[minmax(0,1fr)_180px] xl:grid-cols-[minmax(0,1fr)_270px] xl:gap-6 items-start">
                 <div ref={contentRef} className="home-hero-copy max-w-lg space-y-3">
                   <div className="hero-badge-shimmer inline-flex items-center gap-2 rounded-full border border-accent/35 bg-black/30 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-accent backdrop-blur-md">
-                    <RiFireLine size={12} className="animate-pulse" />
+                    <RiFireLine size={12} className={performanceSettings.enableHeavyAnimations && !isPlaying ? 'animate-pulse' : ''} />
                     Your Music Library
                   </div>
                   <h1 className="text-3xl font-black leading-[1.02] md:text-[1.85rem] xl:text-[2.5rem] text-white tracking-tight drop-shadow-[0_3px_18px_rgba(0,0,0,0.8)]">
@@ -518,7 +637,7 @@ export default function HomePage() {
                   <button
                     key={track.id}
                     onClick={() => playTrack(track, allTracks)}
-                    className="group/track flex items-center gap-2.5 rounded-xl border border-white/[0.1] bg-black/[0.24] p-2 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-xl transition-all hover:scale-[1.02] hover:border-white/[0.18] hover:bg-white/[0.11]"
+                    className="liquid-glass-edge group/track flex items-center gap-2.5 rounded-xl border border-white/[0.1] bg-black/[0.24] p-2 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-xl transition-all hover:scale-[1.02] hover:border-white/[0.18] hover:bg-white/[0.11]"
                   >
                     <div className="relative flex-shrink-0">
                       {track.coverUrl ? (
@@ -559,12 +678,7 @@ export default function HomePage() {
 
         {/* Side Stats Card - Your Stats */}
         <div className="space-y-4">
-          <div className="relative w-full rounded-[32px] border border-white/10 bg-gradient-to-br from-card via-surface to-background p-8 flex flex-col overflow-hidden shadow-xl">
-            {/* Background Pattern */}
-            <div className="absolute top-0 right-0 p-8 opacity-[0.03]">
-              <RiMusic2Line size={160} />
-            </div>
-            
+          <div className="liquid-glass-surface relative w-full rounded-[32px] border border-white/10 bg-gradient-to-br from-card via-surface to-background p-8 flex flex-col overflow-hidden shadow-xl">
             <div className="relative z-10">
               <div className="flex items-center gap-2 mb-6">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/15">
@@ -575,7 +689,7 @@ export default function HomePage() {
               
               <div className="grid grid-cols-2 gap-3 mb-3">
                 {/* TODAY Card */}
-                <div className="rounded-2xl border border-white/10 bg-glass backdrop-blur-2xl/50 p-4 backdrop-blur-sm">
+                <div className="liquid-glass-edge rounded-2xl border border-white/10 bg-glass backdrop-blur-2xl/50 p-4 backdrop-blur-sm">
                   <div className="flex items-center gap-2 mb-2">
                     <RiHeadphoneLine size={14} className="text-accent" />
                     <span className="text-[10px] font-bold uppercase tracking-wider text-accent">Today</span>
@@ -585,7 +699,7 @@ export default function HomePage() {
                 </div>
 
                 {/* STREAK Card */}
-                <div className="rounded-2xl border border-white/10 bg-glass backdrop-blur-2xl/50 p-4 backdrop-blur-sm">
+                <div className="liquid-glass-edge rounded-2xl border border-white/10 bg-glass backdrop-blur-2xl/50 p-4 backdrop-blur-sm">
                   <div className="flex items-center gap-2 mb-2">
                     <RiFireLine size={14} className="text-gradient-to" />
                     <span className="text-[10px] font-bold uppercase tracking-wider text-gradient-to">Streak</span>
@@ -597,7 +711,7 @@ export default function HomePage() {
 
               <div className="grid grid-cols-2 gap-3">
                 {/* LIBRARY Card */}
-                <div className="rounded-2xl border border-white/10 bg-glass backdrop-blur-2xl/50 p-4 backdrop-blur-sm">
+                <div className="liquid-glass-edge rounded-2xl border border-white/10 bg-glass backdrop-blur-2xl/50 p-4 backdrop-blur-sm">
                   <div className="flex items-center gap-2 mb-2">
                     <RiMusic2Line size={14} className="text-white/70" />
                     <span className="text-[10px] font-bold uppercase tracking-wider text-white/70">Library</span>
@@ -607,7 +721,7 @@ export default function HomePage() {
                 </div>
 
                 {/* TOP GENRE Card */}
-                <div className="rounded-2xl border border-purple-500/20 bg-purple-950/30 p-4 backdrop-blur-sm">
+                <div className="liquid-glass-edge rounded-2xl border border-purple-500/20 bg-purple-950/30 p-4 backdrop-blur-sm">
                   <div className="flex items-center gap-2 mb-2">
                     <RiTrophyLine size={14} className="text-purple-400" />
                     <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">Top Genre</span>
@@ -643,12 +757,12 @@ export default function HomePage() {
               </button>
             )}
           </div>
-          <div className="grid grid-cols-1 gap-2 sm:gap-3 sm:grid-cols-2 md:grid-cols-3">
+          <div className="-mx-3 flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-3 pb-1 scrollbar-hidden sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-3 sm:overflow-visible sm:px-0 md:grid-cols-3">
             {recentTracks.slice(0, 3).map(track => (
               <button
                 key={track.id}
                 onClick={(event) => handleJumpBackInPlay(track, event.currentTarget)}
-                className="group flex items-center gap-4 rounded-2xl bg-gradient-to-br from-card/80 to-surface/60 p-3 text-left transition-all hover:from-card hover:to-surface hover:scale-[1.02] border border-white/5 hover:border-white/10 shadow-lg hover:shadow-xl backdrop-blur-sm"
+                className="group flex w-[220px] shrink-0 snap-start items-center gap-3 rounded-2xl border border-white/5 bg-gradient-to-br from-card/80 to-surface/60 p-3 text-left shadow-lg backdrop-blur-sm transition-all hover:border-white/10 hover:from-card hover:to-surface sm:w-auto sm:gap-4 sm:hover:scale-[1.02] sm:hover:shadow-xl"
               >
                 {track.coverUrl ? (
                   <img
@@ -663,7 +777,7 @@ export default function HomePage() {
                   />
                 )}
                 <span className="flex-1 truncate text-xs sm:text-sm font-bold text-white group-hover:text-accent transition-colors">{track.title}</span>
-                <div className="flex h-9 w-9 sm:h-12 sm:w-12 flex-shrink-0 items-center justify-center rounded-full bg-accent text-white shadow-glow-sm opacity-0 group-hover:opacity-100 transition-all hover:scale-110">
+                <div className="flex h-9 w-9 sm:h-12 sm:w-12 flex-shrink-0 items-center justify-center rounded-full bg-accent text-white shadow-glow-sm opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all hover:scale-110">
                   <RiPlayFill size={20} className="ml-0.5" />
                 </div>
               </button>
@@ -678,28 +792,40 @@ export default function HomePage() {
           <h2 className="text-lg sm:text-2xl font-bold">Your Playlists</h2>
           <button onClick={() => navigate('/local')} className="text-sm font-semibold text-softText transition hover:text-white">View all</button>
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 xl:grid-cols-6">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 xl:grid-cols-5 xl:grid-cols-6">
+          <div className="sm:hidden">
+            {userPlaylists.slice(0, 3).map(pl => (
+              <button key={pl.id} onClick={() => navigate('/local')} className="flex w-full items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.035] p-2.5 text-left">
+                {pl.coverUrl ? <img src={pl.coverUrl} alt="" className="h-11 w-11 shrink-0 rounded-xl object-cover" /> : <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white/80" style={{ background: `linear-gradient(135deg, ${pl.coverGradient?.[0] || '#7c3aed'}, ${pl.coverGradient?.[1] || '#111827'})` }}><RiFolderMusicLine size={18} /></span>}
+                <span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold text-white">{pl.title}</span><span className="mt-0.5 block text-[10px] text-white/45">{pl.trackIds.length} tracks</span></span>
+                <span className="text-sm text-white/35">›</span>
+              </button>
+            ))}
+          </div>
           {userPlaylists.map(pl => (
-            <ContentCard
-              key={pl.id}
-              id={pl.id}
-              title={pl.title}
-              subtitle={`${pl.trackIds.length} tracks`}
-              gradient={pl.coverGradient}
-              coverUrl={pl.coverUrl}
-              type="playlist"
-              onClick={() => navigate('/local')}
-            />
+            <div key={pl.id} className="hidden sm:block">
+              <ContentCard
+                id={pl.id}
+                title={pl.title}
+                subtitle={`${pl.trackIds.length} tracks`}
+                gradient={pl.coverGradient}
+                coverUrl={pl.coverUrl}
+                type="playlist"
+                onClick={() => navigate('/local')}
+              />
+            </div>
           ))}
           {userPlaylists.length === 0 && (
-            <div className="col-span-full py-16 rounded-3xl border-2 border-dashed border-white/10 bg-gradient-to-br from-white/5 to-transparent flex flex-col items-center justify-center text-center backdrop-blur-sm">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-accent/15 mb-4">
-                <RiFolderMusicLine size={32} className="text-accent" />
+            <div className="col-span-full flex flex-row items-center gap-3 rounded-2xl border border-dashed border-white/10 bg-gradient-to-br from-white/5 to-transparent p-3 text-left backdrop-blur-sm sm:flex-col sm:py-16 sm:text-center">
+              <div className="mb-0 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent/15 sm:mb-4 sm:h-16 sm:w-16 sm:rounded-2xl">
+                <RiFolderMusicLine size={22} className="text-accent sm:text-[32px]" />
               </div>
-              <p className="text-base font-bold text-white mb-2">No playlists found</p>
-              <p className="text-sm text-dimText mb-5">Create your first playlist in the Library.</p>
-              <button onClick={() => navigate('/local')} className="px-6 py-3 bg-theme-gradient rounded-full text-sm font-bold hover:scale-105 transition-transform shadow-glow-sm">
-                Go to Library
+              <div className="min-w-0 flex-1 sm:flex-none">
+                <p className="mb-0.5 text-xs font-bold text-white sm:mb-2 sm:text-base">No playlists yet</p>
+                <p className="mb-0 text-[10px] text-dimText sm:mb-5 sm:text-sm">Create one to organize your music.</p>
+              </div>
+              <button onClick={() => navigate('/local')} className="shrink-0 rounded-full bg-theme-gradient px-3.5 py-2 text-[10px] font-bold shadow-glow-sm transition-transform hover:scale-105 sm:px-6 sm:py-3 sm:text-sm">
+                Create
               </button>
             </div>
           )}
@@ -711,7 +837,7 @@ export default function HomePage() {
         <div className="mb-3 sm:mb-5 flex items-center justify-between">
           <h2 className="text-lg sm:text-2xl font-bold">Popular Artists in Library</h2>
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:gap-4 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 xl:grid-cols-6">
+        <div className="hidden grid-cols-3 gap-4 sm:grid md:grid-cols-4 xl:grid-cols-5 xl:grid-cols-6">
           {popularArtists.map(artist => (
             <ContentCard
               key={artist.id}
@@ -731,6 +857,22 @@ export default function HomePage() {
               <p className="text-sm text-dimText">
                 Import music to discover popular artists.
               </p>
+            </div>
+          )}
+        </div>
+        <div className="space-y-2 sm:hidden">
+          {popularArtists.filter(artist => !/^\d+$/.test(artist.name.trim())).length > 0 ? (
+            popularArtists.filter(artist => !/^\d+$/.test(artist.name.trim())).slice(0, 4).map(artist => (
+              <button key={artist.id} onClick={() => navigate(`/artist/${encodeURIComponent(artist.id)}`)} className="flex w-full items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.035] p-2.5 text-left">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-black text-white/85" style={{ background: `linear-gradient(135deg, ${artist.gradient[0]}, ${artist.gradient[1]})` }}>{artist.name.slice(0, 1).toUpperCase()}</span>
+                <span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold text-white">{artist.name}</span><span className="mt-0.5 block text-[10px] text-white/45">{artist.trackCount} {artist.trackCount === 1 ? 'track' : 'tracks'}</span></span>
+                <span className="text-sm text-white/35">›</span>
+              </button>
+            ))
+          ) : (
+            <div className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.035] p-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-white/45"><RiUserLine size={18} /></span>
+              <span><span className="block text-xs font-semibold text-white/75">No artist names yet</span><span className="mt-0.5 block text-[10px] text-white/40">Add artist tags to your tracks to see them here.</span></span>
             </div>
           )}
         </div>

@@ -18,6 +18,13 @@ import {
   RiPulseLine,
   RiSoundModuleLine,
 } from 'react-icons/ri';
+import { shallow } from 'zustand/shallow';
+import {
+  connectLocalAudioForVisualization,
+  readAudioSpectrum,
+  subscribeAudioSpectrum,
+} from '../../utils/audioVisualizer';
+import { isMobileDevice } from '../../utils/performanceOptimizations';
 
 type VisualizerMode = 'bars' | 'wave' | 'circular';
 
@@ -28,9 +35,8 @@ interface VisualizerPlayerProps {
 export default function VisualizerPlayer({ onClose }: VisualizerPlayerProps) {
   const {
     currentTrack,
+    audioRef,
     isPlaying,
-    currentTime,
-    duration,
     shuffle,
     repeat,
     togglePlay,
@@ -38,35 +44,40 @@ export default function VisualizerPlayer({ onClose }: VisualizerPlayerProps) {
     prevTrack,
     toggleShuffle,
     cycleRepeat,
-    seekTo,
-  } = usePlayerStore();
+  } = usePlayerStore((state) => ({
+    currentTrack: state.currentTrack,
+    audioRef: state.audioRef,
+    isPlaying: state.isPlaying,
+    shuffle: state.shuffle,
+    repeat: state.repeat,
+    togglePlay: state.togglePlay,
+    nextTrack: state.nextTrack,
+    prevTrack: state.prevTrack,
+    toggleShuffle: state.toggleShuffle,
+    cycleRepeat: state.cycleRepeat,
+  }), shallow);
 
   const { likedTrackIds, toggleLike } = useLibraryStore();
 
   const [visualizerMode, setVisualizerMode] = useState<VisualizerMode>('bars');
-  const [audioData, setAudioData] = useState<number[]>(Array(64).fill(0));
+  const mobilePerformanceMode = isMobileDevice();
+  const audioDataRef = useRef<number[]>(Array(mobilePerformanceMode ? 32 : 48).fill(0));
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number | null>(null);
 
   const isLiked = currentTrack ? likedTrackIds.has(currentTrack.id) : false;
   const RepeatIcon = repeat === 'one' ? RiRepeatOneLine : repeat === 'all' ? RiRepeat2Line : RiRepeatLine;
 
-  // Simulate audio data (in real app, this would come from Web Audio API)
+  // Keep the canvas connected even when the small player indicators are hidden.
   useEffect(() => {
-    if (!isPlaying) {
-      setAudioData(Array(64).fill(0));
-      return;
-    }
+    if (!audioRef) return;
+    void connectLocalAudioForVisualization([audioRef]);
+  }, [currentTrack?.id, currentTrack?.isLocal, currentTrack?.blob, audioRef, isPlaying]);
 
-    const interval = setInterval(() => {
-      setAudioData(
-        Array(64)
-          .fill(0)
-          .map(() => Math.random() * 100)
-      );
-    }, 50);
-
-    return () => clearInterval(interval);
+  // The shared sampler refreshes the FFT buffer once for both the canvas and UI bars.
+  useEffect(() => {
+    if (!isPlaying) return;
+    return subscribeAudioSpectrum();
   }, [isPlaying]);
 
   // Canvas visualization
@@ -77,50 +88,109 @@ export default function VisualizerPlayer({ onClose }: VisualizerPlayerProps) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    let barGradient: CanvasGradient;
+    let waveGradient: CanvasGradient;
+    let circularGradient: CanvasGradient;
+
     const resize = () => {
-      canvas.width = canvas.offsetWidth * window.devicePixelRatio;
-      canvas.height = canvas.offsetHeight * window.devicePixelRatio;
-      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+      // This large canvas is a backdrop; rendering above native CSS resolution
+      // costs a lot of fill work without improving the visible spectrum.
+      const pixelRatio = 1;
+      canvas.width = canvas.offsetWidth * pixelRatio;
+      canvas.height = canvas.offsetHeight * pixelRatio;
+      ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+
+      const width = canvas.offsetWidth;
+      const height = canvas.offsetHeight;
+      barGradient = ctx.createLinearGradient(0, height, 0, 0);
+      barGradient.addColorStop(0, '#E8470A');
+      barGradient.addColorStop(0.5, '#FF6B35');
+      barGradient.addColorStop(1, '#FFB627');
+      waveGradient = ctx.createLinearGradient(0, 0, width, 0);
+      waveGradient.addColorStop(0, '#E8470A');
+      waveGradient.addColorStop(0.5, '#FF6B35');
+      waveGradient.addColorStop(1, '#FFB627');
+      const centerX = width / 2;
+      const centerY = height / 2;
+      const radius = Math.min(width, height) * 0.3;
+      circularGradient = ctx.createRadialGradient(centerX, centerY, radius * 0.5, centerX, centerY, radius * 1.5);
+      circularGradient.addColorStop(0, '#E8470A');
+      circularGradient.addColorStop(0.5, '#FF6B35');
+      circularGradient.addColorStop(1, '#FFB627');
     };
 
     resize();
-    window.addEventListener('resize', resize);
-
-    const draw = () => {
+    const frameIntervalMs = mobilePerformanceMode ? 1000 / 20 : 1000 / 30;
+    let frameTimer: number | null = null;
+    let draw = (_frameAt: number) => {};
+    const scheduleNextFrame = () => {
+      if (!isPlaying || document.hidden || frameTimer !== null) return;
+      frameTimer = window.setTimeout(() => {
+        frameTimer = null;
+        if (!document.hidden && animationRef.current === null) {
+          animationRef.current = requestAnimationFrame(draw);
+        }
+      }, frameIntervalMs);
+    };
+    draw = (_frameAt: number) => {
+      animationRef.current = null;
+      if (!isPlaying || !readAudioSpectrum(audioDataRef.current)) {
+        audioDataRef.current.fill(0);
+      }
       const width = canvas.offsetWidth;
       const height = canvas.offsetHeight;
 
       ctx.clearRect(0, 0, width, height);
 
       if (visualizerMode === 'bars') {
-        drawBars(ctx, width, height);
+        drawBars(ctx, width, height, barGradient);
       } else if (visualizerMode === 'wave') {
-        drawWave(ctx, width, height);
+        drawWave(ctx, width, height, waveGradient);
       } else if (visualizerMode === 'circular') {
-        drawCircular(ctx, width, height);
+        drawCircular(ctx, width, height, circularGradient);
       }
 
-      animationRef.current = requestAnimationFrame(draw);
+      scheduleNextFrame();
     };
 
-    draw();
+    const startDrawing = () => {
+      if (animationRef.current === null && frameTimer === null) {
+        animationRef.current = requestAnimationFrame(draw);
+      }
+    };
+    const handleResize = () => {
+      resize();
+      if (!isPlaying) startDrawing();
+    };
+    const handleVisibility = () => {
+      if (document.hidden) {
+        if (animationRef.current !== null) cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+        if (frameTimer !== null) window.clearTimeout(frameTimer);
+        frameTimer = null;
+      } else {
+        startDrawing();
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    document.addEventListener('visibilitychange', handleVisibility);
+    if (!document.hidden) startDrawing();
 
     return () => {
-      window.removeEventListener('resize', resize);
-      if (animationRef.current) {
+      window.removeEventListener('resize', handleResize);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      if (animationRef.current !== null) {
         cancelAnimationFrame(animationRef.current);
       }
+      animationRef.current = null;
+      if (frameTimer !== null) window.clearTimeout(frameTimer);
     };
-  }, [audioData, visualizerMode]);
+  }, [visualizerMode, isPlaying, mobilePerformanceMode]);
 
-  const drawBars = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
+  const drawBars = (ctx: CanvasRenderingContext2D, width: number, height: number, gradient: CanvasGradient) => {
+    const audioData = audioDataRef.current;
     const barCount = audioData.length;
     const barWidth = width / barCount;
-    const gradient = ctx.createLinearGradient(0, height, 0, 0);
-    gradient.addColorStop(0, '#E8470A');
-    gradient.addColorStop(0.5, '#FF6B35');
-    gradient.addColorStop(1, '#FFB627');
-
     audioData.forEach((value, i) => {
       const barHeight = (value / 100) * height * 0.8;
       const x = i * barWidth;
@@ -136,12 +206,8 @@ export default function VisualizerPlayer({ onClose }: VisualizerPlayerProps) {
     });
   };
 
-  const drawWave = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
-    const gradient = ctx.createLinearGradient(0, 0, width, 0);
-    gradient.addColorStop(0, '#E8470A');
-    gradient.addColorStop(0.5, '#FF6B35');
-    gradient.addColorStop(1, '#FFB627');
-
+  const drawWave = (ctx: CanvasRenderingContext2D, width: number, height: number, gradient: CanvasGradient) => {
+    const audioData = audioDataRef.current;
     ctx.strokeStyle = gradient;
     ctx.lineWidth = 4;
     ctx.lineCap = 'round';
@@ -180,15 +246,11 @@ export default function VisualizerPlayer({ onClose }: VisualizerPlayerProps) {
     ctx.globalAlpha = 1;
   };
 
-  const drawCircular = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
+  const drawCircular = (ctx: CanvasRenderingContext2D, width: number, height: number, gradient: CanvasGradient) => {
+    const audioData = audioDataRef.current;
     const centerX = width / 2;
     const centerY = height / 2;
     const radius = Math.min(width, height) * 0.3;
-
-    const gradient = ctx.createRadialGradient(centerX, centerY, radius * 0.5, centerX, centerY, radius * 1.5);
-    gradient.addColorStop(0, '#E8470A');
-    gradient.addColorStop(0.5, '#FF6B35');
-    gradient.addColorStop(1, '#FFB627');
 
     audioData.forEach((value, i) => {
       const angle = (i / audioData.length) * Math.PI * 2 - Math.PI / 2;
@@ -217,12 +279,6 @@ export default function VisualizerPlayer({ onClose }: VisualizerPlayerProps) {
     ctx.stroke();
   };
 
-  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const percent = (e.clientX - rect.left) / rect.width;
-    seekTo(percent * duration);
-  };
-
   if (!currentTrack) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
@@ -231,7 +287,6 @@ export default function VisualizerPlayer({ onClose }: VisualizerPlayerProps) {
     );
   }
 
-  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
   const coverUrl = currentTrack.coverUrl?.startsWith('/')
     ? `http://localhost:3001${currentTrack.coverUrl}`
     : currentTrack.coverUrl;
@@ -327,25 +382,7 @@ export default function VisualizerPlayer({ onClose }: VisualizerPlayerProps) {
             </button>
           </div>
 
-          {/* Progress Slider */}
-          <div className="mb-5">
-            <div
-              onClick={handleSeek}
-              className="group relative h-1.5 cursor-pointer rounded-full bg-white/10 transition-all hover:h-2"
-            >
-              <div
-                className="h-full rounded-full transition-all duration-100"
-                style={{ 
-                  width: `${progressPercent}%`,
-                  background: `linear-gradient(to right, var(--gradient-from), var(--gradient-to))`
-                }}
-              />
-            </div>
-            <div className="mt-2 flex justify-between text-xs font-semibold text-white/40">
-              <span>{formatDuration(currentTime)}</span>
-              <span>{formatDuration(duration)}</span>
-            </div>
-          </div>
+          <VisualizerProgress />
 
           {/* Control Buttons */}
           <div className="flex items-center justify-between">
@@ -402,23 +439,39 @@ export default function VisualizerPlayer({ onClose }: VisualizerPlayerProps) {
         </div>
       </div>
 
-      {/* Floating Particles Overlay */}
-      <div className="pointer-events-none absolute inset-0">
-        {isPlaying &&
-          Array(15)
-            .fill(0)
-            .map((_, i) => (
-              <div
-                key={i}
-                className="absolute h-1 w-1 animate-pulse rounded-full bg-accent/20"
-                style={{
-                  left: `${Math.random() * 100}%`,
-                  top: `${Math.random() * 100}%`,
-                  animationDelay: `${Math.random() * 2}s`,
-                  animationDuration: `${2 + Math.random() * 3}s`,
-                }}
-              />
-            ))}
+    </div>
+  );
+}
+
+function VisualizerProgress() {
+  const currentTime = usePlayerStore((state) => state.currentTime);
+  const duration = usePlayerStore((state) => state.duration);
+  const seekTo = usePlayerStore((state) => state.seekTo);
+  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  const handleSeek = (event: React.MouseEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const percent = (event.clientX - rect.left) / rect.width;
+    seekTo(percent * duration);
+  };
+
+  return (
+    <div className="mb-5">
+      <div
+        onClick={handleSeek}
+        className="group relative h-1.5 cursor-pointer rounded-full bg-white/10 transition-all hover:h-2"
+      >
+        <div
+          className="h-full rounded-full transition-all duration-100"
+          style={{
+            width: `${progressPercent}%`,
+            background: `linear-gradient(to right, var(--gradient-from), var(--gradient-to))`,
+          }}
+        />
+      </div>
+      <div className="mt-2 flex justify-between text-xs font-semibold text-white/40">
+        <span>{formatDuration(currentTime)}</span>
+        <span>{formatDuration(duration)}</span>
       </div>
     </div>
   );

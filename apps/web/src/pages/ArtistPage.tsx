@@ -7,11 +7,17 @@ import { useLibraryStore } from '../stores/libraryStore';
 import { useLocalLibraryStore } from '../stores/localLibraryStore';
 import { RiPlayFill, RiPauseFill, RiUserFollowLine, RiUserFollowFill, RiMoreLine, RiShuffleLine } from 'react-icons/ri';
 import { formatListeners } from '../utils/formatters';
+import { shallow } from 'zustand/shallow';
 
 export default function ArtistPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayerStore();
+  const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayerStore((state) => ({
+    currentTrack: state.currentTrack,
+    isPlaying: state.isPlaying,
+    playTrack: state.playTrack,
+    togglePlay: state.togglePlay,
+  }), shallow);
   const { followedArtistIds, toggleFollowArtist } = useLibraryStore();
   const { localTracks } = useLocalLibraryStore();
 

@@ -1,9 +1,12 @@
 import { usePlayerStore } from '../../stores/playerStore';
 import { useLibraryStore } from '../../stores/libraryStore';
+import { useUIStore } from '../../stores/uiStore';
 import type { Track } from '../../types';
 import { formatDuration, getLyricsForTrack } from '../../utils/formatters';
 import { useFluidLyricMotion } from '../../utils/lyricMotion';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
+import { autoUpgradeTrackLyrics, hasSyncedLyricTimestamps } from '../../services/lyricsService';
 import {
   RiArrowLeftLine,
   RiShuffleLine,
@@ -23,13 +26,201 @@ import {
 import { gsap } from 'gsap';
 import { bottomPlayerCoverRef } from '../layout/BottomPlayer';
 import DrivePlayer from './DrivePlayer';
+import { shallow } from 'zustand/shallow';
 
 
 // Shared ref for tracking clicked track covers
 export const clickedTrackCoverRef: { current: HTMLElement | null } = { current: null };
 
 type TransitionState = 'closed' | 'opening' | 'open' | 'closing';
-type FullscreenLayoutProfile = 'desktop' | 'tablet' | 'android' | 'iphone';
+type FullscreenLayoutProfile = 'desktop' | 'tablet' | 'mobile' | 'android' | 'iphone';
+type ModeCoverTransition = {
+  direction: 'to-drive' | 'to-fullscreen';
+  clone: HTMLElement;
+  source: HTMLElement;
+  target?: HTMLElement;
+  revealTargets?: HTMLElement[];
+};
+
+function FullscreenLyricsContent({
+  lyrics,
+  lyricVerticalPositions,
+  lyricLineHeight,
+  lyricLineGap,
+  isMobileFullscreenLayout,
+  isDesktopFullscreenLayout,
+  lyricsDisplayMode,
+  activeLyricGlowColor,
+  lyricsMask,
+}: {
+  lyrics: ReturnType<typeof getLyricsForTrack>;
+  lyricVerticalPositions: number[];
+  lyricLineHeight: string;
+  lyricLineGap: number;
+  isMobileFullscreenLayout: boolean;
+  isDesktopFullscreenLayout: boolean;
+  lyricsDisplayMode: 'vertical' | 'karaoke' | 'spotlight' | 'clean';
+  activeLyricGlowColor: string;
+  lyricsMask: string;
+}) {
+  const currentTime = usePlayerStore((state) => state.isFullscreenOpen ? state.currentTime : 0);
+  const isPlaying = usePlayerStore((state) => state.isFullscreenOpen && state.isPlaying && (state.showLyrics || !state.showQueue));
+  const { centeredFocusPosition, activeLyricIndex } = useFluidLyricMotion(lyrics, currentTime, isPlaying);
+  const isSynced = useMemo(() => lyrics.some((line) => line.time >= 0), [lyrics]);
+  const desktopDisplayMode = isDesktopFullscreenLayout ? lyricsDisplayMode : 'vertical';
+  const lyricWindowCenter = lyrics.length > 0
+    ? Math.max(0, Math.min(lyrics.length - 1, Math.round(centeredFocusPosition)))
+    : -1;
+  const focusIndex = isSynced && activeLyricIndex >= 0
+    ? activeLyricIndex
+    : lyricWindowCenter;
+  const lyricWindowStart = lyricWindowCenter >= 0
+    ? Math.max(0, lyricWindowCenter - (isDesktopFullscreenLayout || isMobileFullscreenLayout ? 3 : 4))
+    : 0;
+  const lyricWindowEnd = lyricWindowCenter >= 0
+    ? lyricWindowCenter + (isDesktopFullscreenLayout ? 5 : isMobileFullscreenLayout ? 5 : 7)
+    : 0;
+  const isSpotlight = isDesktopFullscreenLayout && desktopDisplayMode === 'spotlight' && isSynced;
+  const renderWindowStart = isSpotlight ? focusIndex : lyricWindowStart;
+  const visibleLyrics = isSpotlight
+    ? lyrics.slice(focusIndex, focusIndex + 1)
+    : lyrics.slice(lyricWindowStart, lyricWindowEnd);
+  const focusedLyricVerticalPosition = useMemo(() => {
+    if (lyricVerticalPositions.length === 0) return 0;
+    const focus = Math.max(0, Math.min(lyricVerticalPositions.length - 1, centeredFocusPosition));
+    const lowerIndex = Math.floor(focus);
+    const upperIndex = Math.min(lyricVerticalPositions.length - 1, lowerIndex + 1);
+    const fraction = focus - lowerIndex;
+    return lyricVerticalPositions[lowerIndex]
+      + (lyricVerticalPositions[upperIndex] - lyricVerticalPositions[lowerIndex]) * fraction;
+  }, [lyricVerticalPositions, centeredFocusPosition]);
+
+  return (
+    <div
+      className="relative w-full flex-1 max-w-3xl mx-auto overflow-hidden"
+      style={{
+        maskImage: lyricsMask,
+        WebkitMaskImage: lyricsMask,
+        // Lift only the phone lyric viewport; album art and playback controls
+        // keep their existing positions and the lower fade stays with the text.
+        transform: isMobileFullscreenLayout ? 'translate3d(0, -36px, 0)' : undefined,
+      }}
+    >
+      {lyrics.length > 0 ? (
+        <div className="absolute inset-0">
+          {visibleLyrics.map((line, index) => {
+            const actualIndex = renderWindowStart + index;
+            const relativePosition = actualIndex - centeredFocusPosition;
+            const distance = Math.abs(relativePosition);
+            const yOffset = (lyricVerticalPositions[actualIndex] || 0) - focusedLyricVerticalPosition;
+            const isCurrent = isSynced && actualIndex === activeLyricIndex;
+            const isPreSinging = isSynced && activeLyricIndex < 0;
+            const isFocus = actualIndex === focusIndex;
+            const legacyFocusFactor = 1 - Math.min(distance, 1);
+            const opacity = isDesktopFullscreenLayout
+              ? (isFocus
+                ? (isPreSinging ? 0.72 : 1)
+                : desktopDisplayMode === 'clean'
+                  ? Math.max(0.42, 0.74 - distance * 0.055)
+                  : desktopDisplayMode === 'karaoke'
+                    ? Math.max(0.14, 0.38 - distance * 0.09)
+                    : Math.max(0.12, 0.42 - distance * 0.1))
+              : 0.3 + legacyFocusFactor * 0.7;
+            const blur = isDesktopFullscreenLayout && !isFocus
+              ? desktopDisplayMode === 'vertical'
+                ? Math.min(4.5, distance * 1.2)
+                : desktopDisplayMode === 'karaoke'
+                  ? Math.min(1.25, distance * 0.35)
+                  : 0
+              : isMobileFullscreenLayout && !isFocus
+                ? Math.min(2.2, Math.max(0, distance - 1.6) * 0.8)
+                : 0;
+            const scale = isDesktopFullscreenLayout
+              ? (isFocus
+                ? desktopDisplayMode === 'spotlight' ? 1.08 : 1.04
+                : desktopDisplayMode === 'clean' ? 1 : Math.max(0.9, 0.98 - distance * 0.025))
+              : 1;
+            const textShadow = isDesktopFullscreenLayout
+              ? (isFocus
+                ? desktopDisplayMode === 'karaoke'
+                  ? `0 0 26px ${activeLyricGlowColor}99, 0 2px 18px rgba(0,0,0,0.8)`
+                  : '0 2px 20px rgba(0,0,0,0.76)'
+                : '0 2px 8px rgba(0,0,0,0.6)')
+              : (isCurrent ? `0 0 16px ${activeLyricGlowColor}, 0 0 8px ${activeLyricGlowColor}80` : 'none');
+
+            return (
+              <div
+                key={`${line.time}-${actualIndex}`}
+                className="fullscreen-lyric-motion absolute w-full max-w-3xl left-1/2 px-8 text-center font-bold select-none pointer-events-none"
+                style={{
+                  top: '50%',
+                  fontSize: isDesktopFullscreenLayout
+                    ? (isFocus
+                      ? desktopDisplayMode === 'spotlight' ? 'clamp(2rem, 4.1vw, 3.6rem)' : 'clamp(1.5rem, 3.1vw, 2.8rem)'
+                      : desktopDisplayMode === 'clean' ? 'clamp(1.05rem, 1.7vw, 1.45rem)' : 'clamp(1.15rem, 2.15vw, 1.8rem)')
+                    : 'clamp(1.1rem, 4.5vw, 1.5rem)',
+                  lineHeight: lyricLineHeight,
+                  ...(isDesktopFullscreenLayout || isMobileFullscreenLayout ? { filter: `blur(${blur.toFixed(2)}px)` } : {}),
+                  transform: `translate3d(-50%, calc(-50% + ${(isDesktopFullscreenLayout ? yOffset : relativePosition * lyricLineGap).toFixed(2)}px), 0) scale(${scale})`,
+                  opacity,
+                  color: '#ffffff',
+                  textShadow,
+                  fontWeight: isDesktopFullscreenLayout ? (isFocus ? '850' : '650') : '700',
+                  letterSpacing: '-0.02em',
+                  whiteSpace: 'normal',
+                  overflowWrap: 'anywhere',
+                  willChange: 'transform, opacity',
+                }}
+              >
+                <span>{line.text || '♪'}</span>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="text-center">
+            <div className="text-4xl mb-4">♪</div>
+            <p className="text-lg text-white/50">No lyrics available</p>
+            <p className="text-sm text-white/30 mt-2">Enjoy the music</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FullscreenProgressTrack() {
+  const { progress, currentTime, duration, seekTo } = usePlayerStore((state) => ({
+    progress: state.isFullscreenOpen ? state.progress : 0,
+    currentTime: state.isFullscreenOpen ? state.currentTime : 0,
+    duration: state.isFullscreenOpen ? state.duration : 0,
+    seekTo: state.seekTo,
+  }), shallow);
+
+  return (
+    <div className="fullscreen-progress-bar mt-2 mb-2 shrink-0 self-stretch px-1 md:w-full md:max-w-md md:self-auto md:px-0">
+      <input
+        type="range"
+        min={0}
+        max={100}
+        value={progress}
+        onChange={(event) => seekTo(Number(event.target.value))}
+        className="accent-track h-1.5 w-full"
+        style={{ '--progress': `${progress}%` } as CSSProperties}
+      />
+      <div className="mt-1 flex justify-between text-xs text-white/50">
+        <span>{formatDuration(Math.floor(currentTime))}</span>
+        <span>{formatDuration(Math.floor(duration))}</span>
+      </div>
+    </div>
+  );
+}
+
+function FullscreenUpNext({ track }: { track: Track | null }) {
+  const visible = usePlayerStore((state) => state.isFullscreenOpen && state.progress >= 75 && state.progress <= 80);
+  return <UpNextPopup track={track} visible={visible} />;
+}
 
 function getTrackCoverUrl(track: Track | null) {
   if (!track?.coverUrl) return null;
@@ -46,9 +237,15 @@ function getFullscreenLayoutProfile(): FullscreenLayoutProfile {
   const isIPad = /iPad/i.test(userAgent)
     || (window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1);
 
-  if (isiPhone && width < 768) return 'iphone';
-  if (isAndroid && width < 768) return 'android';
   if (isIPad || (width >= 768 && width < 1280)) return 'tablet';
+  if (width < 768) {
+    if (isiPhone) return 'iphone';
+    if (isAndroid) return 'android';
+    // Some mobile browsers hide their device name (or request desktop sites).
+    // Treat a phone-sized viewport as mobile so the compact lyrics layout is
+    // still applied consistently.
+    return 'mobile';
+  }
   return 'desktop';
 }
 
@@ -56,13 +253,11 @@ export default function FullscreenPlayer() {
   const {
     currentTrack,
     isPlaying,
-    progress,
-    currentTime,
-    duration,
     volume,
     isMuted,
     shuffle,
     repeat,
+    lyricsDisplayMode,
     isFullscreenOpen,
     queue,
     queueIndex,
@@ -71,29 +266,50 @@ export default function FullscreenPlayer() {
     togglePlay,
     nextTrack,
     prevTrack,
-    seekTo,
     toggleMute,
     toggleShuffle,
     cycleRepeat,
-    toggleLyrics,
-    toggleQueue,
     playTrack,
     setFullscreenOpen,
-  } = usePlayerStore();
+  } = usePlayerStore((state) => ({
+    currentTrack: state.currentTrack,
+    isPlaying: state.isPlaying,
+    volume: state.volume,
+    isMuted: state.isMuted,
+    shuffle: state.shuffle,
+    repeat: state.repeat,
+    lyricsDisplayMode: state.lyricsDisplayMode,
+    isFullscreenOpen: state.isFullscreenOpen,
+    queue: state.queue,
+    queueIndex: state.queueIndex,
+    showLyrics: state.showLyrics,
+    showQueue: state.showQueue,
+    togglePlay: state.togglePlay,
+    nextTrack: state.nextTrack,
+    prevTrack: state.prevTrack,
+    toggleMute: state.toggleMute,
+    toggleShuffle: state.toggleShuffle,
+    cycleRepeat: state.cycleRepeat,
+    playTrack: state.playTrack,
+    setFullscreenOpen: state.setFullscreenOpen,
+  }), shallow);
   const { likedTrackIds, toggleLike } = useLibraryStore();
+  const { isDriveModeOpen, setDriveModeOpen } = useUIStore();
 
   const [isFullscreenInteractable, setFullscreenInteractable] = useState(false);
   const [transitionState, setTransitionState] = useState<TransitionState>('closed');
   const [isDriveMode, setIsDriveMode] = useState(false);
-  const [isDriveModeTransitioning, setIsDriveModeTransitioning] = useState(false);
   const [isTitleOverflowing, setIsTitleOverflowing] = useState(false);
   const [isDesktopLyricLayout, setIsDesktopLyricLayout] = useState(false);
+  const [lyricViewportWidth, setLyricViewportWidth] = useState(0);
   const [layoutProfile, setLayoutProfile] = useState<FullscreenLayoutProfile>(() => getFullscreenLayoutProfile());
+  const [viewportWidth, setViewportWidth] = useState(() => typeof window === 'undefined' ? 1280 : window.innerWidth);
+  const [viewportHeight, setViewportHeight] = useState(() => typeof window === 'undefined' ? 800 : window.innerHeight);
 
   const shellRef = useRef<HTMLDivElement>(null);
   const coverWrapperRef = useRef<HTMLDivElement>(null);
+  const driveCoverRef = useRef<HTMLDivElement | null>(null);
   const driveModeButtonRef = useRef<HTMLButtonElement>(null);
-  const driveModeTransitionRef = useRef<gsap.core.Timeline | null>(null);
   const titleContainerRef = useRef<HTMLDivElement>(null);
   const titleTextRef = useRef<HTMLHeadingElement>(null);
   const previousOpenRef = useRef(isFullscreenOpen);
@@ -110,20 +326,38 @@ export default function FullscreenPlayer() {
   const lyricsTabBtnRef = useRef<HTMLButtonElement>(null);
   const queueTabBtnRef = useRef<HTMLButtonElement>(null);
   const tabTransitionTlRef = useRef<gsap.core.Timeline | null>(null);
+  const modeCoverTransitionRef = useRef<ModeCoverTransition | null>(null);
+  const modeCoverTimelineRef = useRef<gsap.core.Timeline | null>(null);
+  const modeTransitionBusyRef = useRef(false);
+  const modeTransitionTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const container = lyricsContainerRef.current;
+    if (!container) return;
+
+    const updateWidth = () => setLyricViewportWidth(container.clientWidth);
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
 
   const visualTrack = currentTrack;
+  const isLyricsPanelActive = showLyrics || !showQueue;
+  const isMobileFullscreenLayout = layoutProfile === 'android' || layoutProfile === 'iphone' || layoutProfile === 'mobile';
   const coverUrl = getTrackCoverUrl(visualTrack);
-  const lyrics = useMemo(() => (visualTrack ? getLyricsForTrack(visualTrack.id, visualTrack.lyrics) : []), [visualTrack]);
+  const lyrics = useMemo(() => (visualTrack ? getLyricsForTrack(visualTrack.id, visualTrack.lyrics) : []), [visualTrack?.id, visualTrack?.lyrics]);
+
+  // Auto-upgrade: normalize + fetch synced lyrics from LRCLIB when track changes
+  useEffect(() => {
+    if (!visualTrack) return;
+    // Only upgrade if lyrics are missing or unsynced plain text
+    if (!visualTrack.lyrics || !hasSyncedLyricTimestamps(visualTrack.lyrics)) {
+      autoUpgradeTrackLyrics(visualTrack).catch(() => {});
+    }
+  }, [visualTrack?.id]);
+
   // Keep the active lyric centered while the text motion eases.
-  const {
-    centeredFocusPosition: centeredLyricFocusPosition,
-    activeLyricIndex,
-  } = useFluidLyricMotion(lyrics, currentTime, isPlaying);
-  const lyricWindowCenter = lyrics.length > 0
-    ? Math.max(0, Math.min(lyrics.length - 1, Math.round(centeredLyricFocusPosition)))
-    : -1;
-  const lyricWindowStart = lyricWindowCenter >= 0 ? Math.max(0, lyricWindowCenter - 4) : 0;
-  const visibleLyrics = lyrics.slice(lyricWindowStart, lyricWindowCenter >= 0 ? lyricWindowCenter + 7 : 0);
 
   const upcomingTracks = useMemo(() => {
     if (queueIndex < 0) return queue.slice(0, 5);
@@ -135,8 +369,11 @@ export default function FullscreenPlayer() {
   const RepeatIcon = repeat === 'one' ? RiRepeatOneLine : repeat === 'all' ? RiRepeat2Line : RiRepeatLine;
   const startColor = visualTrack?.coverGradient?.[0] || '#333333';
   const endColor = visualTrack?.coverGradient?.[1] || '#E8470A';
+  const isPhoneFullscreenLayout = layoutProfile === 'android' || layoutProfile === 'iphone' || layoutProfile === 'mobile';
   const fullscreenBackgroundStyle = useMemo<CSSProperties>(() => ({
-    background: `
+    // Keep the phone fullscreen canvas neutral so album-color ambience cannot
+    // read as a persistent edge glow after the chorus HUD has been removed.
+    background: isPhoneFullscreenLayout ? '#000000' : `
       radial-gradient(circle at 0% 0%, ${startColor}42 0%, transparent 42%),
       radial-gradient(circle at 100% 34%, ${endColor}36 0%, transparent 40%),
       radial-gradient(circle at 44% 105%, rgba(139, 92, 246, 0.24) 0%, transparent 45%),
@@ -146,10 +383,10 @@ export default function FullscreenPlayer() {
     backfaceVisibility: 'hidden',
     WebkitBackfaceVisibility: 'hidden',
     contain: 'paint',
-  }), [startColor, endColor]);
+  }), [startColor, endColor, isPhoneFullscreenLayout]);
   
   const fullscreenGlassStyle = useMemo<CSSProperties>(() => ({
-    background: 'linear-gradient(180deg, rgba(4, 4, 6, 0.78) 0%, rgba(6, 6, 8, 0.84) 45%, rgba(0, 0, 0, 0.9) 100%)',
+    background: 'linear-gradient(180deg, rgba(4, 4, 6, 0.82) 0%, rgba(6, 6, 8, 0.88) 45%, rgba(0, 0, 0, 0.94) 100%)',
     willChange: 'opacity',
     transform: 'translate3d(0,0,0)',
     backfaceVisibility: 'hidden',
@@ -157,14 +394,64 @@ export default function FullscreenPlayer() {
     contain: 'paint',
   }), []);
   const currentQueuePosition = queueIndex >= 0 ? queueIndex + 1 : 1;
-  const isLyricsPanelActive = showLyrics || !showQueue;
   const isLiked = visualTrack ? likedTrackIds.has(visualTrack.id) : false;
-  const lyricLineGap = isDesktopLyricLayout ? 72 : 56;
-  const lyricLineHeight = isDesktopLyricLayout ? '1.42' : '1.3';
-  const fullscreenLyricsMask = 'linear-gradient(to bottom, transparent 0%, transparent 22%, black 29%, black 96%, transparent 100%)';
+  // Keep adjacent lyric rows compact on both large and small screens while
+  // reserving extra room below only for lines that actually wrap.
+  const lyricLineGap = isDesktopLyricLayout
+    ? lyricsDisplayMode === 'karaoke' ? 62 : lyricsDisplayMode === 'spotlight' ? 36 : lyricsDisplayMode === 'clean' ? 42 : 52
+    : isMobileFullscreenLayout ? 48 : 40;
+  const lyricLineHeight = isDesktopLyricLayout ? '1.3' : '1.22';
+  const lyricFontSizePx = typeof window === 'undefined'
+    ? 24
+    : Math.min(25.6, Math.max(18.4, window.innerWidth * 0.045));
+  const lyricWrapCounts = useMemo(() => {
+    if (typeof document === 'undefined' || lyrics.length === 0) return [] as number[];
+
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    if (!context) return lyrics.map(() => 1);
+    context.font = `700 ${lyricFontSizePx}px Inter, sans-serif`;
+    // The lyric rows have 32px horizontal padding on every layout profile.
+    const maxWidth = Math.max(120, lyricViewportWidth - 64);
+
+    return lyrics.map(({ text }) => {
+      let rows = 1;
+      for (const paragraph of text.split(/\n+/)) {
+        let rowWidth = 0;
+        for (const word of paragraph.split(/\s+/).filter(Boolean)) {
+          const wordWidth = context.measureText(word).width;
+          const spaceWidth = rowWidth === 0 ? 0 : context.measureText(' ').width;
+          if (rowWidth > 0 && rowWidth + spaceWidth + wordWidth > maxWidth) {
+            rows += 1;
+            rowWidth = wordWidth;
+          } else {
+            rowWidth += spaceWidth + wordWidth;
+          }
+        }
+      }
+      return rows;
+    });
+  }, [lyrics, lyricFontSizePx, lyricViewportWidth, isDesktopLyricLayout]);
+  const lyricVerticalPositions = useMemo(() => {
+    const positions = new Array<number>(lyrics.length).fill(0);
+    const lineHeightPx = lyricFontSizePx * parseFloat(lyricLineHeight);
+    for (let index = 1; index < lyrics.length; index += 1) {
+      const previousExtraRows = Math.max(0, (lyricWrapCounts[index - 1] || 1) - 1);
+      const currentExtraRows = Math.max(0, (lyricWrapCounts[index] || 1) - 1);
+      const autoSpacing = ((previousExtraRows + currentExtraRows) * lineHeightPx) / 2;
+      positions[index] = positions[index - 1] + lyricLineGap + autoSpacing;
+    }
+    return positions;
+  }, [lyrics.length, lyricWrapCounts, lyricFontSizePx, lyricLineHeight, lyricLineGap]);
+  const fullscreenLyricsMask = isMobileFullscreenLayout
+    ? 'linear-gradient(to bottom, transparent 0%, transparent 7%, black 18%, black 74%, transparent 94%, transparent 100%)'
+    : 'linear-gradient(to bottom, transparent 0%, transparent 22%, black 29%, black 96%, transparent 100%)';
   const fullscreenQueueMask = 'linear-gradient(to bottom, transparent 0%, black 3%, black 98%, transparent 100%)';
-  const isMobileFullscreenLayout = layoutProfile === 'android' || layoutProfile === 'iphone';
+  const isCompactLyricsLayout = isMobileFullscreenLayout || layoutProfile === 'tablet';
+  const isPortraitStackedLayout = viewportHeight > viewportWidth;
   const fullscreenTabsTopOffset = useMemo(() => {
+    if (isPortraitStackedLayout) return 0;
+    if (layoutProfile === 'desktop' && viewportWidth < 768) return 118;
     switch (layoutProfile) {
       case 'desktop':
         return 150;
@@ -172,13 +459,16 @@ export default function FullscreenPlayer() {
         return 120;
       case 'android':
       case 'iphone':
+      case 'mobile':
         return 0;
       default:
         return 0;
     }
-  }, [layoutProfile]);
-  const fullscreenQueueHeaderTopOffset = isMobileFullscreenLayout ? 4 : Math.max(56, fullscreenTabsTopOffset - 20);
-  const fullscreenQueueListTopOffset = fullscreenQueueHeaderTopOffset + 34;
+  }, [isPortraitStackedLayout, layoutProfile, viewportWidth]);
+  const fullscreenQueueHeaderTopOffset = isPortraitStackedLayout || isMobileFullscreenLayout
+    ? 4
+    : Math.max(56, fullscreenTabsTopOffset - 20);
+  const fullscreenQueueListTopOffset = fullscreenQueueHeaderTopOffset + (isPortraitStackedLayout || isMobileFullscreenLayout ? 26 : 34);
 
   const animateModeToggle = (button: HTMLButtonElement | null, hovered: boolean, active: boolean) => {
     if (!button) return;
@@ -230,6 +520,129 @@ export default function FullscreenPlayer() {
     }
   };
 
+  const clearModeCoverTransition = () => {
+    if (modeTransitionTimeoutRef.current !== null) {
+      window.clearTimeout(modeTransitionTimeoutRef.current);
+      modeTransitionTimeoutRef.current = null;
+    }
+    modeCoverTimelineRef.current?.kill();
+    modeCoverTimelineRef.current = null;
+
+    const transition = modeCoverTransitionRef.current;
+    if (transition) {
+      if (transition.source.isConnected) {
+        gsap.set(transition.source, { clearProps: 'opacity,willChange' });
+      }
+      if (transition.target?.isConnected) {
+        gsap.set(transition.target, { clearProps: 'opacity,willChange' });
+      }
+      transition.clone.remove();
+    }
+
+    modeCoverTransitionRef.current = null;
+    modeTransitionBusyRef.current = false;
+  };
+
+  const createModeCoverTransition = (
+    source: HTMLElement,
+    direction: ModeCoverTransition['direction'],
+  ) => {
+    const shell = shellRef.current;
+    const rect = source.getBoundingClientRect();
+    if (!shell || rect.width <= 0 || rect.height <= 0) return null;
+
+    const clone = source.cloneNode(true) as HTMLElement;
+    clone.setAttribute('aria-hidden', 'true');
+    Object.assign(clone.style, {
+      position: 'fixed',
+      boxSizing: 'border-box',
+      left: `${rect.left}px`,
+      top: `${rect.top}px`,
+      width: `${rect.width}px`,
+      height: `${rect.height}px`,
+      maxWidth: 'none',
+      maxHeight: 'none',
+      margin: '0',
+      flex: 'none',
+      zIndex: '100000',
+      pointerEvents: 'none',
+      transform: 'none',
+      opacity: '1',
+      visibility: 'visible',
+      transition: 'none',
+      willChange: 'left, top, width, height, border-radius',
+      borderRadius: window.getComputedStyle(source).borderRadius,
+    });
+    document.body.appendChild(clone);
+    gsap.set(source, { opacity: 0, willChange: 'opacity' });
+
+    const transition: ModeCoverTransition = { direction, clone, source };
+    modeCoverTransitionRef.current = transition;
+    modeTransitionBusyRef.current = true;
+    modeTransitionTimeoutRef.current = window.setTimeout(clearModeCoverTransition, 1800);
+
+    return { transition, rect };
+  };
+
+  const moveModeCoverToTarget = (target: HTMLElement) => {
+    const transition = modeCoverTransitionRef.current;
+    if (!transition) return;
+
+    const rect = target.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) {
+      clearModeCoverTransition();
+      return;
+    }
+
+    transition.target = target;
+    gsap.set(target, { opacity: 0, willChange: 'opacity' });
+
+    if (transition.direction === 'to-drive') {
+      const driveDetails = target.parentElement?.querySelector<HTMLElement>('.drive-track-copy');
+      transition.revealTargets = driveDetails ? [driveDetails] : [];
+    } else {
+      transition.revealTargets = selectWithinShell(
+        '.fullscreen-close-btn, .fullscreen-track-meta, .fullscreen-tabs, .fullscreen-progress-bar, .fullscreen-controls, .fullscreen-lyrics-panel',
+      );
+    }
+    gsapSetIfPresent(transition.revealTargets, { opacity: 0, y: 8, willChange: 'opacity,transform' });
+
+    const timeline = gsap.timeline({
+      onComplete: () => {
+        if (modeCoverTransitionRef.current !== transition) return;
+        modeCoverTimelineRef.current = null;
+        gsap.set(target, { clearProps: 'opacity,willChange' });
+        transition.clone.remove();
+        if (transition.source.isConnected) {
+          gsap.set(transition.source, { clearProps: 'opacity,willChange' });
+        }
+        gsap.to(transition.revealTargets || [], {
+          opacity: 1,
+          y: 0,
+          duration: 0.24,
+          ease: 'power2.out',
+          clearProps: 'opacity,transform,willChange',
+        });
+        if (modeTransitionTimeoutRef.current !== null) {
+          window.clearTimeout(modeTransitionTimeoutRef.current);
+          modeTransitionTimeoutRef.current = null;
+        }
+        modeCoverTransitionRef.current = null;
+        modeTransitionBusyRef.current = false;
+      },
+    });
+    modeCoverTimelineRef.current = timeline;
+    timeline.to(transition.clone, {
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height,
+      borderRadius: window.getComputedStyle(target).borderRadius,
+      duration: 0.52,
+      ease: 'power3.inOut',
+    });
+  };
+
   useEffect(() => {
     animateModeToggle(driveModeButtonRef.current, false, isDriveMode);
   }, [isDriveMode]);
@@ -237,6 +650,8 @@ export default function FullscreenPlayer() {
   useEffect(() => {
     const updateLayoutProfile = () => {
       setLayoutProfile(getFullscreenLayoutProfile());
+      setViewportWidth(window.innerWidth);
+      setViewportHeight(window.innerHeight);
     };
 
     updateLayoutProfile();
@@ -273,33 +688,30 @@ export default function FullscreenPlayer() {
 
       gsap.killTweensOf(queueItems);
       gsap.set(queueItems, {
-        willChange: 'transform, opacity, filter',
+        willChange: 'transform, opacity',
       });
 
       gsap.fromTo(
         queueItems,
         {
           autoAlpha: 0,
-          y: 18,
-          scale: 0.972,
-          filter: 'blur(10px)',
+          y: 14,
+          scale: 0.98,
         },
         {
           autoAlpha: 1,
           y: 0,
           scale: 1,
-          filter: 'blur(0px)',
-          duration: 0.64,
+          duration: 0.45,
           delay,
           stagger: {
-            each: 0.065,
+            each: 0.05,
             from: 'start',
           },
-          ease: 'power4.out',
+          ease: 'power3.out',
           overwrite: 'auto',
-          clearProps: 'transform,opacity,visibility,filter,willChange',
+          clearProps: 'transform,opacity,visibility,willChange',
           onComplete: () => {
-            // Ensure will-change is cleared
             gsap.set(queueItems, { clearProps: 'willChange' });
           },
         }
@@ -308,6 +720,7 @@ export default function FullscreenPlayer() {
   };
 
   const resetAnimatedState = () => {
+    setIsDriveMode(false);
     const coverWrapper = coverWrapperRef.current;
     const shell = shellRef.current;
     if (!coverWrapper || !shell) return;
@@ -339,12 +752,16 @@ export default function FullscreenPlayer() {
       clearCloseCanvasTimeout();
       clearAutoTransitionFrame();
       clearQueueAnimationFrame();
+      clearModeCoverTransition();
     };
   }, []);
 
   // Initialize tab visibility and pill position
   useLayoutEffect(() => {
-    if (!isFullscreenOpen) return;
+    // Wait for the opening effect to normalize the store to Queue first. The
+    // fullscreen shell stays mounted between visits, so it may still carry the
+    // previous Lyrics selection when this screen is reopened.
+    if (!isFullscreenOpen || transitionState !== 'opening') return;
 
     const lyricsEl = lyricsContainerRef.current;
     const queueEl = queueContainerRef.current;
@@ -353,11 +770,11 @@ export default function FullscreenPlayer() {
       killTabTransition();
       
       if (isLyricsPanelActive) {
-        gsap.set(lyricsEl, { visibility: 'visible', pointerEvents: 'auto', opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' });
-        gsap.set(queueEl, { visibility: 'hidden', pointerEvents: 'none', opacity: 0, y: 20, scale: 0.985, filter: 'blur(10px)' });
+        gsap.set(lyricsEl, { visibility: 'visible', pointerEvents: 'auto', opacity: 1, y: 0, scale: 1 });
+        gsap.set(queueEl, { visibility: 'hidden', pointerEvents: 'none', opacity: 0, y: 16, scale: 0.985 });
       } else {
-        gsap.set(queueEl, { visibility: 'visible', pointerEvents: 'auto', opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' });
-        gsap.set(lyricsEl, { visibility: 'hidden', pointerEvents: 'none', opacity: 0, y: 20, scale: 0.985, filter: 'blur(10px)' });
+        gsap.set(queueEl, { visibility: 'visible', pointerEvents: 'auto', opacity: 1, y: 0, scale: 1 });
+        gsap.set(lyricsEl, { visibility: 'hidden', pointerEvents: 'none', opacity: 0, y: 16, scale: 0.985 });
       }
     }
     
@@ -373,15 +790,15 @@ export default function FullscreenPlayer() {
             width: targetRect.width,
           });
           
-          // Set initial text colors
+          // Set initial text colors (frosted dark pill: white active, dimmed inactive)
           if (lyricsTabBtnRef.current && queueTabBtnRef.current) {
-            gsap.set(lyricsTabBtnRef.current, { color: isLyricsPanelActive ? 'rgba(0,0,0,1)' : 'rgba(255,255,255,0.85)' });
-            gsap.set(queueTabBtnRef.current, { color: !isLyricsPanelActive ? 'rgba(0,0,0,1)' : 'rgba(255,255,255,0.85)' });
+            gsap.set(lyricsTabBtnRef.current, { color: isLyricsPanelActive ? 'rgba(255,255,255,1)' : 'rgba(255,255,255,0.38)' });
+            gsap.set(queueTabBtnRef.current, { color: !isLyricsPanelActive ? 'rgba(255,255,255,1)' : 'rgba(255,255,255,0.38)' });
           }
         }
       }
     }
-  }, [isFullscreenOpen]);
+  }, [isFullscreenOpen, transitionState]);
 
   useEffect(() => {
     if (!currentTrack) {
@@ -437,6 +854,9 @@ export default function FullscreenPlayer() {
     previousOpenRef.current = isFullscreenOpen;
 
     if (!visualTrack || !isFullscreenOpen || wasOpen) return;
+
+    // Opening the fullscreen player always starts on the queue tab.
+    usePlayerStore.setState({ showQueue: true, showLyrics: false });
 
     clearCloseCanvasTimeout();
     killActiveTransition();
@@ -596,6 +1016,8 @@ export default function FullscreenPlayer() {
   const startCloseTransition = () => {
     if (!visualTrack || !isFullscreenOpen) return;
 
+    setIsDriveMode(false);
+
     clearCloseCanvasTimeout();
     killActiveTransition();
     setFullscreenInteractable(false);
@@ -717,6 +1139,17 @@ export default function FullscreenPlayer() {
       tabTransitionTlRef.current.kill();
       tabTransitionTlRef.current = null;
     }
+
+    // The tab pill and tab-label color tweens are started separately from the
+    // panel timeline. Kill them explicitly so none can keep sliding while the
+    // fullscreen player is hidden in Drive Mode.
+    [
+      tabPillRef.current,
+      lyricsTabBtnRef.current,
+      queueTabBtnRef.current,
+    ].forEach((target) => {
+      if (target) gsap.killTweensOf(target);
+    });
   }, []);
 
   const animateTabPill = useCallback((toLyrics: boolean) => {
@@ -733,21 +1166,21 @@ export default function FullscreenPlayer() {
     gsap.to(pill, {
       x: targetRect.left - parentRect.left,
       width: targetRect.width,
-      duration: 0.5,
+      duration: 0.48,
       ease: 'back.out(1.4)',
       overwrite: true,
     });
 
-    // Animate text colors
+    // Active = bright white, inactive = dimmed white (both on dark frosted pill)
     gsap.to(lyricsBtn, {
-      color: toLyrics ? 'rgba(0,0,0,1)' : 'rgba(255,255,255,0.85)',
-      duration: 0.35,
+      color: toLyrics ? 'rgba(255,255,255,1)' : 'rgba(255,255,255,0.38)',
+      duration: 0.3,
       ease: 'power2.out',
       overwrite: 'auto',
     });
     gsap.to(queueBtn, {
-      color: !toLyrics ? 'rgba(0,0,0,1)' : 'rgba(255,255,255,0.85)',
-      duration: 0.35,
+      color: !toLyrics ? 'rgba(255,255,255,1)' : 'rgba(255,255,255,0.38)',
+      duration: 0.3,
       ease: 'power2.out',
       overwrite: 'auto',
     });
@@ -769,7 +1202,7 @@ export default function FullscreenPlayer() {
     const tl = gsap.timeline({
       onStart: () => {
         // Set will-change for performance during transition
-        gsap.set([incoming, outgoing], { willChange: 'transform, opacity, filter' });
+        gsap.set([incoming, outgoing], { willChange: 'transform, opacity' });
         // Make both visible during transition
         gsap.set(incoming, { visibility: 'visible', pointerEvents: 'none' });
         gsap.set(outgoing, { pointerEvents: 'none' });
@@ -783,32 +1216,27 @@ export default function FullscreenPlayer() {
     });
     tabTransitionTlRef.current = tl;
 
-    // ── Outgoing: fade + blur + drift down ──
+    // ── Outgoing: clean fade + slight slide ──
     tl.to(outgoing, {
       opacity: 0,
-      y: 24,
+      y: 16,
       scale: 0.985,
-      filter: 'blur(12px)',
-      duration: 0.55,
-      ease: 'power3.in',
+      duration: 0.32,
+      ease: 'power2.in',
     }, 0);
 
-    // ── Incoming: set initial state then reveal ──
-    tl.set(incoming, {
+    // ── Incoming: reveal smoothly ──
+    tl.fromTo(incoming, {
       opacity: 0,
-      y: 20,
+      y: 16,
       scale: 0.985,
-      filter: 'blur(10px)',
-    }, 0.15);
-
-    tl.to(incoming, {
+    }, {
       opacity: 1,
       y: 0,
       scale: 1,
-      filter: 'blur(0px)',
-      duration: 0.7,
-      ease: 'expo.out',
-    }, 0.2);
+      duration: 0.42,
+      ease: 'power3.out',
+    }, 0.1);
 
     // ── Stagger nested elements ──
     if (toLyrics) {
@@ -819,19 +1247,17 @@ export default function FullscreenPlayer() {
       if (queueItems.length > 0) {
         tl.fromTo(queueItems, {
           opacity: 0,
-          y: 18,
-          scale: 0.97,
-          filter: 'blur(6px)',
+          y: 12,
+          scale: 0.98,
         }, {
           opacity: 1,
           y: 0,
           scale: 1,
-          filter: 'blur(0px)',
-          duration: 0.55,
-          ease: 'power4.out',
-          stagger: { each: 0.06, from: 'start' },
-          clearProps: 'transform,opacity,filter',
-        }, '-=0.35');
+          duration: 0.38,
+          ease: 'power3.out',
+          stagger: { each: 0.04, from: 'start' },
+          clearProps: 'transform,opacity',
+        }, '-=0.25');
       }
 
       // Queue empty state dissolves in
@@ -853,17 +1279,191 @@ export default function FullscreenPlayer() {
 
   const handleShowLyrics = useCallback(() => {
     if (isLyricsPanelActive) return; // already active
-    if (!showLyrics) toggleLyrics();
-    if (showQueue) toggleQueue();
+
+    if (!isCompactLyricsLayout) {
+      usePlayerStore.setState({ showLyrics: true, showQueue: false });
+      runTabTransition(true);
+      return;
+    }
+
+    // Capture the current layout so the cover, title, and tab area can move
+    // together into their compact lyrics layout after React applies it.
+    const cover = coverWrapperRef.current;
+    const trackHeader = selectWithinShell('.fullscreen-track-meta');
+    const tabs = selectWithinShell('.fullscreen-tabs');
+    const panel = selectWithinShell('.fullscreen-lyrics-panel');
+    const before = {
+      cover: cover?.getBoundingClientRect(),
+      trackHeader: trackHeader[0]?.getBoundingClientRect(),
+      tabs: tabs[0]?.getBoundingClientRect(),
+      panel: panel[0]?.getBoundingClientRect(),
+    };
+
+    usePlayerStore.setState({ showLyrics: true, showQueue: false });
     runTabTransition(true);
-  }, [isLyricsPanelActive, showLyrics, showQueue, toggleLyrics, toggleQueue, runTabTransition]);
+
+    requestAnimationFrame(() => {
+      const nextCover = coverWrapperRef.current;
+      const nextTrackHeader = selectWithinShell('.fullscreen-track-meta')[0];
+      const nextTabs = selectWithinShell('.fullscreen-tabs')[0];
+      const nextPanel = selectWithinShell('.fullscreen-lyrics-panel')[0];
+      const coverRect = nextCover?.getBoundingClientRect();
+      const trackHeaderRect = nextTrackHeader?.getBoundingClientRect();
+      const tabsRect = nextTabs?.getBoundingClientRect();
+      const panelRect = nextPanel?.getBoundingClientRect();
+
+      if (nextCover && before.cover && coverRect?.width && coverRect.height) {
+        gsap.set(nextCover, {
+          x: before.cover.left - coverRect.left,
+          y: before.cover.top - coverRect.top,
+          width: before.cover.width,
+          height: before.cover.height,
+          borderRadius: '28px',
+          transformOrigin: 'top left',
+          force3D: true,
+        });
+        gsap.to(nextCover, {
+          x: 0,
+          y: 0,
+          width: coverRect.width,
+          height: coverRect.height,
+          borderRadius: '16px',
+          duration: 0.62,
+          ease: 'power3.inOut',
+          overwrite: 'auto',
+          clearProps: 'x,y,width,height,borderRadius,transformOrigin',
+        });
+      }
+
+      // Keep the title in place relative to the shrinking cover, while the
+      // tabs and their content ride upward with the newly compact header.
+      if (nextTrackHeader && before.trackHeader && trackHeaderRect) {
+        gsap.fromTo(nextTrackHeader, {
+          x: before.trackHeader.left - trackHeaderRect.left,
+          y: before.trackHeader.top - trackHeaderRect.top,
+        }, {
+          x: 0,
+          y: 0,
+          duration: 0.52,
+          ease: 'power3.inOut',
+          overwrite: 'auto',
+          clearProps: 'x,y',
+        });
+      }
+
+      if (nextTabs && before.tabs && tabsRect) {
+        gsap.fromTo(nextTabs, { y: before.tabs.top - tabsRect.top }, {
+          y: 0,
+          duration: 0.58,
+          ease: 'power3.inOut',
+          overwrite: 'auto',
+          clearProps: 'y',
+        });
+      }
+
+      if (nextPanel && before.panel && panelRect) {
+        gsap.fromTo(nextPanel, { y: before.panel.top - panelRect.top }, {
+          y: 0,
+          duration: 0.62,
+          ease: 'power3.inOut',
+          overwrite: 'auto',
+          clearProps: 'y',
+        });
+      }
+    });
+  }, [isLyricsPanelActive, isCompactLyricsLayout, runTabTransition]);
 
   const handleShowQueue = useCallback(() => {
     if (!isLyricsPanelActive) return; // already active
-    if (!showQueue) toggleQueue();
-    if (showLyrics) toggleLyrics();
+
+    if (!isCompactLyricsLayout) {
+      usePlayerStore.setState({ showLyrics: false, showQueue: true });
+      runTabTransition(false);
+      return;
+    }
+
+    const cover = coverWrapperRef.current;
+    const trackHeader = selectWithinShell('.fullscreen-track-meta');
+    const tabs = selectWithinShell('.fullscreen-tabs');
+    const panel = selectWithinShell('.fullscreen-lyrics-panel');
+    const before = {
+      cover: cover?.getBoundingClientRect(),
+      trackHeader: trackHeader[0]?.getBoundingClientRect(),
+      tabs: tabs[0]?.getBoundingClientRect(),
+      panel: panel[0]?.getBoundingClientRect(),
+    };
+
+    usePlayerStore.setState({ showLyrics: false, showQueue: true });
     runTabTransition(false);
-  }, [isLyricsPanelActive, showQueue, showLyrics, toggleQueue, toggleLyrics, runTabTransition]);
+
+    requestAnimationFrame(() => {
+      const nextCover = coverWrapperRef.current;
+      const nextTrackHeader = selectWithinShell('.fullscreen-track-meta')[0];
+      const nextTabs = selectWithinShell('.fullscreen-tabs')[0];
+      const nextPanel = selectWithinShell('.fullscreen-lyrics-panel')[0];
+      const coverRect = nextCover?.getBoundingClientRect();
+      const trackHeaderRect = nextTrackHeader?.getBoundingClientRect();
+      const tabsRect = nextTabs?.getBoundingClientRect();
+      const panelRect = nextPanel?.getBoundingClientRect();
+
+      if (nextCover && before.cover && coverRect?.width && coverRect.height) {
+        gsap.set(nextCover, {
+          x: before.cover.left - coverRect.left,
+          y: before.cover.top - coverRect.top,
+          width: before.cover.width,
+          height: before.cover.height,
+          borderRadius: '16px',
+          transformOrigin: 'top left',
+          force3D: true,
+        });
+        gsap.to(nextCover, {
+          x: 0,
+          y: 0,
+          width: coverRect.width,
+          height: coverRect.height,
+          borderRadius: '28px',
+          duration: 0.56,
+          ease: 'power3.inOut',
+          overwrite: 'auto',
+          clearProps: 'x,y,width,height,borderRadius,transformOrigin',
+        });
+      }
+
+      if (nextTrackHeader && before.trackHeader && trackHeaderRect) {
+        gsap.fromTo(nextTrackHeader, {
+          x: before.trackHeader.left - trackHeaderRect.left,
+          y: before.trackHeader.top - trackHeaderRect.top,
+        }, {
+          x: 0,
+          y: 0,
+          duration: 0.5,
+          ease: 'power3.inOut',
+          overwrite: 'auto',
+          clearProps: 'x,y',
+        });
+      }
+
+      if (nextTabs && before.tabs && tabsRect) {
+        gsap.fromTo(nextTabs, { y: before.tabs.top - tabsRect.top }, {
+          y: 0,
+          duration: 0.54,
+          ease: 'power3.inOut',
+          overwrite: 'auto',
+          clearProps: 'y',
+        });
+      }
+
+      if (nextPanel && before.panel && panelRect) {
+        gsap.fromTo(nextPanel, { y: before.panel.top - panelRect.top }, {
+          y: 0,
+          duration: 0.58,
+          ease: 'power3.inOut',
+          overwrite: 'auto',
+          clearProps: 'y',
+        });
+      }
+    });
+  }, [isLyricsPanelActive, isCompactLyricsLayout, runTabTransition]);
 
   const handleTrackClick = (track: Track, clickedIndex: number) => {
     const coverWrapper = coverWrapperRef.current;
@@ -964,112 +1564,219 @@ export default function FullscreenPlayer() {
     animateUpNextQueueItems();
   };
 
-  const toggleDriveMode = () => {
-    if (isDriveModeTransitioning) return;
-    
-    const coverWrapper = coverWrapperRef.current;
-    if (!coverWrapper) {
-      setIsDriveMode(!isDriveMode);
-      return;
+  // Sync if opened directly into Drive Mode from DevicesMenu
+  useLayoutEffect(() => {
+    if (isFullscreenOpen && isDriveModeOpen && !isDriveMode) {
+      setIsDriveMode(true);
+    }
+  }, [isFullscreenOpen, isDriveModeOpen, isDriveMode]);
+
+  // Mode changes should be a hard cut. If a fullscreen open/close or Lyrics/Queue
+  // tween is still running when Drive Mode is entered or left, it can keep
+  // moving the hidden player and become visible again on return. Stop those
+  // timelines and put the fullscreen panels into their exact resting state.
+  const settleFullscreenForModeSwitch = () => {
+    clearCloseCanvasTimeout();
+    clearAutoTransitionFrame();
+    clearQueueAnimationFrame();
+    killActiveTransition();
+    killTabTransition();
+
+    if (coverWrapperRef.current) {
+      gsap.set(coverWrapperRef.current, {
+        clearProps: 'x,y,scaleX,scaleY,opacity,transformOrigin,willChange',
+      });
     }
 
-    if (!isDriveMode) {
-      // Entering Drive Mode
-      setIsDriveModeTransitioning(true);
-      
-      // Store fullscreen cover position for animation
-      const fullscreenRect = coverWrapper.getBoundingClientRect();
-      (window as any).__fullscreenCoverRect = {
-        top: fullscreenRect.top,
-        left: fullscreenRect.left,
-        width: fullscreenRect.width,
-        height: fullscreenRect.height,
-      };
-      
-      // Provide callback for DrivePlayer to clear transition flag
-      (window as any).__clearDriveModeTransition = () => {
-        setIsDriveModeTransitioning(false);
-      };
-      
-      // Kill any existing animation
-      if (driveModeTransitionRef.current) {
-        driveModeTransitionRef.current.kill();
+    gsapSetIfPresent(selectWithinShell('.fullscreen-overlay-bg'), {
+      opacity: 1,
+      clearProps: 'willChange',
+    });
+    gsapSetIfPresent(selectWithinShell('.fullscreen-cover-2d'), {
+      clearProps: 'willChange',
+    });
+    gsapSetIfPresent(
+      selectWithinShell('.fullscreen-close-btn, .fullscreen-track-title, .fullscreen-artist, .fullscreen-track-badges, .fullscreen-tabs, .fullscreen-progress-bar, .fullscreen-controls, .fullscreen-lyrics-panel'),
+      { clearProps: 'transform,opacity,scale,willChange' },
+    );
+    gsapSetIfPresent(selectWithinShell('.queue-item'), {
+      clearProps: 'transform,opacity,willChange',
+    });
+
+    const lyricsPanel = lyricsContainerRef.current;
+    const queuePanel = queueContainerRef.current;
+    if (lyricsPanel && queuePanel) {
+      gsap.set(lyricsPanel, {
+        visibility: isLyricsPanelActive ? 'visible' : 'hidden',
+        pointerEvents: isLyricsPanelActive ? 'auto' : 'none',
+        opacity: isLyricsPanelActive ? 1 : 0,
+        clearProps: 'transform',
+      });
+      gsap.set(queuePanel, {
+        visibility: isLyricsPanelActive ? 'hidden' : 'visible',
+        pointerEvents: isLyricsPanelActive ? 'none' : 'auto',
+        opacity: isLyricsPanelActive ? 0 : 1,
+        clearProps: 'transform',
+      });
+    }
+
+    const pill = tabPillRef.current;
+    const activeTab = isLyricsPanelActive ? lyricsTabBtnRef.current : queueTabBtnRef.current;
+    const pillParent = pill?.parentElement;
+    if (pill && activeTab && pillParent) {
+      const parentRect = pillParent.getBoundingClientRect();
+      const activeRect = activeTab.getBoundingClientRect();
+      if (activeRect.width > 0) {
+        gsap.set(pill, { x: activeRect.left - parentRect.left, width: activeRect.width });
       }
-
-      // Mount DrivePlayer immediately so mobile taps do not depend on the fade callback.
-      setIsDriveMode(true);
-
-      // Fade out fullscreen UI (but keep cover visible for animation)
-      const tl = gsap.timeline();
-      driveModeTransitionRef.current = tl;
-      
-      // Fade out UI elements only (not the cover)
-      tl.to(selectWithinShell('.fullscreen-close-btn, .fullscreen-track-title, .fullscreen-artist, .fullscreen-track-badges, .fullscreen-tabs, .fullscreen-lyrics-panel, .fullscreen-progress-bar, .fullscreen-controls'), {
-        opacity: 0,
-        duration: 0.25,
-        ease: 'power2.in',
-      }, 0);
-      
-    } else {
-      // Exiting Drive Mode - switch back immediately
-      setIsDriveMode(false);
-      // Transition flag will be cleared by the return animation useLayoutEffect
+    }
+    if (lyricsTabBtnRef.current && queueTabBtnRef.current) {
+      gsap.set(lyricsTabBtnRef.current, {
+        color: isLyricsPanelActive ? 'rgba(255,255,255,1)' : 'rgba(255,255,255,0.38)',
+      });
+      gsap.set(queueTabBtnRef.current, {
+        color: isLyricsPanelActive ? 'rgba(255,255,255,0.38)' : 'rgba(255,255,255,1)',
+      });
     }
   };
 
-  // Animate cover when returning from Drive Mode
-  useLayoutEffect(() => {
-    if (!isDriveMode && coverWrapperRef.current) {
-      const driveModeRect = (window as any).__driveModeBackRect;
-      
-      if (driveModeRect) {
-        const coverWrapper = coverWrapperRef.current;
-        const finalRect = coverWrapper.getBoundingClientRect();
-        
-        // Calculate initial position (from Drive Mode)
-        const initialX = driveModeRect.left - finalRect.left;
-        const initialY = driveModeRect.top - finalRect.top;
-        const initialScaleX = driveModeRect.width / finalRect.width;
-        const initialScaleY = driveModeRect.height / finalRect.height;
-        
-        // Set initial state with opacity 0
-        gsap.set(coverWrapper, {
-          x: initialX,
-          y: initialY,
-          scaleX: initialScaleX,
-          scaleY: initialScaleY,
-          transformOrigin: 'top left',
-          opacity: 0,
-        });
-        
-        // Animate to final position with fade in
-        gsap.to(coverWrapper, {
-          x: 0,
-          y: 0,
-          scaleX: 1,
-          scaleY: 1,
-          opacity: 1,
-          duration: 0.5,
-          ease: 'expo.out',
-          onComplete: () => {
-            gsap.set(coverWrapper, { clearProps: 'all' });
-            delete (window as any).__driveModeBackRect;
-            setIsDriveModeTransitioning(false);
+  const handleDriveCoverReady = (cover: HTMLDivElement) => {
+    driveCoverRef.current = cover;
+    if (modeCoverTransitionRef.current?.direction === 'to-drive') {
+      moveModeCoverToTarget(cover);
+    }
+  };
+
+  const handleEnterDriveMode = useCallback(() => {
+    if (isDriveMode || modeTransitionBusyRef.current) return;
+
+    settleFullscreenForModeSwitch();
+    const source = coverWrapperRef.current;
+    const coverTransition = source ? createModeCoverTransition(source, 'to-drive') : null;
+    if (!coverTransition) {
+      setFullscreenInteractable(true);
+      setTransitionState('open');
+      setDriveModeOpen(true);
+      setIsDriveMode(true);
+      return;
+    }
+
+    const { transition, rect } = coverTransition;
+    const fadeTargets = selectWithinShell(
+      '.fullscreen-close-btn, .fullscreen-track-meta, .fullscreen-tabs, .fullscreen-progress-bar, .fullscreen-controls, .fullscreen-lyrics-panel',
+    );
+    const timeline = gsap.timeline({
+      onComplete: () => {
+        if (modeCoverTransitionRef.current !== transition) return;
+        modeCoverTimelineRef.current = null;
+        setFullscreenInteractable(true);
+        setTransitionState('open');
+        setDriveModeOpen(true);
+        setIsDriveMode(true);
+      },
+    });
+    modeCoverTimelineRef.current = timeline;
+
+    const scale = 1.08;
+    const width = rect.width * scale;
+    const height = rect.height * scale;
+    timeline
+      .to(transition.clone, {
+        left: rect.left - (width - rect.width) / 2,
+        top: rect.top - (height - rect.height) / 2,
+        width,
+        height,
+        duration: 0.2,
+        ease: 'power2.out',
+      }, 0)
+      .to(fadeTargets, {
+        opacity: 0,
+        y: -6,
+        duration: 0.2,
+        ease: 'power2.out',
+        stagger: 0.015,
+      }, 0);
+  }, [isDriveMode, setDriveModeOpen, settleFullscreenForModeSwitch]);
+
+  const handleCloseDriveMode = useCallback(() => {
+    if (!isDriveMode || modeTransitionBusyRef.current) return;
+
+    const source = driveCoverRef.current?.isConnected
+      ? driveCoverRef.current
+      : shellRef.current?.querySelector<HTMLElement>('.drive-cover-art');
+    const coverTransition = source ? createModeCoverTransition(source, 'to-fullscreen') : null;
+    if (!coverTransition) {
+      settleFullscreenForModeSwitch();
+      setFullscreenInteractable(true);
+      setTransitionState('open');
+      setDriveModeOpen(false);
+      setIsDriveMode(false);
+      return;
+    }
+
+    const { transition, rect } = coverTransition;
+    const fadeTargets = selectWithinShell(
+      '.drive-header, .drive-track-copy, .drive-bottom-panel, .drive-lyrics-container',
+    );
+    const timeline = gsap.timeline({
+      onComplete: () => {
+        if (modeCoverTransitionRef.current !== transition) return;
+        modeCoverTimelineRef.current = null;
+        settleFullscreenForModeSwitch();
+
+        const revealTargets = selectWithinShell(
+          '.fullscreen-close-btn, .fullscreen-track-meta, .fullscreen-tabs, .fullscreen-progress-bar, .fullscreen-controls, .fullscreen-lyrics-panel',
+        );
+        gsapSetIfPresent(revealTargets, { opacity: 0, y: 8, willChange: 'opacity,transform' });
+        if (coverWrapperRef.current) {
+          gsap.set(coverWrapperRef.current, { opacity: 0, willChange: 'opacity' });
+        }
+
+        setFullscreenInteractable(true);
+        setTransitionState('open');
+        setDriveModeOpen(false);
+        setIsDriveMode(false);
+
+        window.requestAnimationFrame(() => {
+          const target = coverWrapperRef.current;
+          if (target) {
+            moveModeCoverToTarget(target);
+          } else {
+            clearModeCoverTransition();
           }
         });
-        
-        // Fade in fullscreen UI elements
-        gsap.to(selectWithinShell('.fullscreen-close-btn, .fullscreen-track-title, .fullscreen-artist, .fullscreen-track-badges, .fullscreen-tabs, .fullscreen-lyrics-panel, .fullscreen-progress-bar, .fullscreen-controls'), {
-          opacity: 1,
-          duration: 0.4,
-          ease: 'power2.out',
-          delay: 0.2,
-        });
-      } else {
-        setIsDriveModeTransitioning(false);
-      }
+      },
+    });
+    modeCoverTimelineRef.current = timeline;
+
+    const scale = 1.08;
+    const width = rect.width * scale;
+    const height = rect.height * scale;
+    timeline
+      .to(transition.clone, {
+        left: rect.left - (width - rect.width) / 2,
+        top: rect.top - (height - rect.height) / 2,
+        width,
+        height,
+        duration: 0.2,
+        ease: 'power2.out',
+      }, 0)
+      .to(fadeTargets, {
+        opacity: 0,
+        y: -6,
+        duration: 0.2,
+        ease: 'power2.out',
+        stagger: 0.015,
+      }, 0);
+  }, [isDriveMode, setDriveModeOpen, settleFullscreenForModeSwitch]);
+
+  const toggleDriveMode = useCallback(() => {
+    if (!isDriveMode) {
+      handleEnterDriveMode();
+    } else {
+      handleCloseDriveMode();
     }
-  }, [isDriveMode]);
+  }, [isDriveMode, handleEnterDriveMode, handleCloseDriveMode]);
 
   // DrivePlayer is embedded inline below to share the background layer
 
@@ -1100,19 +1807,14 @@ export default function FullscreenPlayer() {
       />
 
       {/* Bottom-to-top black gradient fade */}
-      <div className="absolute inset-0 -z-10 pointer-events-none" style={{ background: 'linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 25%, rgba(0,0,0,0.4) 50%, transparent 75%)' }} />
+      <div className="absolute inset-0 -z-10 pointer-events-none" style={{ background: 'linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0.9) 25%, rgba(0,0,0,0.55) 52%, rgba(0,0,0,0.12) 78%, transparent 100%)' }} />
 
       {visualTrack ? (
         <div 
           className="absolute inset-0 flex h-full w-full flex-col overflow-hidden p-4 pt-6 md:p-8"
           style={{
-            // Keep visible during transition so cover can be seen
-            opacity: isDriveMode && !isDriveModeTransitioning ? 0 : 1,
-            pointerEvents: isDriveMode || isDriveModeTransitioning ? 'none' : 'auto',
-            // Only hide after transition completes
-            visibility: isDriveMode && !isDriveModeTransitioning ? 'hidden' : 'visible',
-            willChange: isDriveModeTransitioning ? 'opacity' : 'auto',
-            transform: 'translateZ(0)',
+            visibility: isDriveMode ? 'hidden' : 'visible',
+            pointerEvents: isDriveMode ? 'none' : 'auto',
           }}
           onClick={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
@@ -1153,15 +1855,15 @@ export default function FullscreenPlayer() {
           <div className="m-auto h-full w-full max-w-6xl overflow-hidden pt-0 pb-4 flex flex-col landscape:grid landscape:grid-cols-[minmax(360px,448px)_minmax(0,1fr)] landscape:gap-x-12 landscape:items-center landscape:overflow-visible xl:grid xl:grid-cols-[448px_minmax(0,1fr)] xl:gap-x-12 xl:items-center xl:justify-center relative">
             
             <div className="portrait:contents landscape:flex landscape:flex-col landscape:justify-center landscape:h-full landscape:col-start-1 landscape:row-start-1 landscape:min-w-0 xl:flex xl:flex-col xl:justify-center xl:h-full xl:col-start-1 xl:row-start-1">
-              <div className="order-1 flex w-full justify-center">
+              <div className={`fullscreen-track-header order-1 flex w-full items-center ${isCompactLyricsLayout && isLyricsPanelActive ? 'max-w-2xl flex-row justify-center gap-3 sm:gap-4' : 'flex-col'}`}>
                 <div
                   ref={coverWrapperRef}
-                  className="fullscreen-cover-wrapper relative flex h-[44vw] w-[44vw] max-h-[220px] max-w-[220px] flex-shrink-0 items-center justify-center overflow-hidden rounded-[28px] shadow-2xl sm:h-[240px] sm:w-[240px] md:h-[280px] md:w-[280px] xl:h-[360px] xl:w-[360px]"
+                  className={`fullscreen-cover-wrapper relative flex flex-shrink-0 items-center justify-center overflow-hidden shadow-2xl ${isCompactLyricsLayout && isLyricsPanelActive ? 'h-16 w-16 max-h-16 max-w-16 rounded-2xl sm:h-20 sm:w-20 sm:max-h-20 sm:max-w-20' : 'h-[44vw] w-[44vw] max-h-[220px] max-w-[220px] rounded-[28px] sm:h-[240px] sm:w-[240px] md:h-[280px] md:w-[280px] xl:h-[360px] xl:w-[360px]'}`}
                   style={{
-                    willChange: transitionState === 'opening' || transitionState === 'closing' || isDriveModeTransitioning ? 'transform, opacity' : 'auto',
-                    opacity: isDriveMode ? 0 : undefined,
+                    willChange: transitionState === 'opening' || transitionState === 'closing' ? 'transform, opacity' : 'auto',
                     position: 'relative',
                     transform: 'translateZ(0)',
+                    boxShadow: '0 0 0 1px rgba(255,255,255,0.16), 0 18px 48px rgba(0,0,0,0.7), 0 0 28px rgba(150,110,255,0.14)',
                   }}
                 >
                   <div className="absolute inset-0" style={{ transform: 'translateZ(0)' }}>
@@ -1184,15 +1886,18 @@ export default function FullscreenPlayer() {
                       )}
                     </div>
                   </div>
+                  <div className="pointer-events-none absolute inset-0 z-10 rounded-[inherit] border border-white/20">
+                    <span className="absolute inset-y-3 left-0 w-[3px] rounded-full bg-gradient-to-b from-white/75 via-white/20 to-accent/70 shadow-[0_0_10px_rgba(255,255,255,0.35)]" />
+                    <span className="absolute inset-y-3 right-0 w-[3px] rounded-full bg-gradient-to-b from-white/75 via-white/20 to-accent/70 shadow-[0_0_10px_rgba(255,255,255,0.35)]" />
+                  </div>
                 </div>
-              </div>
 
-              <div className="order-2 mt-4 flex flex-col items-center landscape:mt-6 xl:mt-8 w-full">
-                <div className="flex w-full max-w-2xl flex-col items-center text-center">
-                  <div ref={titleContainerRef} className="overflow-hidden w-full px-6 md:px-8 xl:px-0">
+              <div className={`fullscreen-track-meta flex min-w-0 flex-col ${isCompactLyricsLayout && isLyricsPanelActive ? 'flex-1 items-start text-left' : 'mt-4 w-full items-center text-center landscape:mt-6 xl:mt-8'}`}>
+                <div className={`flex w-full flex-col ${isCompactLyricsLayout && isLyricsPanelActive ? 'items-start text-left' : 'max-w-2xl items-center text-center'}`}>
+                  <div ref={titleContainerRef} className={`overflow-hidden w-full ${isCompactLyricsLayout && isLyricsPanelActive ? 'px-0' : 'px-6 md:px-8 xl:px-0'}`}>
                     <h1 
                       ref={titleTextRef}
-                      className={`fullscreen-track-title text-2xl font-bold leading-tight md:text-3xl ${
+                      className={`fullscreen-track-title font-bold leading-tight ${isCompactLyricsLayout && isLyricsPanelActive ? 'text-lg md:text-xl' : 'text-2xl md:text-3xl'} ${
                         isTitleOverflowing ? 'animate-marquee inline-block whitespace-nowrap' : 'truncate'
                       }`}
                     >
@@ -1202,10 +1907,10 @@ export default function FullscreenPlayer() {
                       )}
                     </h1>
                   </div>
-                  <p className="fullscreen-artist mt-1 text-base text-white/70 md:text-lg truncate w-full">
+                  <p className={`fullscreen-artist mt-0.5 text-sm text-white/70 md:text-base truncate w-full ${isCompactLyricsLayout && isLyricsPanelActive ? 'text-left' : 'mt-1 text-base text-center md:text-lg'}`}>
                     {visualTrack.artist}
                   </p>
-                  <div className="fullscreen-track-badges mt-2 flex flex-wrap items-center justify-center gap-2">
+                  <div className={`fullscreen-track-badges mt-2 flex flex-wrap items-center gap-2 ${isCompactLyricsLayout && isLyricsPanelActive ? 'justify-start' : 'justify-center'}`}>
                     <span className="rounded-full border border-white/20 bg-white/10 backdrop-blur-xl px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/80 shadow-md">
                       Queue {currentQueuePosition}/{Math.max(queue.length, 1)}
                     </span>
@@ -1220,45 +1925,32 @@ export default function FullscreenPlayer() {
                   </div>
                 </div>
               </div>
+              </div>
 
               <div className="order-4 mt-4 flex w-full flex-col items-center justify-center gap-2 xl:mt-6">
-                <div className="fullscreen-progress-bar mt-2 mb-2 shrink-0 self-stretch px-1 md:w-full md:max-w-md md:self-auto md:px-0">
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={progress}
-                    onChange={(event) => seekTo(Number(event.target.value))}
-                    className="accent-track h-1.5 w-full"
-                    style={{ '--progress': `${progress}%` } as React.CSSProperties}
-                  />
-                  <div className="mt-1 flex justify-between text-xs text-white/50">
-                    <span>{formatDuration(Math.floor(currentTime))}</span>
-                    <span>{formatDuration(Math.floor(duration))}</span>
-                  </div>
-                </div>
+                <FullscreenProgressTrack />
 
-                <div className="fullscreen-controls shrink-0 w-full max-w-md flex justify-center landscape:max-w-full xl:max-w-md">
-                  <div className="flex items-center justify-between sm:justify-center gap-1 sm:gap-4 w-full px-2 xs:px-4 sm:px-0">
-                    <button onClick={toggleShuffle} className={`p-1 sm:p-2 transition ${shuffle ? 'text-accent' : 'text-white/50 hover:text-white'}`}>
+                  <div className="fullscreen-controls shrink-0 w-full max-w-md flex justify-center landscape:max-w-full xl:max-w-md">
+                  <div className="grid w-full grid-cols-7 items-center px-2 xs:px-4 sm:px-0">
+                    <button onClick={toggleShuffle} className={`justify-self-center p-1 sm:p-2 transition ${shuffle ? 'text-accent' : 'text-white/50 hover:text-white'}`}>
                       <RiShuffleLine size={24} />
                     </button>
-                    <button onClick={() => toggleLike(visualTrack.id)} className="p-1 sm:p-2 transition hover:scale-110">
+                    <button onClick={() => toggleLike(visualTrack.id)} className="justify-self-center p-1 sm:p-2 transition hover:scale-110">
                       {isLiked ? <RiHeartFill size={24} className="text-accent" /> : <RiHeartLine size={24} className="text-white/50 hover:text-white" />}
                     </button>
-                    <button onClick={prevTrack} className="p-1 sm:p-2 text-white/70 transition hover:text-white">
+                    <button onClick={prevTrack} className="justify-self-center p-1 sm:p-2 text-white/70 transition hover:text-white">
                       <RiSkipBackFill size={32} />
                     </button>
-                    <button onClick={togglePlay} className="flex h-[60px] w-[60px] sm:h-16 sm:w-16 items-center justify-center rounded-full bg-white text-surface transition hover:scale-105 shrink-0 mx-2 sm:mx-0">
-                      {isPlaying ? <RiPauseFill size={32} /> : <RiPlayFill size={32} className="ml-1" />}
+                    <button onClick={togglePlay} className="flex h-[60px] w-[60px] sm:h-16 sm:w-16 items-center justify-center justify-self-center rounded-full bg-white text-surface transition hover:scale-105 shrink-0">
+                      {isPlaying ? <RiPauseFill size={32} /> : <RiPlayFill size={32} />}
                     </button>
-                    <button onClick={nextTrack} className="p-1 sm:p-2 text-white/70 transition hover:text-white">
+                    <button onClick={nextTrack} className="justify-self-center p-1 sm:p-2 text-white/70 transition hover:text-white">
                       <RiSkipForwardFill size={32} />
                     </button>
-                    <button onClick={toggleMute} className="p-1 sm:p-2 text-white/50 transition hover:text-white">
+                    <button onClick={toggleMute} className="justify-self-center p-1 sm:p-2 text-white/50 transition hover:text-white">
                       {isMuted || volume === 0 ? <RiVolumeMuteLine size={22} /> : <RiVolumeUpLine size={22} />}
                     </button>
-                    <button onClick={cycleRepeat} className={`p-1 sm:p-2 transition ${repeat !== 'off' ? 'text-accent' : 'text-white/50 hover:text-white'}`}>
+                    <button onClick={cycleRepeat} className={`justify-self-center p-1 sm:p-2 transition ${repeat !== 'off' ? 'text-accent' : 'text-white/50 hover:text-white'}`}>
                       <RepeatIcon size={24} />
                     </button>
                   </div>
@@ -1267,107 +1959,86 @@ export default function FullscreenPlayer() {
             </div>
 
             <div className="portrait:contents landscape:flex landscape:flex-col landscape:justify-center landscape:h-full landscape:col-start-2 landscape:row-start-1 landscape:min-w-0 landscape:pl-2 xl:flex xl:flex-col xl:justify-center xl:col-start-2 xl:row-start-1 xl:min-w-0 xl:pl-0">
-              <div className="order-3 mt-3 flex w-full flex-1 flex-col items-center gap-3 min-h-0 md:mt-6 md:gap-6 landscape:mt-0 xl:mt-8">
+              <div
+                className="order-3 mt-3 flex w-full flex-1 flex-col items-center gap-3 min-h-0 md:mt-6 md:gap-6 landscape:mt-0 xl:mt-8"
+                style={{ transform: isPortraitStackedLayout || isMobileFullscreenLayout ? undefined : 'translateY(-80px)' }}
+              >
                 <div
-                  className="fullscreen-tabs relative z-10 flex w-full max-w-md items-center justify-between gap-3 rounded-2xl border border-white/20 bg-white/10 backdrop-blur-xl p-1.5 shadow-lg"
+                  className="fullscreen-tabs relative z-10 flex min-h-12 w-full max-w-[22rem] items-center rounded-full p-1 shadow-2xl"
                   style={{
                     top: `${fullscreenTabsTopOffset}px`,
                     transform: 'translateZ(0)',
+                    marginTop: undefined,
+                    background: 'rgba(10,10,16,0.72)',
+                    border: '1px solid rgba(255,255,255,0.10)',
+                    backdropFilter: 'blur(16px)',
+                    WebkitBackdropFilter: 'blur(16px)',
+                    boxShadow: '0 4px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.07)',
                   }}
                 >
+                  {/* Animated active pill */}
                   <div
                     ref={tabPillRef}
-                    className="absolute top-1.5 bottom-1.5 left-1.5 rounded-xl bg-white shadow-md z-0 pointer-events-none"
+                    className="absolute top-1 bottom-1 left-1 rounded-full z-0 pointer-events-none"
                     style={{
-                      width: 'calc(50% - 9px)',
+                      width: 'calc(50% - 6px)',
+                      background: 'linear-gradient(135deg, color-mix(in srgb, var(--gradient-from) 25%, rgba(255,255,255,0.1)), color-mix(in srgb, var(--gradient-to) 18%, rgba(255,255,255,0.06)))',
+                      boxShadow: '0 3px 14px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.22)',
+                      border: '1px solid color-mix(in srgb, var(--gradient-from) 36%, rgba(255,255,255,0.12))',
                       willChange: tabTransitionTlRef.current ? 'transform, width' : 'auto',
                       transform: 'translateZ(0)',
                     }}
                   />
+
+                  {/* Lyrics tab */}
                   <button
                     ref={lyricsTabBtnRef}
                     onClick={handleShowLyrics}
-                    className="relative z-10 flex flex-1 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold transition-colors duration-250 select-none outline-none"
+                    className="relative z-10 flex min-h-10 flex-1 items-center justify-center gap-2 rounded-full px-3 py-2 select-none outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
                     style={{ willChange: 'color' }}
                   >
-                    Lyrics
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" opacity="0.85">
+                      <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                    </svg>
+                    <span style={{ fontSize: '13px', fontWeight: 700, letterSpacing: '0.025em' }}>Lyrics</span>
                   </button>
+
+                  {/* Queue tab */}
                   <button
                     ref={queueTabBtnRef}
                     onClick={handleShowQueue}
-                    className="relative z-10 flex flex-1 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold transition-colors duration-250 select-none outline-none"
+                    className="relative z-10 flex min-h-10 flex-1 items-center justify-center gap-2 rounded-full px-3 py-2 select-none outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
                     style={{ willChange: 'color' }}
                   >
-                    Queue
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" opacity="0.85">
+                      <path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/>
+                    </svg>
+                    <span style={{ fontSize: '13px', fontWeight: 700, letterSpacing: '0.025em' }}>Queue</span>
                   </button>
                 </div>
 
-                <div className="fullscreen-lyrics-panel relative flex flex-col flex-1 w-full min-h-0 xl:items-center mt-2 -mb-12">
+                <div className={`fullscreen-lyrics-panel relative flex flex-col flex-1 w-full min-h-0 xl:items-center mt-2 ${(isPortraitStackedLayout || isMobileFullscreenLayout) && showQueue ? '-mb-20' : '-mb-12'}`}>
                   
                   {/* Lyrics Container */}
                   <div
                     ref={lyricsContainerRef}
-                    className="absolute inset-0 flex flex-col items-center w-full h-full"
+                    className="lyric-scroller absolute inset-0 flex flex-col items-center w-full h-full"
                     style={{ 
-                      willChange: tabTransitionTlRef.current ? 'transform, opacity, filter' : 'auto',
+                      willChange: tabTransitionTlRef.current ? 'transform, opacity' : 'auto',
                       transform: 'translateZ(0)',
                     }}
                   >
-                    <div
-                      className="relative w-full flex-1 max-w-3xl mx-auto"
-                      style={{
-                        maskImage: fullscreenLyricsMask,
-                        WebkitMaskImage: fullscreenLyricsMask,
-                      }}
-                    >
-                      {lyrics.length > 0 ? (
-                        <div className="absolute inset-0">
-                          {visibleLyrics.map((line, index) => {
-                            const actualIndex = lyricWindowStart + index;
-                            const relativePosition = actualIndex - centeredLyricFocusPosition;
-                            const distance = Math.abs(relativePosition);
-                            
-                            // Minimal calculations - maximum performance
-                            const yOffset = relativePosition * lyricLineGap;
-                            const focusFactor = 1 - Math.min(distance, 1);
-                            const opacity = 0.3 + focusFactor * 0.7;
-                            const isCurrent = actualIndex === activeLyricIndex;
-                            
-                            // Simple glow for current line only
-                            const glowColor = visualTrack?.coverGradient?.[0] || '#E8470A';
-
-                            return (
-                              <div
-                                key={`${line.time}-${actualIndex}`}
-                                className="absolute w-full max-w-3xl left-1/2 px-8 text-center font-bold"
-                                style={{
-                                  top: '50%',
-                                  fontSize: 'clamp(1.1rem, 4.5vw, 1.5rem)',
-                                  lineHeight: lyricLineHeight,
-                                  transform: `translate3d(-50%, calc(-50% + ${yOffset}px), 0)`,
-                                  opacity,
-                                  color: '#ffffff',
-                                  textShadow: isCurrent ? `0 0 16px ${glowColor}, 0 0 8px ${glowColor}80` : 'none',
-                                  fontWeight: '700',
-                                  willChange: 'transform, opacity',
-                                  pointerEvents: 'none',
-                                }}
-                              >
-                                {line.text || '♪'}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="text-center">
-                            <div className="text-4xl mb-4">♪</div>
-                            <p className="text-lg text-white/50">No lyrics available</p>
-                            <p className="text-sm text-white/30 mt-2">Enjoy the music</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    <FullscreenLyricsContent
+                      lyrics={lyrics}
+                      lyricVerticalPositions={lyricVerticalPositions}
+                      lyricLineHeight={lyricLineHeight}
+                      lyricLineGap={lyricLineGap}
+                      isMobileFullscreenLayout={isMobileFullscreenLayout}
+                      isDesktopFullscreenLayout={layoutProfile === 'desktop'}
+                      lyricsDisplayMode={lyricsDisplayMode}
+                      activeLyricGlowColor={visualTrack?.coverGradient?.[0] || '#E8470A'}
+                      lyricsMask={fullscreenLyricsMask}
+                    />
                   </div>
 
                   {/* Queue Container */}
@@ -1453,30 +2124,18 @@ export default function FullscreenPlayer() {
       ) : null}
 
       {/* Dynamic Up Next Popup (Only active when not in Drive mode) */}
-      {!isDriveMode && (
-        <UpNextPopup 
-          track={queue[queueIndex + 1] || (repeat === 'all' ? queue[0] : null)}
-          visible={progress >= 75 && progress <= 80 && isFullscreenOpen}
-        />
-      )}
+      {!isDriveMode && <FullscreenUpNext track={queue[queueIndex + 1] || (repeat === 'all' ? queue[0] : null)} />}
 
-      {/* Embedded Drive Player for background sharing */}
-      {isDriveMode && visualTrack && (
-        <div 
-          className="absolute inset-0 z-40"
-          style={{ 
-            willChange: isDriveModeTransitioning ? 'opacity, transform' : 'auto',
-            transform: 'translateZ(0)',
-          }}
-        >
+      {/* Embedded Drive Player, shown immediately when Drive Mode is selected */}
+      {isDriveMode && visualTrack && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[60] overflow-hidden">
           <DrivePlayer 
-            onClose={() => {
-              setIsDriveModeTransitioning(true);
-              setIsDriveMode(false);
-            }} 
+            onClose={handleCloseDriveMode}
             isEmbedded={true} 
+            onLargeCoverReady={handleDriveCoverReady}
           />
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

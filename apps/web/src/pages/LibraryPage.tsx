@@ -59,55 +59,55 @@ export default function LibraryPage() {
   ];
 
   return (
-    <div className="page-enter space-y-5 sm:space-y-8">
+    <div className="page-enter space-y-4 sm:space-y-8">
       {/* Header - Enhanced */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl sm:text-4xl font-black tracking-tight">Your Library</h1>
-          <p className="mt-1 sm:mt-2 text-xs sm:text-sm text-softText">Manage your music collection</p>
+          <h1 className="text-xl sm:text-4xl font-black tracking-tight">Your Library</h1>
+          <p className="mt-1 text-[11px] sm:mt-2 sm:text-sm text-softText">Manage your music collection</p>
         </div>
         <button
           onClick={() => {
             const name = prompt('Enter playlist name:');
             if (name) createPlaylist(name);
           }}
-          className="flex items-center gap-1.5 sm:gap-2 rounded-full bg-theme-gradient px-4 py-2.5 sm:px-6 sm:py-3 text-xs sm:text-sm font-bold text-white transition-all hover:scale-105 hover:shadow-glow-sm active:scale-95"
+          className="flex shrink-0 items-center gap-1 sm:gap-2 rounded-full bg-theme-gradient px-3 py-2 sm:px-6 sm:py-3 text-[11px] sm:text-sm font-bold text-white transition-all hover:scale-105 hover:shadow-glow-sm active:scale-95"
         >
-          <RiAddLine size={18} /> Create playlist
+          <RiAddLine size={16} className="sm:h-[18px] sm:w-[18px]" /> <span className="sm:hidden">Create</span><span className="hidden sm:inline">Create playlist</span>
         </button>
       </div>
 
       {/* Liked songs banner - Enhanced */}
       <button
         onClick={() => navigate('/liked')}
-        className="group flex w-full items-center gap-3 sm:gap-5 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-gradient-from/20 via-accent/10 to-gradient-to/10 p-4 sm:p-6 text-left transition-all hover:from-accent/30 hover:via-accent/15 hover:to-gradient-to/15 hover:scale-[1.01] border border-accent/20 hover:border-accent/30 shadow-xl hover:shadow-2xl backdrop-blur-sm"
+        className="group flex w-full items-center gap-3 rounded-2xl sm:gap-5 sm:rounded-3xl bg-gradient-to-br from-gradient-from/20 via-accent/10 to-gradient-to/10 p-3 sm:p-6 text-left transition-all hover:from-accent/30 hover:via-accent/15 hover:to-gradient-to/15 hover:scale-[1.01] border border-accent/20 hover:border-accent/30 shadow-xl hover:shadow-2xl backdrop-blur-sm"
       >
-        <div className="flex h-14 w-14 sm:h-20 sm:w-20 items-center justify-center rounded-xl sm:rounded-2xl bg-theme-gradient shadow-glow group-hover:scale-110 transition-transform">
-          <RiHeartFill size={28} className="sm:hidden" />
+        <div className="flex h-12 w-12 sm:h-20 sm:w-20 items-center justify-center rounded-xl sm:rounded-2xl bg-theme-gradient shadow-glow group-hover:scale-110 transition-transform">
+          <RiHeartFill size={24} className="sm:hidden" />
           <RiHeartFill size={36} className="hidden sm:block" />
         </div>
         <div>
-          <div className="text-lg sm:text-2xl font-black">Liked Songs</div>
-          <div className="mt-0.5 sm:mt-1 text-sm sm:text-base text-white/80">{likedTrackIds.size} songs</div>
+          <div className="text-base sm:text-2xl font-black">Liked Songs</div>
+          <div className="mt-0.5 text-xs sm:mt-1 sm:text-base text-white/65">{likedTrackIds.size} songs</div>
         </div>
       </button>
 
       {/* Tabs - Enhanced */}
       <div className="flex items-center justify-between">
-        <div className="flex gap-2 overflow-x-auto scrollbar-hidden">
+        <div className="grid w-full grid-cols-3 gap-1 sm:flex sm:w-auto sm:gap-2 sm:overflow-x-auto scrollbar-hidden">
           {tabItems.map(t => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`group flex flex-shrink-0 items-center gap-1.5 sm:gap-2.5 rounded-full px-3.5 py-2 sm:px-5 sm:py-3 text-xs sm:text-sm font-semibold transition-all ${
+              className={`group flex min-w-0 items-center justify-center gap-1 rounded-full px-1.5 py-2 text-[10px] font-semibold transition-all sm:flex-shrink-0 sm:gap-2.5 sm:px-5 sm:py-3 sm:text-sm ${
                 tab === t.key 
                   ? 'bg-theme-gradient text-white shadow-glow-sm scale-105' 
                   : 'bg-glass-card backdrop-blur-xl/80 text-softText hover:bg-glass-card backdrop-blur-xl hover:text-white border border-white/5 hover:border-white/10'
               }`}
             >
-              <t.icon size={18} className={tab === t.key ? '' : 'group-hover:scale-110 transition-transform'} />
-              {t.label}
-              <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${tab === t.key ? 'bg-white/20' : 'bg-white/10'}`}>
+              <t.icon size={14} className={`shrink-0 sm:h-[18px] sm:w-[18px] ${tab === t.key ? '' : 'group-hover:scale-110 transition-transform'}`} />
+              <span className="truncate">{t.label}</span>
+              <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold sm:px-2 sm:text-xs ${tab === t.key ? 'bg-white/20' : 'bg-white/10'}`}>
                 {t.count}
               </span>
             </button>
@@ -192,14 +192,14 @@ export default function LibraryPage() {
         {((tab === 'playlists' && libraryPlaylists.length === 0) ||
           (tab === 'albums' && libraryAlbums.length === 0) ||
           (tab === 'artists' && libraryArtists.length === 0)) && (
-          <div className="col-span-full py-20 rounded-3xl border-2 border-dashed border-white/10 bg-gradient-to-br from-white/5 to-transparent flex flex-col items-center justify-center text-center backdrop-blur-sm">
-            <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-accent/15 mb-5">
-              {tab === 'playlists' && <RiPlayListLine size={40} className="text-accent" />}
-              {tab === 'albums' && <RiAlbumLine size={40} className="text-accent" />}
-              {tab === 'artists' && <RiUserLine size={40} className="text-accent" />}
+          <div className="col-span-full flex flex-col items-center justify-center rounded-3xl border border-dashed border-white/10 bg-gradient-to-br from-white/5 to-transparent px-4 py-10 text-center backdrop-blur-sm sm:border-2 sm:py-20">
+            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/15 sm:mb-5 sm:h-20 sm:w-20">
+              {tab === 'playlists' && <RiPlayListLine size={26} className="text-accent sm:h-10 sm:w-10" />}
+              {tab === 'albums' && <RiAlbumLine size={26} className="text-accent sm:h-10 sm:w-10" />}
+              {tab === 'artists' && <RiUserLine size={26} className="text-accent sm:h-10 sm:w-10" />}
             </div>
-            <p className="text-lg font-bold text-white mb-2">No items in your {tab} library yet</p>
-            <p className="text-sm text-dimText">Add some music to get started!</p>
+            <p className="mb-1 text-base font-bold text-white sm:mb-2 sm:text-lg">No items in your {tab} library yet</p>
+            <p className="text-xs text-dimText sm:text-sm">Add some music to get started!</p>
           </div>
         )}
       </div>

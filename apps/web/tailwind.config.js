@@ -31,10 +31,10 @@ export default {
         dimText: '#666666',
         border: 'rgba(255,255,255,0.07)',
         glass: {
-          DEFAULT: 'rgba(26, 26, 26, 0.7)',
-          heavy: 'rgba(13, 13, 13, 0.8)',
-          light: 'rgba(34, 34, 34, 0.6)',
-          card: 'rgba(34, 34, 34, 0.5)',
+          DEFAULT: 'rgba(26, 26, 26, 0.64)',
+          heavy: 'rgba(13, 13, 13, 0.76)',
+          light: 'rgba(34, 34, 34, 0.52)',
+          card: 'rgba(34, 34, 34, 0.44)',
         },
       },
       backdropBlur: {

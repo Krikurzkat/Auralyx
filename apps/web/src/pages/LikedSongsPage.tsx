@@ -4,9 +4,15 @@ import { usePlayerStore } from '../stores/playerStore';
 import { useLibraryStore } from '../stores/libraryStore';
 import { useLocalLibraryStore } from '../stores/localLibraryStore';
 import { RiPlayFill, RiPauseFill, RiHeartFill, RiTimeLine } from 'react-icons/ri';
+import { shallow } from 'zustand/shallow';
 
 export default function LikedSongsPage() {
-  const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayerStore();
+  const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayerStore((state) => ({
+    currentTrack: state.currentTrack,
+    isPlaying: state.isPlaying,
+    playTrack: state.playTrack,
+    togglePlay: state.togglePlay,
+  }), shallow);
   const { likedTrackIds } = useLibraryStore();
   const { localTracks } = useLocalLibraryStore();
 

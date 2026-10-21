@@ -17,5 +17,12 @@
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
-  "dependencies": {}
+  "dependencies": {},
+  "allowScripts": {
+    "electron@31.7.7": true,
+    "esbuild@0.21.5": true,
+    "esbuild@0.27.4": true,
+    "mongodb-memory-server@11.0.1": true,
+    "msgpackr-extract@3.0.4": true
+  }
 }

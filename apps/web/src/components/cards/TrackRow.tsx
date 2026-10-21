@@ -4,6 +4,8 @@ import { usePlayerStore } from '../../stores/playerStore';
 import { useLibraryStore } from '../../stores/libraryStore';
 import { RiPlayFill, RiPauseFill, RiHeartLine, RiHeartFill, RiMoreLine } from 'react-icons/ri';
 import { useNavigate } from 'react-router-dom';
+import { shallow } from 'zustand/shallow';
+import AudioReactiveBars from '../ui/AudioReactiveBars';
 
 interface TrackRowProps {
   track: Track;
@@ -16,7 +18,12 @@ interface TrackRowProps {
 
 export default function TrackRow({ track, showAlbum = true, showDateAdded = false, context, compact = false }: TrackRowProps) {
   const navigate = useNavigate();
-  const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayerStore();
+  const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayerStore((state) => ({
+    currentTrack: state.currentTrack,
+    isPlaying: state.isPlaying,
+    playTrack: state.playTrack,
+    togglePlay: state.togglePlay,
+  }), shallow);
   const { likedTrackIds, toggleLike } = useLibraryStore();
 
   const isCurrent = currentTrack?.id === track.id;
@@ -39,11 +46,7 @@ export default function TrackRow({ track, showAlbum = true, showDateAdded = fals
       <div className="w-8 text-center">
         <span className={`text-sm group-hover:hidden ${isCurrent ? 'text-accent font-medium' : 'text-dimText'}`}>
           {isCurrent && isPlaying ? (
-            <span className="inline-flex items-end gap-0.5">
-              <span className="eq-bar animate-equalizer-1" style={{ height: '4px' }} />
-              <span className="eq-bar animate-equalizer-2" style={{ height: '8px' }} />
-              <span className="eq-bar animate-equalizer-3" style={{ height: '6px' }} />
-            </span>
+            <AudioReactiveBars isActive={isPlaying} />
           ) : ''}
         </span>
         <button onClick={(e) => { e.stopPropagation(); handlePlay(); }} className="hidden group-hover:block">

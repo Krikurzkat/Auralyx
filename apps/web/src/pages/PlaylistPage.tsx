@@ -5,11 +5,17 @@ import { usePlayerStore } from '../stores/playerStore';
 import { useLibraryStore } from '../stores/libraryStore';
 import { useLocalLibraryStore } from '../stores/localLibraryStore';
 import { RiPlayFill, RiPauseFill, RiHeartLine, RiHeartFill, RiShuffleLine, RiMoreLine, RiTimeLine, RiDownloadLine, RiShareLine } from 'react-icons/ri';
+import { shallow } from 'zustand/shallow';
 
 export default function PlaylistPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayerStore();
+  const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayerStore((state) => ({
+    currentTrack: state.currentTrack,
+    isPlaying: state.isPlaying,
+    playTrack: state.playTrack,
+    togglePlay: state.togglePlay,
+  }), shallow);
   const { savedPlaylistIds, toggleSavePlaylist } = useLibraryStore();
   const { localPlaylists, localTracks } = useLocalLibraryStore();
 

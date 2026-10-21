@@ -6,7 +6,9 @@ import { Playlist } from '../types';
 import type { LocalTrack } from '../services/localDb';
 import gsap from 'gsap';
 import { clickedTrackCoverRef } from '../components/player/FullscreenPlayer';
-import { useGalaxyS8PlusLayout } from '../hooks/useGalaxyS8PlusLayout';
+import { usePhoneLayout } from '../hooks/usePhoneLayout';
+import toast from 'react-hot-toast';
+import { hasSyncedLyricTimestamps } from '../utils/embeddedMetadata';
 import {
   RiUploadCloud2Line,
   RiSearchLine,
@@ -15,6 +17,7 @@ import {
   RiAddLine,
   RiPlayListLine,
   RiMusicLine,
+  RiMusic2Line,
   RiHeartLine,
   RiHeartFill,
   RiSortAsc,
@@ -81,6 +84,7 @@ const TrackRow = memo(function TrackRow({
 }) {
   const [liked, setLiked] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const extractAndApplyEmbeddedMetadata = useLocalLibraryStore(s => s.extractAndApplyEmbeddedMetadata);
   const menuRef = useRef<HTMLDivElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   const coverRef = useRef<HTMLDivElement>(null);
@@ -253,7 +257,7 @@ const TrackRow = memo(function TrackRow({
             setShowMenu(!showMenu);
           }}
           className={`rounded-full transition-all duration-200 ${compact ? 'p-1' : 'p-1.5'} ${
-            showMenu ? 'bg-white/15 text-white opacity-100 scale-105' : 'text-white/30 opacity-0 group-hover:opacity-100 hover:text-white hover:bg-white/10 hover:scale-105'
+            showMenu ? 'bg-white/15 text-white opacity-100 scale-105' : compact ? 'text-white/45 opacity-100 hover:text-white hover:bg-white/10' : 'text-white/30 opacity-0 group-hover:opacity-100 hover:text-white hover:bg-white/10 hover:scale-105'
           }`}
         >
           <RiMore2Fill size={compact ? 14 : 16} />
@@ -294,6 +298,26 @@ const TrackRow = memo(function TrackRow({
                 </div>
                 <span className="truncate">Edit Track Info</span>
               </button>
+              {track.blob && (
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    setShowMenu(false);
+                    const applied = await extractAndApplyEmbeddedMetadata(track.id);
+                    if (applied) {
+                      toast.success('Embedded metadata & lyrics applied!');
+                    } else {
+                      toast.error('No embedded metadata or lyrics found.');
+                    }
+                  }}
+                  className="group flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium text-white transition-all duration-200 hover:bg-white/10 rounded-xl mx-1"
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 group-hover:bg-white/10 transition-colors text-accent">
+                    <RiMusic2Line size={16} />
+                  </div>
+                  <span className="truncate">Apply Embedded Metadata</span>
+                </button>
+              )}
               <div className="mx-3 my-2 h-px bg-white/10" />
               <button
                 onClick={(e) => { e.stopPropagation(); onAddToQueue(track); setShowMenu(false); }}
@@ -459,8 +483,61 @@ function EditTrackModal({
   const [lyrics, setLyrics] = useState(track.lyrics || '');
   const [lrcFileName, setLrcFileName] = useState('');
   const [isUploadingCover, setIsUploadingCover] = useState(false);
+  const [isExtractingMetadata, setIsExtractingMetadata] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lrcInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExtractEmbeddedMetadata = async () => {
+    if (!track.blob) {
+      toast.error('No audio file data available for this track.');
+      return;
+    }
+    setIsExtractingMetadata(true);
+    try {
+      const { extractFullEmbeddedMetadata } = await import('../utils/embeddedMetadata');
+      const meta = await extractFullEmbeddedMetadata(track.blob);
+      let count = 0;
+      if (meta.lyrics) {
+        setLyrics(meta.lyrics);
+        setLrcFileName('Embedded metadata');
+        count++;
+      }
+      if (meta.title) {
+        setTitle(meta.title);
+        count++;
+      }
+      if (meta.artist) {
+        setArtist(meta.artist);
+        count++;
+      }
+      if (meta.album) {
+        setAlbum(meta.album);
+        count++;
+      }
+      if (meta.year) {
+        setYear(String(meta.year));
+        count++;
+      }
+      if (meta.genre) {
+        setGenre(meta.genre);
+        count++;
+      }
+      if (meta.coverUrl) {
+        setCoverUrl(meta.coverUrl);
+        count++;
+      }
+      if (count > 0) {
+        toast.success(meta.lyrics ? 'Extracted embedded lyrics & metadata from file!' : 'Extracted embedded metadata from file!');
+      } else {
+        toast.error('No embedded metadata or lyrics found in this file.');
+      }
+    } catch (err) {
+      console.error('Failed to extract embedded metadata:', err);
+      toast.error('Failed to read embedded metadata.');
+    } finally {
+      setIsExtractingMetadata(false);
+    }
+  };
 
   const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -515,13 +592,31 @@ function EditTrackModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xl p-4 animate-fade-in">
       <div className="w-full max-w-2xl rounded-3xl bg-glass backdrop-blur-2xl border border-white/20 p-8 shadow-2xl animate-scale-in max-h-[90vh] overflow-y-auto scrollbar-thin">
         <div className="flex items-center justify-between mb-8">
-          <h3 className="text-2xl font-bold text-white">Edit Track Info</h3>
-          <button 
-            onClick={onClose} 
-            className="text-white/50 hover:text-white transition-colors hover:rotate-90 duration-300"
-          >
-            <RiCloseLine size={28} />
-          </button>
+          <div>
+            <h3 className="text-2xl font-bold text-white">Edit Track Info</h3>
+            {track.blob && (
+              <p className="text-xs text-dimText mt-1">Audio file saved locally</p>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            {track.blob && (
+              <button
+                type="button"
+                onClick={handleExtractEmbeddedMetadata}
+                disabled={isExtractingMetadata}
+                className="flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-white/20 hover:border-white/30 disabled:opacity-50"
+              >
+                <RiRefreshLine size={14} className={isExtractingMetadata ? 'animate-spin' : ''} />
+                {isExtractingMetadata ? 'Extracting…' : 'Extract Metadata from File'}
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="text-white/50 hover:text-white transition-colors hover:rotate-90 duration-300"
+            >
+              <RiCloseLine size={28} />
+            </button>
+          </div>
         </div>
 
         {/* Album Cover */}
@@ -659,19 +754,68 @@ function EditTrackModal({
             </div>
           </div>
 
-          {/* Import Lyrics */}
+          {/* Lyrics */}
           <div>
-            <label className="block text-xs font-semibold text-softText uppercase tracking-wider mb-2">
-              Lyrics
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs font-semibold text-softText uppercase tracking-wider">
+                Lyrics
+              </label>
+              {track.blob && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setIsExtractingMetadata(true);
+                    try {
+                      const { extractEmbeddedLyricsFromBlobDirect, extractFullEmbeddedMetadata } = await import('../utils/embeddedMetadata');
+                      let extracted = await extractEmbeddedLyricsFromBlobDirect(track.blob!);
+                      if (!extracted) {
+                        const full = await extractFullEmbeddedMetadata(track.blob!);
+                        extracted = full.lyrics;
+                      }
+                      if (extracted) {
+                        const { normalizeLyricText } = await import('../services/lyricsService');
+                        let finalLyrics = normalizeLyricText(extracted);
+                        if (!hasSyncedLyricTimestamps(finalLyrics)) {
+                          const { fetchOnlineSyncedLyrics } = await import('../services/lyricsService');
+                          const online = await fetchOnlineSyncedLyrics(title || track.title, artist || track.artist, album || track.album, track.duration);
+                          if (online?.syncedLyrics) {
+                            finalLyrics = online.syncedLyrics;
+                          }
+                        }
+                        setLyrics(finalLyrics);
+                        setLrcFileName('Embedded in audio file');
+                        toast.success(hasSyncedLyricTimestamps(finalLyrics) ? 'Extracted & synchronized lyrics!' : 'Extracted embedded lyrics!');
+                      } else {
+                        toast.error('No embedded lyrics found in audio file.');
+                      }
+                    } catch {
+                      toast.error('Failed to extract embedded lyrics.');
+                    } finally {
+                      setIsExtractingMetadata(false);
+                    }
+                  }}
+                  disabled={isExtractingMetadata}
+                  className="flex items-center gap-1 text-xs text-accent hover:text-accent-light font-semibold transition disabled:opacity-50"
+                >
+                  <RiMusic2Line size={13} />
+                  <span>{isExtractingMetadata ? 'Extracting…' : 'Extract from Audio File'}</span>
+                </button>
+              )}
+            </div>
+
             {lyrics ? (
               <div className="space-y-2">
                 <div className="flex items-center justify-between rounded-xl border border-accent/30 bg-accent/10 px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <RiCheckLine size={18} className="text-accent" />
-                    <span className="text-sm font-medium text-white">
-                      {lrcFileName || 'Lyrics imported'}
-                    </span>
+                  <div className="flex items-center gap-2.5">
+                    <RiCheckLine size={18} className="text-accent flex-shrink-0" />
+                    <div>
+                      <span className="text-sm font-medium text-white block">
+                        {lrcFileName || 'Lyrics loaded'}
+                      </span>
+                      <span className="text-[11px] text-white/60">
+                        {hasSyncedLyricTimestamps(lyrics) ? '⏱️ Synced LRC' : '📄 Plain Text'} • {lyrics.split('\n').filter(Boolean).length} lines
+                      </span>
+                    </div>
                   </div>
                   <button
                     onClick={() => {
@@ -683,7 +827,23 @@ function EditTrackModal({
                     Remove
                   </button>
                 </div>
-                <label className="flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 backdrop-blur-xl px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-white/20 hover:border-white/30 cursor-pointer">
+                <div className="flex gap-2">
+                  <label className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 backdrop-blur-xl px-4 py-2.5 text-xs font-semibold text-white shadow-md transition hover:bg-white/20 hover:border-white/30 cursor-pointer">
+                    <input
+                      ref={lrcInputRef}
+                      type="file"
+                      accept=".lrc"
+                      className="hidden"
+                      onChange={handleLrcImport}
+                    />
+                    <RiRefreshLine size={15} />
+                    Replace .lrc file
+                  </label>
+                </div>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <label className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 backdrop-blur-xl px-4 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-white/20 hover:border-white/30 cursor-pointer">
                   <input
                     ref={lrcInputRef}
                     type="file"
@@ -691,24 +851,12 @@ function EditTrackModal({
                     className="hidden"
                     onChange={handleLrcImport}
                   />
-                  <RiRefreshLine size={16} />
-                  Replace Lyrics
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  Import Lyrics (.lrc)
                 </label>
               </div>
-            ) : (
-              <label className="flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 backdrop-blur-xl px-4 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-white/20 hover:border-white/30 cursor-pointer">
-                <input
-                  ref={lrcInputRef}
-                  type="file"
-                  accept=".lrc"
-                  className="hidden"
-                  onChange={handleLrcImport}
-                />
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-                Import Lyrics (.lrc)
-              </label>
             )}
           </div>
         </div>
@@ -745,8 +893,9 @@ export default function LocalLibraryPage() {
     searchTracks, getMostPlayed, getRecentlyPlayed, recordPlay,
   } = useLocalLibraryStore();
 
-  const { currentTrack, isPlaying } = usePlayerStore();
-  const isGalaxyS8PlusLayout = useGalaxyS8PlusLayout();
+  const currentTrack = usePlayerStore((state) => state.currentTrack);
+  const isPlaying = usePlayerStore((state) => state.isPlaying);
+  const isPhoneLayout = usePhoneLayout();
 
   const [tab, setTab] = useState<ViewTab>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('list');
@@ -872,7 +1021,7 @@ export default function LocalLibraryPage() {
 
   return (
     <div
-      className={`relative page-enter min-h-full ${isGalaxyS8PlusLayout ? 's8-plus-layout' : ''}`}
+      className="relative page-enter min-h-full"
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
@@ -921,27 +1070,27 @@ export default function LocalLibraryPage() {
       )}
 
       {/* ── Hero Header - Simplified ── */}
-      <div className={isGalaxyS8PlusLayout ? 'mb-4' : 'mb-10'}>
-        <div className={`flex flex-col ${isGalaxyS8PlusLayout ? 'gap-3' : 'gap-6'} sm:flex-row sm:items-end sm:justify-between`}>
+      <div className={isPhoneLayout ? 'mb-4' : 'mb-10'}>
+        <div className={`flex flex-col ${isPhoneLayout ? 'gap-3' : 'gap-6'} sm:flex-row sm:items-end sm:justify-between`}>
           <div>
             <h1 className={`bg-gradient-to-r from-white to-white/70 bg-clip-text font-black tracking-tight text-transparent ${
-              isGalaxyS8PlusLayout ? 'mb-2 text-3xl leading-none' : 'mb-4 text-4xl'
+              isPhoneLayout ? 'mb-2 text-3xl leading-none' : 'mb-4 text-4xl'
             }`}>
               My Music
             </h1>
-            <div className={`flex flex-wrap items-center font-medium ${isGalaxyS8PlusLayout ? 'gap-1.5 text-[11px]' : 'gap-4 text-sm'}`}>
-              <span className={`flex items-center rounded-full border border-white/10 bg-glass-card backdrop-blur-xl ${isGalaxyS8PlusLayout ? 'gap-1 px-2.5 py-1' : 'gap-2 px-4 py-2'}`}>
-                <RiMusicLine size={isGalaxyS8PlusLayout ? 13 : 18} className="text-accent" />
+            <div className={`flex flex-wrap items-center font-medium ${isPhoneLayout ? 'w-fit max-w-full gap-2 text-[11px]' : 'gap-4 text-sm'}`}>
+              <span className={`flex items-center rounded-full border border-white/10 bg-glass-card backdrop-blur-xl ${isPhoneLayout ? 'gap-1 px-2.5 py-1' : 'gap-2 px-4 py-2'}`}>
+                <RiMusicLine size={isPhoneLayout ? 13 : 18} className="text-accent" />
                 <span className="text-white">{localTracks.length}</span>
                 <span className="text-white/50">tracks</span>
               </span>
-              <span className={`flex items-center rounded-full border border-white/10 bg-glass-card backdrop-blur-xl ${isGalaxyS8PlusLayout ? 'gap-1 px-2.5 py-1' : 'gap-2 px-4 py-2'}`}>
-                <RiTimeLine size={isGalaxyS8PlusLayout ? 13 : 18} className="text-gradient-to" />
+              <span className={`flex items-center rounded-full border border-white/10 bg-glass-card backdrop-blur-xl ${isPhoneLayout ? 'gap-1 px-2.5 py-1' : 'gap-2 px-4 py-2'}`}>
+                <RiTimeLine size={isPhoneLayout ? 13 : 18} className="text-gradient-to" />
                 <span className="text-white">{formatDuration(totalDuration)}</span>
                 <span className="text-white/50">total</span>
               </span>
               {localTracks.length > 0 && (
-                <span className={`flex items-center rounded-full border border-white/10 bg-glass-card backdrop-blur-xl ${isGalaxyS8PlusLayout ? 'gap-1 px-2.5 py-1' : 'gap-2 px-4 py-2'}`}>
+                <span className={`flex items-center rounded-full border border-white/10 bg-glass-card backdrop-blur-xl ${isPhoneLayout ? 'gap-1 px-2.5 py-1' : 'gap-2 px-4 py-2'}`}>
                   <span className="text-white">{(localTracks.reduce((s, t) => s + (t.blob?.size || 0), 0) / (1024 * 1024)).toFixed(0)}</span>
                   <span className="text-white/50">MB</span>
                 </span>
@@ -949,24 +1098,24 @@ export default function LocalLibraryPage() {
             </div>
           </div>
 
-          <div className={`flex flex-wrap ${isGalaxyS8PlusLayout ? 'gap-1.5' : 'gap-3'}`}>
+          <div className={isPhoneLayout ? 'grid w-full max-w-[360px] grid-cols-2 gap-2' : 'flex flex-wrap gap-3'}>
             <button
               onClick={() => fileInputRef.current?.click()}
               className={`group flex items-center rounded-2xl bg-theme-gradient font-bold text-white shadow-glow transition-all hover:scale-105 hover:shadow-glow-lg active:scale-95 ${
-                isGalaxyS8PlusLayout ? 'gap-1.5 px-4 py-2.5 text-[13px]' : 'gap-3 px-8 py-4 text-base'
+                isPhoneLayout ? 'w-full justify-center gap-1.5 px-2 py-2.5 text-[12px]' : 'gap-3 px-8 py-4 text-base'
               }`}
             >
-              <RiUploadCloud2Line size={isGalaxyS8PlusLayout ? 16 : 22} className="group-hover:scale-110 transition-transform" />
-              {isGalaxyS8PlusLayout ? 'Add' : 'Add Files'}
+              <RiUploadCloud2Line size={isPhoneLayout ? 16 : 22} className="group-hover:scale-110 transition-transform" />
+              Add Files
             </button>
             <button
               onClick={() => folderInputRef.current?.click()}
               className={`group flex items-center rounded-2xl border border-white/10 bg-glass-card font-bold text-white/80 shadow-lg backdrop-blur-xl transition-all hover:scale-105 hover:border-white/20 hover:bg-white/10 hover:text-white active:scale-95 ${
-                isGalaxyS8PlusLayout ? 'gap-1.5 px-4 py-2.5 text-[13px]' : 'gap-3 px-6 py-4 text-base'
+                isPhoneLayout ? 'w-full justify-center gap-1.5 px-2 py-2.5 text-[12px]' : 'gap-3 px-6 py-4 text-base'
               }`}
             >
-              <RiPlayListAddLine size={isGalaxyS8PlusLayout ? 16 : 22} className="transition-transform group-hover:scale-110" />
-              {isGalaxyS8PlusLayout ? 'Folder' : 'Add Folder'}
+              <RiPlayListAddLine size={isPhoneLayout ? 16 : 22} className="transition-transform group-hover:scale-110" />
+              Add Folder
             </button>
           </div>
 
@@ -992,13 +1141,13 @@ export default function LocalLibraryPage() {
 
         {/* Import Progress Bar */}
         {importProgress.isRunning && (
-          <div className={`rounded-2xl border border-white/10 bg-glass-card backdrop-blur-xl ${isGalaxyS8PlusLayout ? 'mt-4 p-4' : 'mt-8 p-6'}`}>
-            <div className={`flex items-center justify-between ${isGalaxyS8PlusLayout ? 'mb-2' : 'mb-3'}`}>
-              <span className={`flex items-center font-semibold text-white ${isGalaxyS8PlusLayout ? 'gap-2 text-xs' : 'gap-3 text-sm'}`}>
-                <RiLoader4Line className="animate-spin text-accent" size={isGalaxyS8PlusLayout ? 16 : 20} />
+          <div className={`rounded-2xl border border-white/10 bg-glass-card backdrop-blur-xl ${isPhoneLayout ? 'mt-4 p-4' : 'mt-8 p-6'}`}>
+            <div className={`flex items-center justify-between ${isPhoneLayout ? 'mb-2' : 'mb-3'}`}>
+              <span className={`flex items-center font-semibold text-white ${isPhoneLayout ? 'gap-2 text-xs' : 'gap-3 text-sm'}`}>
+                <RiLoader4Line className="animate-spin text-accent" size={isPhoneLayout ? 16 : 20} />
                 Importing {importProgress.current}
               </span>
-              <span className={`${isGalaxyS8PlusLayout ? 'text-xs' : 'text-sm'} font-bold text-white/70`}>{importProgress.done}/{importProgress.total}</span>
+              <span className={`${isPhoneLayout ? 'text-xs' : 'text-sm'} font-bold text-white/70`}>{importProgress.done}/{importProgress.total}</span>
             </div>
             <div className="h-2 rounded-full bg-white/10 overflow-hidden">
               <div
@@ -1009,7 +1158,7 @@ export default function LocalLibraryPage() {
           </div>
         )}
         {!importProgress.isRunning && importProgress.skippedDuplicates > 0 && (
-          <div className={`rounded-2xl border border-white/10 bg-white/5 text-white/80 backdrop-blur-xl ${isGalaxyS8PlusLayout ? 'mt-4 p-3 text-xs' : 'mt-6 p-4 text-sm'}`}>
+          <div className={`rounded-2xl border border-white/10 bg-white/5 text-white/80 backdrop-blur-xl ${isPhoneLayout ? 'mt-4 p-3 text-xs' : 'mt-6 p-4 text-sm'}`}>
             <div className="font-bold">Skipped {importProgress.skippedDuplicates} duplicate item{importProgress.skippedDuplicates === 1 ? '' : 's'}.</div>
             <div className="mt-1 text-white/50">Already in your library or repeated inside this folder.</div>
           </div>
@@ -1017,44 +1166,44 @@ export default function LocalLibraryPage() {
       </div>
 
       {/* ── Tabs + Controls ── */}
-      <div className={`mb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between ${isGalaxyS8PlusLayout ? 'gap-2.5' : 'mb-6 gap-5'}`}>
-        <div className={`flex overflow-x-auto scrollbar-hidden pb-1 ${isGalaxyS8PlusLayout ? 'gap-1.5' : 'gap-2.5'}`}>
+      <div className={`mb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between ${isPhoneLayout ? 'gap-2.5' : 'mb-6 gap-5'}`}>
+        <div className={`${isPhoneLayout ? 'grid w-full grid-cols-4 gap-1.5' : 'flex gap-2.5 overflow-x-auto'} scrollbar-hidden pb-1`}>
           {tabItems.map(t => (
             <button
               key={t.key}
               onClick={() => { setTab(t.key); if (t.key !== 'playlists') setSelectedPlaylist(null); }}
               className={`group flex flex-shrink-0 items-center rounded-2xl font-semibold transition-all duration-300 ${
-                isGalaxyS8PlusLayout ? 'gap-1.5 px-3 py-2 text-[12px]' : 'gap-2.5 px-5 py-3 text-sm'
+                isPhoneLayout ? 'w-full min-w-0 justify-center gap-1 px-1 py-2 text-[11px]' : 'flex-shrink-0 gap-2.5 px-5 py-3 text-sm'
               } ${
                 tab === t.key
-                  ? 'bg-white text-black shadow-lg scale-105'
+                  ? `bg-white text-black shadow-lg ${isPhoneLayout ? '' : 'scale-105'}`
                   : 'bg-glass-card backdrop-blur-xl border border-white/10 text-white/70 hover:bg-white/10 hover:text-white hover:border-white/20 hover:scale-105'
               }`}
             >
-              <t.icon size={isGalaxyS8PlusLayout ? 14 : 18} className={`transition-transform group-hover:scale-110 ${tab === t.key ? 'text-black' : 'text-accent'}`} />
-              {isGalaxyS8PlusLayout ? t.compactLabel : t.label}
+              <t.icon size={isPhoneLayout ? 13 : 18} className={`shrink-0 transition-transform group-hover:scale-110 ${tab === t.key ? 'text-black' : 'text-accent'}`} />
+              {isPhoneLayout ? t.compactLabel : t.label}
             </button>
           ))}
         </div>
 
-        <div className={`flex items-center ${isGalaxyS8PlusLayout ? 'gap-2' : 'gap-3'}`}>
+        <div className={`flex items-center ${isPhoneLayout ? 'gap-2' : 'gap-3'}`}>
           {/* Search */}
           <div className="relative flex-1">
-            <RiSearchLine className={`absolute top-1/2 -translate-y-1/2 text-white/40 ${isGalaxyS8PlusLayout ? 'left-3' : 'left-4'}`} size={isGalaxyS8PlusLayout ? 14 : 16} />
+            <RiSearchLine className={`absolute top-1/2 -translate-y-1/2 text-white/40 ${isPhoneLayout ? 'left-3' : 'left-4'}`} size={isPhoneLayout ? 14 : 16} />
             <input
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder={isGalaxyS8PlusLayout ? 'Search library...' : 'Search your library…'}
+              placeholder={isPhoneLayout ? 'Search library...' : 'Search your library…'}
               className={`rounded-2xl border border-white/10 bg-glass-card text-white placeholder:text-white/40 outline-none transition-all duration-300 focus:border-accent/50 focus:shadow-lg ${
-                isGalaxyS8PlusLayout
+                isPhoneLayout
                   ? 'h-9 w-full min-w-0 pl-8 pr-8 text-[12px] focus:w-full'
                   : 'h-11 w-48 pl-11 pr-10 text-sm focus:w-64'
               }`}
             />
             {search && (
-              <button onClick={() => setSearch('')} className={`absolute top-1/2 -translate-y-1/2 text-white/40 transition-colors hover:text-white ${isGalaxyS8PlusLayout ? 'right-2.5' : 'right-3'}`}>
-                <RiCloseLine size={isGalaxyS8PlusLayout ? 16 : 18} />
+              <button onClick={() => setSearch('')} className={`absolute top-1/2 -translate-y-1/2 text-white/40 transition-colors hover:text-white ${isPhoneLayout ? 'right-2.5' : 'right-3'}`}>
+                <RiCloseLine size={isPhoneLayout ? 16 : 18} />
               </button>
             )}
           </div>
@@ -1063,24 +1212,24 @@ export default function LocalLibraryPage() {
           <button
             onClick={() => setViewMode(v => v === 'list' ? 'grid' : 'list')}
             className={`rounded-2xl border border-white/10 bg-glass-card text-white/70 transition-all duration-300 hover:scale-105 hover:border-white/20 hover:bg-white/10 hover:text-white ${
-              isGalaxyS8PlusLayout ? 'min-h-[36px] min-w-[36px] p-2' : 'p-3'
+              isPhoneLayout ? 'min-h-[36px] min-w-[36px] p-2' : 'p-3'
             }`}
           >
-            {viewMode === 'list' ? <RiGridLine size={isGalaxyS8PlusLayout ? 14 : 18} /> : <RiListUnordered size={isGalaxyS8PlusLayout ? 14 : 18} />}
+            {viewMode === 'list' ? <RiGridLine size={isPhoneLayout ? 14 : 18} /> : <RiListUnordered size={isPhoneLayout ? 14 : 18} />}
           </button>
         </div>
       </div>
 
       {/* ── Empty state ── */}
       {!isLoaded && (
-        <div className={`flex flex-col items-center justify-center text-center ${isGalaxyS8PlusLayout ? 'py-14' : 'py-32'}`}>
+        <div className={`flex flex-col items-center justify-center text-center ${isPhoneLayout ? 'py-14' : 'py-32'}`}>
           <div className="relative">
             <div className="absolute inset-0 animate-ping opacity-20">
-              <div className={`${isGalaxyS8PlusLayout ? 'h-12 w-12' : 'h-16 w-16'} rounded-full bg-accent`}></div>
+              <div className={`${isPhoneLayout ? 'h-12 w-12' : 'h-16 w-16'} rounded-full bg-accent`}></div>
             </div>
-            <RiLoader4Line className={`relative text-accent animate-spin ${isGalaxyS8PlusLayout ? 'mb-4 text-3xl' : 'mb-6 text-4xl'}`} />
+            <RiLoader4Line className={`relative text-accent animate-spin ${isPhoneLayout ? 'mb-4 text-3xl' : 'mb-6 text-4xl'}`} />
           </div>
-          <p className={`${isGalaxyS8PlusLayout ? 'text-sm' : 'text-base'} font-medium text-white/60`}>Loading your local library…</p>
+          <p className={`${isPhoneLayout ? 'text-sm' : 'text-base'} font-medium text-white/60`}>Loading your local library…</p>
         </div>
       )}
 
@@ -1088,33 +1237,33 @@ export default function LocalLibraryPage() {
         <div
           onClick={() => fileInputRef.current?.click()}
           className={`group flex cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-white/10 text-center transition-all duration-300 hover:scale-[1.01] hover:border-accent/50 hover:bg-accent/5 ${
-            isGalaxyS8PlusLayout ? 'px-4 py-10' : 'py-32'
+            isPhoneLayout ? 'px-4 py-10' : 'py-32'
           }`}
         >
-          <div className={`relative ${isGalaxyS8PlusLayout ? 'mb-5' : 'mb-8'}`}>
+          <div className={`relative ${isPhoneLayout ? 'mb-5' : 'mb-8'}`}>
             <div className="absolute inset-0 blur-2xl opacity-50 group-hover:opacity-70 transition-opacity">
-              <div className={`${isGalaxyS8PlusLayout ? 'h-16 w-16' : 'h-24 w-24'} rounded-full bg-accent`}></div>
+              <div className={`${isPhoneLayout ? 'h-16 w-16' : 'h-24 w-24'} rounded-full bg-accent`}></div>
             </div>
             <div className={`relative flex items-center justify-center rounded-full border border-accent/20 bg-gradient-to-br from-accent/20 to-accent/5 backdrop-blur-xl transition-all duration-300 group-hover:scale-110 group-hover:border-accent/40 ${
-              isGalaxyS8PlusLayout ? 'h-16 w-16' : 'h-24 w-24'
+              isPhoneLayout ? 'h-16 w-16' : 'h-24 w-24'
             }`}>
-              <RiUploadCloud2Line className={`text-accent transition-transform group-hover:scale-110 ${isGalaxyS8PlusLayout ? 'text-2xl' : 'text-4xl'}`} />
+              <RiUploadCloud2Line className={`text-accent transition-transform group-hover:scale-110 ${isPhoneLayout ? 'text-2xl' : 'text-4xl'}`} />
             </div>
           </div>
-          <h3 className={`font-bold text-white ${isGalaxyS8PlusLayout ? 'mb-2 text-xl leading-tight' : 'mb-3 text-2xl'}`}>
+          <h3 className={`font-bold text-white ${isPhoneLayout ? 'mb-2 text-xl leading-tight' : 'mb-3 text-2xl'}`}>
             Add your first tracks
           </h3>
-          <p className={`text-white/50 ${isGalaxyS8PlusLayout ? 'mb-4 max-w-[240px] text-sm leading-snug' : 'mb-6 max-w-md text-base leading-relaxed'}`}>
-            {isGalaxyS8PlusLayout
+          <p className={`text-white/50 ${isPhoneLayout ? 'mb-4 max-w-[240px] text-sm leading-snug' : 'mb-6 max-w-md text-base leading-relaxed'}`}>
+            {isPhoneLayout
               ? 'Tap to add music from your device.'
               : 'Drag & drop music files here, or click to browse. Your music stays entirely on your device.'}
           </p>
-          <div className={`flex flex-wrap justify-center ${isGalaxyS8PlusLayout ? 'gap-1.5' : 'gap-2.5'}`}>
+          <div className={`flex flex-wrap justify-center ${isPhoneLayout ? 'gap-1.5' : 'gap-2.5'}`}>
             {['MP3', 'FLAC', 'M4A', 'WAV', 'OGG'].map((format) => (
               <span
                 key={format}
                 className={`rounded-full border border-white/10 bg-glass-card backdrop-blur-xl font-semibold text-white/70 ${
-                  isGalaxyS8PlusLayout ? 'px-3 py-1 text-[10px]' : 'px-4 py-2 text-xs'
+                  isPhoneLayout ? 'px-3 py-1 text-[10px]' : 'px-4 py-2 text-xs'
                 }`}
               >
                 {format}
@@ -1126,42 +1275,42 @@ export default function LocalLibraryPage() {
 
       {/* ── Playlists Tab ── */}
       {isLoaded && tab === 'playlists' && !selectedPlaylist && (
-        <div className={isGalaxyS8PlusLayout ? 'space-y-4' : 'space-y-6'}>
+        <div className={isPhoneLayout ? 'space-y-4' : 'space-y-6'}>
           <div className="flex items-center justify-between">
-            <h2 className={`${isGalaxyS8PlusLayout ? 'text-lg' : 'text-2xl'} font-bold text-white`}>Local Playlists</h2>
+            <h2 className={`${isPhoneLayout ? 'text-lg' : 'text-2xl'} font-bold text-white`}>Local Playlists</h2>
             <button
               onClick={() => setShowCreatePlaylist(true)}
               className={`group flex items-center rounded-2xl border border-accent/30 bg-gradient-to-r from-accent/20 to-accent/10 font-bold text-accent transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-accent/20 ${
-                isGalaxyS8PlusLayout ? 'gap-1.5 px-3 py-2 text-[12px]' : 'gap-2.5 px-5 py-3 text-sm'
+                isPhoneLayout ? 'gap-1.5 px-3 py-2 text-[12px]' : 'gap-2.5 px-5 py-3 text-sm'
               }`}
             >
-              <RiAddLine size={isGalaxyS8PlusLayout ? 14 : 18} className="group-hover:rotate-90 transition-transform duration-300" /> 
-              {isGalaxyS8PlusLayout ? 'New' : 'New Playlist'}
+              <RiAddLine size={isPhoneLayout ? 14 : 18} className="group-hover:rotate-90 transition-transform duration-300" />
+              {isPhoneLayout ? 'New' : 'New Playlist'}
             </button>
           </div>
 
           {localPlaylists.length === 0 ? (
             <div className={`flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-white/10 text-center ${
-              isGalaxyS8PlusLayout ? 'px-4 py-10' : 'py-32'
+              isPhoneLayout ? 'px-4 py-10' : 'py-32'
             }`}>
               <div className={`mb-5 flex items-center justify-center rounded-full border border-accent/20 bg-gradient-to-br from-accent/20 to-accent/5 backdrop-blur-xl ${
-                isGalaxyS8PlusLayout ? 'h-16 w-16' : 'h-24 w-24'
+                isPhoneLayout ? 'h-16 w-16' : 'h-24 w-24'
               }`}>
-                <RiPlayListLine className={`${isGalaxyS8PlusLayout ? 'text-2xl' : 'text-4xl'} text-accent`} />
+                <RiPlayListLine className={`${isPhoneLayout ? 'text-2xl' : 'text-4xl'} text-accent`} />
               </div>
-              <h3 className={`${isGalaxyS8PlusLayout ? 'text-lg' : 'text-xl'} mb-2 font-bold text-white`}>No playlists yet</h3>
-              <p className={`${isGalaxyS8PlusLayout ? 'mb-4 text-xs' : 'mb-6 text-sm'} text-white/50`}>Create one to organize your music.</p>
+              <h3 className={`${isPhoneLayout ? 'text-lg' : 'text-xl'} mb-2 font-bold text-white`}>No playlists yet</h3>
+              <p className={`${isPhoneLayout ? 'mb-4 text-xs' : 'mb-6 text-sm'} text-white/50`}>Create one to organize your music.</p>
               <button
                 onClick={() => setShowCreatePlaylist(true)}
                 className={`flex items-center gap-2 rounded-2xl bg-theme-gradient font-bold text-white shadow-glow-sm transition-all hover:scale-105 ${
-                  isGalaxyS8PlusLayout ? 'px-4 py-2 text-[12px]' : 'px-6 py-3 text-sm'
+                  isPhoneLayout ? 'px-4 py-2 text-[12px]' : 'px-6 py-3 text-sm'
                 }`}
               >
-                <RiAddLine size={isGalaxyS8PlusLayout ? 14 : 18} /> {isGalaxyS8PlusLayout ? 'Create' : 'Create Playlist'}
+                <RiAddLine size={isPhoneLayout ? 14 : 18} /> {isPhoneLayout ? 'Create' : 'Create Playlist'}
               </button>
             </div>
           ) : (
-            <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 ${isGalaxyS8PlusLayout ? 'gap-3' : 'gap-5'}`}>
+            <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 ${isPhoneLayout ? 'gap-3' : 'gap-5'}`}>
               {localPlaylists.map(pl => {
                 const trackCount = pl.trackIds.length;
                 return (
@@ -1169,20 +1318,20 @@ export default function LocalLibraryPage() {
                     key={pl.id}
                     onClick={() => { setSelectedPlaylist(pl); }}
                     className={`group relative flex flex-col items-start rounded-2xl border border-white/10 bg-glass-card text-left transition-all duration-300 hover:scale-105 hover:border-white/20 hover:bg-white/10 hover:shadow-xl ${
-                      isGalaxyS8PlusLayout ? 'p-3' : 'p-5'
+                      isPhoneLayout ? 'p-3' : 'p-5'
                     }`}
                   >
                     <div
-                      className={`aspect-square w-full rounded-xl shadow-lg transition-transform duration-300 group-hover:scale-105 ${isGalaxyS8PlusLayout ? 'mb-2.5' : 'mb-4'}`}
+                      className={`aspect-square w-full rounded-xl shadow-lg transition-transform duration-300 group-hover:scale-105 ${isPhoneLayout ? 'mb-2.5' : 'mb-4'}`}
                       style={{ background: `linear-gradient(135deg, ${pl.coverGradient?.[0] || '#333'}, ${pl.coverGradient?.[1] || '#222'})` }}
                     >
                       <div className="flex h-full w-full items-center justify-center opacity-40 group-hover:opacity-60 transition-opacity">
-                        <RiPlayListLine size={isGalaxyS8PlusLayout ? 30 : 48} className="text-white" />
+                        <RiPlayListLine size={isPhoneLayout ? 30 : 48} className="text-white" />
                       </div>
                     </div>
                     <div className="w-full">
-                      <p className={`${isGalaxyS8PlusLayout ? 'mb-0.5 text-sm' : 'mb-1 text-base'} truncate font-bold text-white`}>{pl.title}</p>
-                      <p className={`${isGalaxyS8PlusLayout ? 'text-[10px]' : 'text-xs'} text-white/50`}>{trackCount} {trackCount === 1 ? 'track' : 'tracks'}</p>
+                      <p className={`${isPhoneLayout ? 'mb-0.5 text-sm' : 'mb-1 text-base'} truncate font-bold text-white`}>{pl.title}</p>
+                      <p className={`${isPhoneLayout ? 'text-[10px]' : 'text-xs'} text-white/50`}>{trackCount} {trackCount === 1 ? 'track' : 'tracks'}</p>
                     </div>
                     {/* Delete button */}
                     <button
@@ -1198,13 +1347,13 @@ export default function LocalLibraryPage() {
               <button
                 onClick={() => setShowCreatePlaylist(true)}
                 className={`group aspect-square flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-white/10 transition-all duration-300 hover:scale-105 hover:border-accent/50 hover:bg-accent/5 ${
-                  isGalaxyS8PlusLayout ? 'p-3' : 'p-5'
+                  isPhoneLayout ? 'p-3' : 'p-5'
                 }`}
               >
-                <div className={`flex items-center justify-center rounded-full bg-accent/10 transition-all duration-300 group-hover:bg-accent/20 group-hover:scale-110 ${isGalaxyS8PlusLayout ? 'mb-2 h-12 w-12' : 'mb-3 h-16 w-16'}`}>
-                  <RiAddLine className={`${isGalaxyS8PlusLayout ? 'text-2xl' : 'text-3xl'} text-accent transition-transform group-hover:rotate-90`} />
+                <div className={`flex items-center justify-center rounded-full bg-accent/10 transition-all duration-300 group-hover:bg-accent/20 group-hover:scale-110 ${isPhoneLayout ? 'mb-2 h-12 w-12' : 'mb-3 h-16 w-16'}`}>
+                  <RiAddLine className={`${isPhoneLayout ? 'text-2xl' : 'text-3xl'} text-accent transition-transform group-hover:rotate-90`} />
                 </div>
-                <span className={`${isGalaxyS8PlusLayout ? 'text-[11px]' : 'text-sm'} font-semibold text-white/60 transition-colors group-hover:text-accent`}>New Playlist</span>
+                <span className={`${isPhoneLayout ? 'text-[11px]' : 'text-sm'} font-semibold text-white/60 transition-colors group-hover:text-accent`}>New Playlist</span>
               </button>
             </div>
           )}
@@ -1213,26 +1362,26 @@ export default function LocalLibraryPage() {
 
       {/* ── Playlist Detail ── */}
       {isLoaded && tab === 'playlists' && selectedPlaylist && (
-        <div className={isGalaxyS8PlusLayout ? 'space-y-4' : 'space-y-6'}>
+        <div className={isPhoneLayout ? 'space-y-4' : 'space-y-6'}>
           <button
             onClick={() => setSelectedPlaylist(null)}
-            className={`group flex items-center gap-2 font-medium text-white/60 transition-colors hover:text-white ${isGalaxyS8PlusLayout ? 'text-xs' : 'text-sm'}`}
+            className={`group flex items-center gap-2 font-medium text-white/60 transition-colors hover:text-white ${isPhoneLayout ? 'text-xs' : 'text-sm'}`}
           >
             <span className="group-hover:-translate-x-1 transition-transform">←</span> All Playlists
           </button>
-          <div className={`flex items-center rounded-3xl border border-white/10 bg-glass-card backdrop-blur-xl ${isGalaxyS8PlusLayout ? 'gap-3 p-4' : 'gap-6 p-6'}`}>
+          <div className={`flex items-center rounded-3xl border border-white/10 bg-glass-card backdrop-blur-xl ${isPhoneLayout ? 'gap-3 p-4' : 'gap-6 p-6'}`}>
             <div
-              className={`${isGalaxyS8PlusLayout ? 'h-20 w-20' : 'h-32 w-32'} flex-shrink-0 rounded-2xl shadow-2xl`}
+              className={`${isPhoneLayout ? 'h-20 w-20' : 'h-32 w-32'} flex-shrink-0 rounded-2xl shadow-2xl`}
               style={{ background: `linear-gradient(135deg, ${selectedPlaylist.coverGradient?.[0] || '#333'}, ${selectedPlaylist.coverGradient?.[1] || '#222'})` }}
             >
               <div className="flex h-full w-full items-center justify-center opacity-40">
-                <RiPlayListLine size={isGalaxyS8PlusLayout ? 34 : 56} className="text-white" />
+                <RiPlayListLine size={isPhoneLayout ? 34 : 56} className="text-white" />
               </div>
             </div>
             <div className="flex-1">
-              <p className={`font-bold uppercase tracking-widest text-accent ${isGalaxyS8PlusLayout ? 'mb-1 text-[10px]' : 'mb-2 text-xs'}`}>Local Playlist</p>
-              <h2 className={`${isGalaxyS8PlusLayout ? 'mb-1 text-2xl' : 'mb-2 text-4xl'} font-black text-white`}>{selectedPlaylist.title}</h2>
-              <p className={`${isGalaxyS8PlusLayout ? 'text-sm' : 'text-base'} font-medium text-white/60`}>{selectedPlaylist.trackIds.length} {selectedPlaylist.trackIds.length === 1 ? 'track' : 'tracks'}</p>
+              <p className={`font-bold uppercase tracking-widest text-accent ${isPhoneLayout ? 'mb-1 text-[10px]' : 'mb-2 text-xs'}`}>Local Playlist</p>
+              <h2 className={`${isPhoneLayout ? 'mb-1 text-2xl' : 'mb-2 text-4xl'} font-black text-white`}>{selectedPlaylist.title}</h2>
+              <p className={`${isPhoneLayout ? 'text-sm' : 'text-base'} font-medium text-white/60`}>{selectedPlaylist.trackIds.length} {selectedPlaylist.trackIds.length === 1 ? 'track' : 'tracks'}</p>
             </div>
           </div>
         </div>
@@ -1240,17 +1389,17 @@ export default function LocalLibraryPage() {
 
       {/* ── Track List / Grid ── */}
       {isLoaded && localTracks.length > 0 && (tab !== 'playlists' || selectedPlaylist) && (
-        <div className={isGalaxyS8PlusLayout ? 'mt-4' : 'mt-6'}>
+        <div className={isPhoneLayout ? 'mt-4' : 'mt-6'}>
           {/* Sort row (list mode only) */}
           {viewMode === 'list' && tab !== 'mostPlayed' && tab !== 'recent' && !(tab === 'playlists' && selectedPlaylist) && (
-            <div className={`mb-1 flex items-center border-b border-white/5 font-bold uppercase tracking-widest text-white/30 ${isGalaxyS8PlusLayout ? 'gap-2 px-2.5 py-1.5 text-[10px]' : 'gap-3 px-3 py-2 text-xs'}`}>
-              <div className={`${isGalaxyS8PlusLayout ? 'w-7' : 'w-10'} flex-shrink-0 ${isGalaxyS8PlusLayout ? 'text-center' : 'pl-1'}`}></div>
-              <div className={`${isGalaxyS8PlusLayout ? 'w-9' : 'w-11'} flex-shrink-0`} />
+            <div className={`mb-1 flex items-center border-b border-white/5 font-bold uppercase tracking-widest text-white/30 ${isPhoneLayout ? 'gap-2 px-2.5 py-1.5 text-[10px]' : 'gap-3 px-3 py-2 text-xs'}`}>
+              <div className={`${isPhoneLayout ? 'w-7' : 'w-10'} flex-shrink-0 ${isPhoneLayout ? 'text-center' : 'pl-1'}`}></div>
+              <div className={`${isPhoneLayout ? 'w-9' : 'w-11'} flex-shrink-0`} />
               <button onClick={() => toggleSort('title')} className="flex flex-1 items-center gap-2 hover:text-white/50 transition-colors">
                 Title {sortKey === 'title' && (sortDir === 'asc' ? <RiSortAsc size={12} /> : <RiSortDesc size={12} />)}
               </button>
               <button onClick={() => toggleSort('album')} className="hidden md:flex w-44 items-center gap-2 hover:text-white/50 transition-colors">
-                Album {sortKey === 'album' && (sortDir === 'asc' ? <RiSortAsc size={12} /> : <RiSortDesc size={12} />)}
+                Artist {sortKey === 'album' && (sortDir === 'asc' ? <RiSortAsc size={12} /> : <RiSortDesc size={12} />)}
               </button>
               <button onClick={() => toggleSort('plays')} className="hidden lg:flex w-16 items-center gap-1.5 hover:text-white/50 transition-colors">
                 <RiFireLine size={12} /> {sortKey === 'plays' && (sortDir === 'asc' ? <RiSortAsc size={12} /> : <RiSortDesc size={12} />)}
@@ -1263,7 +1412,7 @@ export default function LocalLibraryPage() {
           )}
 
           {viewMode === 'list' ? (
-            <div className={isGalaxyS8PlusLayout ? 'space-y-0.5' : 'space-y-1'}>
+            <div className={isPhoneLayout ? 'space-y-0.5' : 'space-y-1'}>
               {displayTracks.length === 0 ? (
                 <div className="py-20 text-center">
                   <RiMusicLine className="mx-auto mb-4 text-3xl text-white/20" />
@@ -1282,12 +1431,12 @@ export default function LocalLibraryPage() {
                   onEdit={setEditTrack}
                   onAddToQueue={handleAddToQueue}
                   onPlayNext={handlePlayNext}
-                  compact={isGalaxyS8PlusLayout}
+                  compact={isPhoneLayout}
                 />
               ))}
             </div>
           ) : (
-            <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 ${isGalaxyS8PlusLayout ? 'gap-3' : 'gap-4'}`}>
+            <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 ${isPhoneLayout ? 'gap-3' : 'gap-4'}`}>
               {displayTracks.map(track => {
                 return (
                   <button
@@ -1296,11 +1445,11 @@ export default function LocalLibraryPage() {
                       const coverEl = e.currentTarget.querySelector('.grid-track-cover') as HTMLElement;
                       handlePlayRow(track, coverEl);
                     }}
-                    className={`group relative flex flex-col rounded-2xl bg-glass-card backdrop-blur-xl p-4 text-left transition hover:bg-card-hover ${
+                      className={`group relative flex flex-col rounded-2xl bg-glass-card backdrop-blur-xl ${isPhoneLayout ? 'p-2.5' : 'p-4'} text-left transition hover:bg-card-hover ${
                       currentTrack?.id === track.id ? 'ring-2 ring-accent' : ''
                     }`}
                   >
-                    <div className="grid-track-cover relative mb-3 aspect-square w-full">
+                    <div className={`grid-track-cover relative aspect-square w-full ${isPhoneLayout ? 'mb-2' : 'mb-3'}`}>
                       {track.coverUrl ? (
                         <img src={track.coverUrl} alt={track.title} className="h-full w-full rounded-xl object-cover shadow-lg" />
                       ) : (
@@ -1317,10 +1466,10 @@ export default function LocalLibraryPage() {
                         </div>
                       </div>
                     </div>
-                    <p className={`text-sm font-bold truncate ${currentTrack?.id === track.id ? 'text-accent' : 'text-white'}`}>
+                    <p className={`${isPhoneLayout ? 'text-[12px]' : 'text-sm'} font-bold truncate ${currentTrack?.id === track.id ? 'text-accent' : 'text-white'}`}>
                       {track.title}
                     </p>
-                    <p className="text-xs text-dimText truncate">{track.artist}</p>
+                    <p className={`${isPhoneLayout ? 'text-[10px]' : 'text-xs'} text-dimText truncate`}>{track.artist}</p>
                   </button>
                 );
               })}
@@ -1329,7 +1478,7 @@ export default function LocalLibraryPage() {
         </div>
       )}
 
-      <div className={isGalaxyS8PlusLayout ? 'h-3' : 'h-8'} />
+      <div className={isPhoneLayout ? 'h-3' : 'h-8'} />
     </div>
   );
 }

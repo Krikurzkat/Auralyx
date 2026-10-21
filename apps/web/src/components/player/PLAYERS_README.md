@@ -77,7 +77,7 @@ This mode is designed to minimize distractions while driving. Always prioritize 
 
 ## 3. Visualizer Player 🎵
 
-An immersive audio visualization experience with multiple visualization modes and particle effects.
+An immersive audio visualization experience with multiple visualization modes.
 
 ### Unique Features:
 
@@ -104,7 +104,6 @@ An immersive audio visualization experience with multiple visualization modes an
 #### Visual Effects
 - **Canvas-based rendering** - Smooth 60 FPS animations
 - **Gradient colors** - Accent orange to yellow spectrum
-- **Particle effects** - 20 floating particles when playing
 - **Responsive design** - Adapts to screen size
 - **High DPI support** - Crisp visuals on retina displays
 

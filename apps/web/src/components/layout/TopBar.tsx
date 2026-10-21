@@ -5,7 +5,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Track, Artist, Album, Playlist } from '../../types';
 import { useLocalLibraryStore } from '../../stores/localLibraryStore';
 import { gsap } from 'gsap';
-import { useGalaxyS8PlusLayout } from '../../hooks/useGalaxyS8PlusLayout';
+import { usePhoneLayout } from '../../hooks/usePhoneLayout';
 
 export default function TopBar() {
   const navigate = useNavigate();
@@ -24,7 +24,7 @@ export default function TopBar() {
     albums: Album[];
     playlists: Playlist[];
   } | null>(null);
-  const isGalaxyS8PlusLayout = useGalaxyS8PlusLayout();
+  const isPhoneLayout = usePhoneLayout();
 
   const isSearchPage = location.pathname === '/search';
 
@@ -156,19 +156,19 @@ export default function TopBar() {
   return (
     <header
       className={`glass-heavy sticky top-0 z-30 border-b border-white/5 md:px-6 ${
-        isGalaxyS8PlusLayout ? 'px-3 py-2' : 'px-4 py-3'
+        isPhoneLayout ? 'px-3 py-2' : 'px-4 py-3'
       }`}
     >
-      <div className={`flex items-center justify-between ${isGalaxyS8PlusLayout ? 'gap-2.5' : 'gap-4'}`}>
+      <div className={`flex items-center justify-between ${isPhoneLayout ? 'gap-2.5' : 'gap-4'}`}>
         {/* Left: hamburger + navigation */}
-        <div className={`flex items-center ${isGalaxyS8PlusLayout ? 'gap-1.5' : 'gap-2'}`}>
+        <div className={`flex items-center ${isPhoneLayout ? 'gap-1.5' : 'gap-2'}`}>
           <button
             onClick={toggleMobileSidebar}
             className={`text-softText transition hover:bg-white/5 hover:text-white xl:hidden ${
-              isGalaxyS8PlusLayout ? 'min-h-[48px] min-w-[48px] rounded-xl p-3' : 'rounded-lg p-2'
+              isPhoneLayout ? 'min-h-[48px] min-w-[48px] rounded-xl p-3' : 'rounded-lg p-2'
             }`}
           >
-            <RiMenuLine size={isGalaxyS8PlusLayout ? 20 : 22} />
+            <RiMenuLine size={isPhoneLayout ? 20 : 22} />
           </button>
           <button
             onClick={() => navigate(-1)}
@@ -185,19 +185,19 @@ export default function TopBar() {
         </div>
 
         {/* Center: Search */}
-        <div className={`relative flex-1 ${isGalaxyS8PlusLayout ? 'max-w-none min-w-0' : 'max-w-xl'}`} ref={searchRef}>
+        <div className={`relative flex-1 ${isPhoneLayout ? 'max-w-none min-w-0' : 'max-w-xl'}`} ref={searchRef}>
           <div
             ref={searchShellRef}
             onMouseEnter={() => setSearchHovered(true)}
             onMouseLeave={() => setSearchHovered(false)}
             className={`flex items-center rounded-full border transition-all ${
               searchFocused ? 'border-white/20 bg-white/10' : 'border-transparent bg-white/5'
-            } ${isGalaxyS8PlusLayout ? 'gap-2 px-3 py-2.5' : 'gap-2 px-4 py-2'}`}
+            } ${isPhoneLayout ? 'gap-2 px-3 py-2.5' : 'gap-2 px-4 py-2'}`}
           >
-            <RiSearchLine size={isGalaxyS8PlusLayout ? 16 : 18} className="topbar-search-icon text-softText" />
+            <RiSearchLine size={isPhoneLayout ? 16 : 18} className="topbar-search-icon text-softText" />
             <input
               type="text"
-              placeholder={isGalaxyS8PlusLayout ? 'Search songs, artists...' : 'Search songs, artists, albums, podcasts...'}
+              placeholder={isPhoneLayout ? 'Search songs, artists...' : 'Search songs, artists, albums, podcasts...'}
               value={searchQuery}
               onChange={e => {
                 setSearchQuery(e.target.value);
@@ -216,7 +216,7 @@ export default function TopBar() {
                 }
               }}
               className={`w-full bg-transparent text-white placeholder-dimText outline-none ${
-                isGalaxyS8PlusLayout ? 'text-[13px]' : 'text-sm'
+                isPhoneLayout ? 'text-[13px]' : 'text-sm'
               }`}
             />
           </div>
@@ -312,7 +312,7 @@ export default function TopBar() {
         </div>
 
         {/* Right: actions */}
-        <div className={`flex items-center ${isGalaxyS8PlusLayout ? 'gap-1' : 'gap-2'}`}>
+        <div className={`flex items-center ${isPhoneLayout ? 'gap-1' : 'gap-2'}`}>
           <span className="hidden rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-200 sm:inline-flex">
             Offline
           </span>
@@ -325,10 +325,10 @@ export default function TopBar() {
             onPointerUp={() => animateSettingsButton(true)}
             onClick={() => navigate('/settings')}
             className={`text-softText transition hover:bg-white/5 hover:text-white ${
-              isGalaxyS8PlusLayout ? 'min-h-[48px] min-w-[48px] rounded-xl p-3' : 'rounded-full p-2'
+              isPhoneLayout ? 'min-h-[48px] min-w-[48px] rounded-xl p-3' : 'rounded-full p-2'
             }`}
           >
-            <RiSettings4Line size={isGalaxyS8PlusLayout ? 18 : 20} />
+            <RiSettings4Line size={isPhoneLayout ? 18 : 20} />
           </button>
         </div>
       </div>

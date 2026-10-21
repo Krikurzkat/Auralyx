@@ -1,4 +1,9 @@
+import { usePerformance } from "../../hooks/usePerformance";
+
 export default function AuroraBackground() {
+  const { enableHeavyAnimations } = usePerformance();
+  if (!enableHeavyAnimations) return null;
+
   return (
     <div className="aurora-bg absolute inset-0 overflow-hidden pointer-events-none -z-20">
       <div className="aurora-bg__blob aurora-bg__blob--blue absolute rounded-full bg-blue-500/30 animate-aurora-1 mix-blend-screen" />

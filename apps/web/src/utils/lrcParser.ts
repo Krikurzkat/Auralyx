@@ -9,13 +9,17 @@ export interface LyricLine {
  * Example: [00:12.50]First line of lyrics
  */
 export function parseLRC(lrcContent: string): LyricLine[] {
-  const lines = lrcContent.replace(/\r/g, '').split('\n');
+  if (!lrcContent) return [];
+  const normalized = lrcContent
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n');
+  const lines = normalized.split('\n');
   const lyrics: LyricLine[] = [];
 
-  // Match common LRC variants:
-  // [mm:ss], [mm:ss.x], [mm:ss.xx], [mm:ss.xxx], [mm:ss:xx], [hh:mm:ss.xx]
-  const timeRegex = /\[(?:(\d+):)?(\d{1,2}):(\d{1,2})(?:[.:](\d{1,3}))?\]/g;
-  const offsetRegex = /\[offset:([+-]?\d+)\]/i;
+  // Match offset tag: e.g. [offset: +500], [offset:-200], [offset: 1000]
+  const offsetRegex = /\[offset:\s*([+-]?\d+)\s*\]/i;
   
   let globalOffset = 0;
 
@@ -27,15 +31,23 @@ export function parseLRC(lrcContent: string): LyricLine[] {
     const offsetMatch = offsetRegex.exec(trimmedLine);
     if (offsetMatch) {
       // Positive offset means lyrics appear sooner, so subtract from timestamp
-      // Negative offset means lyrics appear later, so add to timestamp (handled by minus minus)
+      // Negative offset means lyrics appear later, so add to timestamp
       globalOffset = parseInt(offsetMatch[1], 10) / 1000;
+      continue;
     }
 
-    // Find all timestamps in the line
+    // Skip standard LRC header tags: [ti:...], [ar:...], [al:...], [by:...], [re:...], [ve:...], [length:...]
+    if (/^\s*\[\s*(?:ti|ar|al|by|re|ve|length|tool|author)\s*:/i.test(trimmedLine)) {
+      continue;
+    }
+
+    // Match all timestamp variants:
+    // [mm:ss], [mm:ss.xx], [mm:ss,xx], [mm:ss:xx], [m:ss.xx], [hh:mm:ss.xx], (mm:ss.xx)
+    const timeMatchRegex = /(?:\[|\()\s*(?:(\d{1,2}):)?(\d{1,3}):(\d{1,2})(?:[.:,](\d{1,3}))?\s*(?:\]|\))/g;
     const timestamps: number[] = [];
-    let match;
+    let match: RegExpExecArray | null;
     
-    while ((match = timeRegex.exec(trimmedLine)) !== null) {
+    while ((match = timeMatchRegex.exec(trimmedLine)) !== null) {
       const hours = match[1] ? parseInt(match[1], 10) : 0;
       const minutes = parseInt(match[2], 10);
       const seconds = parseInt(match[3], 10);
@@ -44,15 +56,24 @@ export function parseLRC(lrcContent: string): LyricLine[] {
         : 0;
 
       const timeInSeconds = hours * 3600 + minutes * 60 + seconds + fraction;
-      timestamps.push(timeInSeconds - globalOffset);
+      // Safeguard against NaN and negative times
+      if (!isNaN(timeInSeconds)) {
+        timestamps.push(Math.max(0, timeInSeconds - globalOffset));
+      }
     }
 
-    // Extract the text after all timestamps
-    const text = trimmedLine.replace(timeRegex, '').trim();
+    // Extract text after stripping leading/trailing line timestamps
+    let text = trimmedLine.replace(/(?:\[|\()\s*(?:(\d{1,2}):)?\d{1,3}:\d{1,2}(?:[.:,]\d{1,3})?\s*(?:\]|\))/g, '').trim();
 
-    // Skip metadata lines (like [ar:Artist], [ti:Title], etc.)
+    // Clean word-level / karaoke timestamps embedded inside the line:
+    // e.g. <00:12.50>, <12:34>, <1230>, (00:12.50)
+    text = text
+      .replace(/<\s*(?:\d{1,2}:)?\d{1,3}:\d{1,2}(?:[.:,]\d{1,3})?\s*>/g, '')
+      .replace(/<\s*\d+\s*>/g, '')
+      .replace(/\(\s*(?:\d{1,2}:)?\d{1,3}:\d{1,2}(?:[.:,]\d{1,3})?\s*\)/g, '')
+      .trim();
+
     if (text && timestamps.length > 0) {
-      // Add a lyric line for each timestamp (some LRC files have multiple timestamps per line)
       for (const time of timestamps) {
         lyrics.push({ time, text });
       }

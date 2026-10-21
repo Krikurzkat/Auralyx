@@ -5,7 +5,7 @@ import { usePlayerStore } from '../stores/playerStore';
 
 export default function ListeningHistoryPage() {
   const { getRecentlyPlayed } = useLocalLibraryStore();
-  const { playTrack } = usePlayerStore();
+  const playTrack = usePlayerStore((state) => state.playTrack);
   const { localTracks } = useLocalLibraryStore();
 
   const historyTracks = useMemo(() => getRecentlyPlayed(100), [getRecentlyPlayed]);

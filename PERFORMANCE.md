@@ -39,9 +39,9 @@ The app now automatically detects device capabilities and adjusts visual effects
 - Disabled expensive animations on mobile/tablet:
   - `animate-pulse-glow`
   - `animate-aurora-*`
-  - `animate-meteor`
 - Reduced animation durations on mobile
 - Removed `will-change` property by default (only used during active animations)
+- Removed particle renderers and the particle engine from the app on every device
 
 #### Transform Optimization
 - All animations use `translateZ(0)` for GPU acceleration
@@ -59,7 +59,7 @@ The app now automatically detects device capabilities and adjusts visual effects
 #### RightPanel
 - Reduced stagger animation delays on mobile (40ms vs 60ms)
 - Faster transition durations on mobile (0.2s vs 0.45s)
-- Disabled particle effects on mobile/tablet
+- Removed particle effects on every device
 - Optimized lyric rendering
 
 #### FullscreenPlayer & DrivePlayer
@@ -103,8 +103,7 @@ The app now automatically detects device capabilities and adjusts visual effects
 #### Disabled on Mobile/Tablet
 - Pulse glow effects
 - Aurora background animations
-- Meteor animations
-- Heavy particle effects
+- Particle systems (removed from the app)
 
 ### 6. Rendering Optimizations
 
@@ -132,7 +131,7 @@ The app now automatically detects device capabilities and adjusts visual effects
 1. **Backdrop blur**: 0-40px based on device
 2. **Shadow blur**: 0-48px based on device
 3. **Animation duration**: 0.2s-1s based on device
-4. **Particle effects**: Disabled on mobile/tablet
+4. **Particle effects**: Removed on every device
 5. **Stagger delays**: 40ms on mobile, 60ms on desktop
 
 ## Usage
@@ -147,7 +146,6 @@ function MyComponent() {
   
   return (
     <div>
-      {performance.enableParticles && <ParticleEffect />}
       {performance.enableBlur && <BlurredBackground />}
     </div>
   );
@@ -159,8 +157,7 @@ function MyComponent() {
 ```typescript
 interface PerformanceSettings {
   enableBlur: boolean;           // Backdrop blur effects
-  enableParticles: boolean;      // Particle animations
-  enableHeavyAnimations: boolean; // Aurora, meteor, etc.
+  enableHeavyAnimations: boolean; // Ambient background animation
   enableShadows: boolean;        // Box shadows
   maxBlurRadius: number;         // 0-40px
   animationDuration: number;     // 0.5-1 (multiplier)

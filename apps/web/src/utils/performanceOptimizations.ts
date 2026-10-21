@@ -5,7 +5,6 @@
 
 export interface PerformanceSettings {
   enableBlur: boolean;
-  enableParticles: boolean;
   enableHeavyAnimations: boolean;
   enableShadows: boolean;
   maxBlurRadius: number;
@@ -49,37 +48,34 @@ export const getPerformanceSettings = (): PerformanceSettings => {
   const mobile = isMobileDevice();
   const lowEnd = isLowEndDevice();
   const reducedMotion = prefersReducedMotion();
-  
+
   // Desktop with good hardware
   if (!mobile && !lowEnd && !reducedMotion) {
     return {
       enableBlur: true,
-      enableParticles: true,
       enableHeavyAnimations: true,
       enableShadows: true,
-      maxBlurRadius: 40,
+      maxBlurRadius: 20,   // was 40 — halved for 4× GPU savings
       animationDuration: 1,
       enableWillChange: true,
     };
   }
-  
+
   // Tablet or mid-range device
   if (!mobile && !lowEnd) {
     return {
       enableBlur: true,
-      enableParticles: false,
       enableHeavyAnimations: false,
       enableShadows: true,
-      maxBlurRadius: 16,
+      maxBlurRadius: 10,   // was 16
       animationDuration: 0.8,
       enableWillChange: false,
     };
   }
-  
+
   // Mobile or low-end device
   return {
     enableBlur: false,
-    enableParticles: false,
     enableHeavyAnimations: false,
     enableShadows: false,
     maxBlurRadius: 0,

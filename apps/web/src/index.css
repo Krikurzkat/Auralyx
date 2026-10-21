@@ -151,31 +151,70 @@ input[type="range"].accent-alt-track {
 
 /* ─── Utility Classes ─── */
 .glass {
-  background: rgba(26, 26, 26, 0.7);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(26, 26, 26, 0.64);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.065);
 }
 
 .glass-heavy {
-  background: rgba(13, 13, 13, 0.8);
-  backdrop-filter: blur(32px);
-  -webkit-backdrop-filter: blur(32px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(13, 13, 13, 0.76);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 
 .glass-light {
-  background: rgba(34, 34, 34, 0.6);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(34, 34, 34, 0.52);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.095);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.075);
 }
 
 .glass-card {
-  background: rgba(34, 34, 34, 0.5);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(34, 34, 34, 0.44);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Subtle reflective material for key surfaces, without a bright outline. */
+.liquid-glass-surface {
+  background:
+    linear-gradient(138deg, rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0.012) 48%, rgba(255, 255, 255, 0.03) 100%),
+    rgba(18, 19, 23, 0.68) !important;
+  border-color: rgba(255, 255, 255, 0.105) !important;
+  backdrop-filter: blur(12px) saturate(118%);
+  -webkit-backdrop-filter: blur(12px) saturate(118%);
+  box-shadow:
+    0 14px 32px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.018) !important;
+}
+
+.liquid-glass-edge {
+  backdrop-filter: blur(8px) saturate(112%);
+  -webkit-backdrop-filter: blur(8px) saturate(112%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.075),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.018),
+    0 5px 14px rgba(0, 0, 0, 0.08);
+}
+
+[class~="bg-glass-card"] {
+  backdrop-filter: blur(10px) saturate(112%);
+  -webkit-backdrop-filter: blur(10px) saturate(112%);
+}
+
+/* ─── Lyric Scroller — GPU-isolated compositing layer ─── */
+.lyric-scroller {
+  contain: layout style;
+  will-change: transform;
+  transform: translateZ(0);
 }
 
 .text-gradient {
@@ -326,6 +365,24 @@ input[type="range"].accent-alt-track {
   animation: fade-in 0.2s ease-out;
 }
 
+/* ─── Scale In (menus, modals, popovers) ─── */
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.animate-scale-in {
+  animation: scale-in 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ─── Slide In Left (mobile sidebar drawer) ─── */
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-100%); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.animate-slide-in-left {
+  animation: slide-in-left 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
 /* Ambient album glow */
 .album-art-glow {
   opacity: 0.4;
@@ -424,16 +481,16 @@ input[type="range"].accent-alt-track {
   }
   
   .glass { 
-    background: rgba(26, 26, 26, 0.95) !important; 
+    background: rgba(26, 26, 26, 0.82) !important;
   }
   .glass-heavy { 
-    background: rgba(13, 13, 13, 0.98) !important; 
+    background: rgba(13, 13, 13, 0.9) !important;
   }
   .glass-light { 
-    background: rgba(34, 34, 34, 0.95) !important; 
+    background: rgba(34, 34, 34, 0.7) !important;
   }
   .glass-card { 
-    background: rgba(34, 34, 34, 0.95) !important; 
+    background: rgba(34, 34, 34, 0.68) !important;
   }
 
   /* Reduce shadow blur radiuses on mobile/tablet */
@@ -452,7 +509,10 @@ input[type="range"].accent-alt-track {
   .animate-aurora-1,
   .animate-aurora-2,
   .animate-aurora-3,
-  .animate-meteor {
+  .animate-pulse,
+  .animate-ping,
+  .animate-gradient,
+  [class*="animate-[bounce"] {
     animation: none !important;
   }
 
@@ -519,6 +579,11 @@ input[type="range"].accent-alt-track {
 
 /* Phone-specific optimizations */
 @media (max-width: 768px) {
+  [class~="bg-glass-card"] {
+    backdrop-filter: blur(4px) saturate(106%);
+    -webkit-backdrop-filter: blur(4px) saturate(106%);
+  }
+
   /* Remove all backdrop blur on phones */
   .glass, .glass-heavy, .glass-light, .glass-card {
     backdrop-filter: none !important;
@@ -627,7 +692,7 @@ input[type="range"].accent-alt-track {
   pointer-events: none;
 }
 
-.mini-player-root.layout-galaxy-s8 {
+.mini-player-root.layout-phone {
   padding: 0 6px 4px !important;
 }
 
@@ -654,13 +719,15 @@ input[type="range"].accent-alt-track {
   transform: translateZ(0);
   will-change: transform;
   border-radius: 16px;
-  background: linear-gradient(135deg, rgba(22, 22, 22, 0.88) 0%, rgba(12, 12, 12, 0.82) 100%) !important;
-  backdrop-filter: blur(40px) saturate(180%);
-  -webkit-backdrop-filter: blur(40px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  box-shadow: 0 16px 36px -12px rgba(0, 0, 0, 0.65), 
-              inset 0 1px 0 0 rgba(255, 255, 255, 0.1), 
-              inset 0 0 0 1px rgba(255, 255, 255, 0.04) !important;
+  background:
+    linear-gradient(138deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.012) 48%, rgba(255, 255, 255, 0.03)),
+    linear-gradient(135deg, rgba(22, 22, 26, 0.78) 0%, rgba(12, 12, 15, 0.74) 100%) !important;
+  backdrop-filter: blur(14px) saturate(122%);
+  -webkit-backdrop-filter: blur(14px) saturate(122%);
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 16px 36px -12px rgba(0, 0, 0, 0.58),
+              inset 0 1px 0 0 rgba(255, 255, 255, 0.09),
+              inset 0 0 0 1px rgba(255, 255, 255, 0.025) !important;
   transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
               box-shadow 0.3s ease,
               border-color 0.3s ease;
@@ -674,7 +741,7 @@ input[type="range"].accent-alt-track {
               inset 0 0 0 1px rgba(255, 255, 255, 0.06) !important;
 }
 
-.mini-player-card.layout-galaxy-s8 {
+.mini-player-card.layout-phone {
   border-radius: 14px !important;
 }
 
@@ -687,9 +754,25 @@ input[type="range"].accent-alt-track {
 /* Mobile-specific mini player tweaks */
 @media (max-width: 768px) {
   .mini-player-card {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-    background: rgba(16, 16, 16, 0.95) !important;
+    backdrop-filter: blur(8px) saturate(112%) !important;
+    -webkit-backdrop-filter: blur(8px) saturate(112%) !important;
+    background:
+      linear-gradient(138deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.012) 48%, rgba(255, 255, 255, 0.03)),
+      rgba(16, 16, 18, 0.76) !important;
+  }
+
+  .liquid-glass-surface {
+    backdrop-filter: blur(6px) saturate(108%);
+    -webkit-backdrop-filter: blur(6px) saturate(108%);
+    box-shadow:
+      0 8px 20px rgba(0, 0, 0, 0.16),
+      inset 0 1px 0 rgba(255, 255, 255, 0.085),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.016) !important;
+  }
+
+  .liquid-glass-edge {
+    backdrop-filter: blur(4px) saturate(106%);
+    -webkit-backdrop-filter: blur(4px) saturate(106%);
   }
   
   /* Disable expensive hover effects on mobile */
@@ -701,8 +784,8 @@ input[type="range"].accent-alt-track {
 /* Tablet optimizations */
 @media (min-width: 769px) and (max-width: 1279px) {
   .mini-player-card {
-    backdrop-filter: blur(16px) saturate(160%) !important;
-    -webkit-backdrop-filter: blur(16px) saturate(160%) !important;
+    backdrop-filter: blur(10px) saturate(116%) !important;
+    -webkit-backdrop-filter: blur(10px) saturate(116%) !important;
   }
 }
 
@@ -854,7 +937,15 @@ input[type="range"]:hover::-webkit-slider-thumb {
 
 .drive-lyric-line {
   contain: layout paint;
-  transition: opacity 180ms linear;
+  transition: transform 48ms linear, opacity 80ms linear;
+}
+
+.drive-lyric-line.drive-lyric-desktop-depth {
+  transition: transform 140ms ease-out, opacity 140ms ease-out, filter 140ms ease-out;
+}
+
+.fullscreen-lyric-motion {
+  transition: transform 48ms linear, opacity 80ms linear, filter 120ms ease-out;
 }
 
 .drive-lyric-text {
@@ -872,7 +963,8 @@ input[type="range"]:hover::-webkit-slider-thumb {
 
 @media (prefers-reduced-motion: reduce) {
   .drive-lyric-line,
-  .drive-lyric-track {
+  .drive-lyric-track,
+  .fullscreen-lyric-motion {
     transition: none !important;
   }
 
@@ -938,15 +1030,15 @@ input[type="range"]:hover::-webkit-slider-thumb {
 .home-hero-glass {
   isolation: isolate;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.065) 42%, rgba(255, 255, 255, 0.035) 100%),
-    linear-gradient(180deg, rgba(10, 10, 12, 0.54) 0%, rgba(10, 10, 12, 0.28) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(34px) saturate(170%);
-  -webkit-backdrop-filter: blur(34px) saturate(170%);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.09) 0%, rgba(255, 255, 255, 0.035) 42%, rgba(255, 255, 255, 0.02) 100%),
+    linear-gradient(180deg, rgba(10, 10, 12, 0.6) 0%, rgba(10, 10, 12, 0.4) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(18px) saturate(128%);
+  -webkit-backdrop-filter: blur(18px) saturate(128%);
   box-shadow:
-    0 28px 90px rgba(0, 0, 0, 0.46),
-    inset 0 1px 0 rgba(255, 255, 255, 0.24),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+    0 22px 60px rgba(0, 0, 0, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .home-hero-glass::after {
@@ -956,8 +1048,8 @@ input[type="range"]:hover::-webkit-slider-thumb {
   z-index: 0;
   pointer-events: none;
   background:
-    linear-gradient(115deg, rgba(255, 255, 255, 0.16) 0%, transparent 22%, transparent 72%, rgba(255, 255, 255, 0.08) 100%);
-  opacity: 0.52;
+    linear-gradient(115deg, rgba(255, 255, 255, 0.095) 0%, transparent 22%, transparent 72%, rgba(255, 255, 255, 0.045) 100%);
+  opacity: 0.38;
   mix-blend-mode: screen;
 }
 
@@ -969,10 +1061,10 @@ input[type="range"]:hover::-webkit-slider-thumb {
 @media (min-width: 769px) and (max-width: 1279px) {
   .home-hero-glass {
     background:
-      linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.04) 100%),
-      rgba(10, 10, 12, 0.64);
-    backdrop-filter: blur(16px) saturate(150%);
-    -webkit-backdrop-filter: blur(16px) saturate(150%);
+      linear-gradient(135deg, rgba(255, 255, 255, 0.075) 0%, rgba(255, 255, 255, 0.025) 100%),
+      rgba(10, 10, 12, 0.68);
+    backdrop-filter: blur(10px) saturate(118%);
+    -webkit-backdrop-filter: blur(10px) saturate(118%);
   }
 
   .home-hero-feature-grid {
@@ -1121,19 +1213,611 @@ input[type="range"]:hover::-webkit-slider-thumb {
   animation: pulse-glow 3s ease-in-out infinite;
 }
 
-/* --- Meteor Animations --- */
-@keyframes meteor {
-  0% { transform: rotate(215deg) translateX(0); opacity: 0; }
-  10% { opacity: 1; }
-  70% { opacity: 1; }
-  100% { transform: rotate(215deg) translateX(-1500px); opacity: 0; }
-}
-.animate-meteor {
-  animation: meteor 5s linear infinite;
+/* ─── Drive Mode: focused, responsive playback cockpit ─── */
+.drive-player-shell {
+  --drive-surface: rgba(14, 16, 20, 0.72);
+  --drive-border: rgba(255, 255, 255, 0.12);
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  isolation: isolate;
+  background: #050608;
 }
 
-/* --- Star Twinkle Animation --- */
-@keyframes twinkle {
-  0%, 100% { opacity: 0.3; }
-  50% { opacity: 1; }
+.drive-player-shell.drive-player-embedded {
+  width: auto;
+  height: auto;
+}
+
+.drive-header {
+  min-height: 68px;
+  gap: 16px;
+  padding: max(10px, env(safe-area-inset-top, 0px)) clamp(16px, 3vw, 42px) 10px;
+}
+
+.drive-header-button {
+  min-height: 48px;
+  padding-inline: clamp(16px, 2vw, 22px);
+  border-color: rgba(255, 255, 255, 0.13);
+  background: rgba(18, 20, 24, 0.74);
+  color: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  font-size: clamp(0.84rem, 1.05vw, 0.98rem);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.drive-header-button:hover {
+  background: rgba(36, 39, 45, 0.9);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.drive-header-button:focus-visible,
+.drive-action-control:focus-visible,
+.drive-skip-control:focus-visible,
+.drive-primary-control:focus-visible,
+.drive-like-control:focus-visible,
+.drive-seek-area:focus-visible {
+  outline: 2px solid var(--gradient-from);
+  outline-offset: 3px;
+}
+
+.drive-mode-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 0.7rem;
+  letter-spacing: 0.22em;
+}
+
+.drive-mode-label::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--gradient-from), var(--gradient-to));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--gradient-from) 55%, transparent);
+  content: '';
+}
+
+.drive-toggle-button {
+  border-color: color-mix(in srgb, var(--gradient-from) 30%, rgba(255, 255, 255, 0.1));
+  background: color-mix(in srgb, var(--gradient-from) 13%, rgba(17, 19, 24, 0.88));
+}
+
+.drive-toggle-button[aria-pressed="true"] {
+  color: white;
+  background: color-mix(in srgb, var(--gradient-from) 22%, rgba(18, 20, 24, 0.88));
+}
+
+.drive-track-info {
+  position: relative;
+  z-index: 2;
+  width: min(calc(100% - 48px), 1080px);
+  min-height: 82px;
+  margin: 4px auto 12px;
+  padding: 12px 18px;
+  border: 1px solid var(--drive-border);
+  border-radius: 22px;
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025) 52%, rgba(255, 255, 255, 0.045));
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+}
+
+.drive-track-info.is-hidden {
+  min-height: 0;
+  height: 0;
+  margin-block: 0;
+  padding-block: 0;
+  border-color: transparent;
+  box-shadow: none;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.drive-track-info.is-visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.drive-lyrics-cover {
+  flex: 0 0 auto;
+  box-shadow: 0 7px 20px rgba(0, 0, 0, 0.3);
+}
+
+.drive-lyrics-title {
+  font-size: clamp(0.95rem, 1.6vw, 1.25rem);
+  letter-spacing: -0.025em;
+}
+
+.drive-lyrics-artist {
+  margin-top: 3px;
+  font-size: clamp(0.78rem, 1.1vw, 0.92rem);
+}
+
+.drive-like-control {
+  width: 48px;
+  height: 48px;
+}
+
+.drive-lyrics-container {
+  width: min(100%, 1560px);
+  margin-inline: auto;
+  padding-inline: clamp(16px, 4vw, 64px);
+}
+
+.large-cover-container > .drive-cover-layout {
+  max-width: min(100%, 1180px);
+  gap: clamp(18px, 3vw, 42px);
+}
+
+.drive-cover-art {
+  width: clamp(184px, 58vw, 280px);
+  flex: 0 0 auto;
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.48), 0 10px 30px color-mix(in srgb, var(--gradient-from) 14%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.drive-cover-art img {
+  display: block;
+  border-radius: inherit;
+}
+
+.drive-track-copy {
+  max-width: 580px;
+}
+
+.drive-track-copy::before {
+  display: block;
+  margin-bottom: 10px;
+  color: color-mix(in srgb, var(--gradient-from) 86%, white);
+  content: 'NOW PLAYING';
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+}
+
+.drive-track-copy h2 {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: clamp(1.2rem, 5vw, 1.65rem);
+  letter-spacing: -0.045em;
+  line-height: 1.12;
+}
+
+.drive-track-copy p {
+  margin-top: 5px;
+}
+
+.drive-track-copy p:last-child:not(:nth-of-type(1)) {
+  margin-top: 3px;
+}
+
+.drive-bottom-panel {
+  position: relative;
+  z-index: 5;
+  width: min(100%, 1040px);
+  margin-inline: auto;
+  padding: 10px clamp(16px, 4vw, 56px) max(14px, env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 22px 22px 0 0;
+  background: linear-gradient(180deg, rgba(14, 16, 20, 0.28), rgba(5, 6, 8, 0.9) 34%, rgba(5, 6, 8, 0.98));
+}
+
+.drive-seek-area {
+  min-height: 36px;
+  touch-action: pan-y;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.drive-seek-track {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.drive-time-labels {
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.drive-controls {
+  gap: clamp(8px, 2vw, 20px);
+  min-height: 76px;
+  padding-block: 4px 8px;
+}
+
+.drive-action-control,
+.drive-skip-control,
+.drive-primary-control {
+  flex: 0 0 auto;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.drive-action-control {
+  width: 48px;
+  height: 48px;
+  color: rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.075);
+  border-color: rgba(255, 255, 255, 0.11);
+}
+
+.drive-action-control svg {
+  width: 20px;
+  height: 20px;
+}
+
+.drive-action-control[data-active="true"] {
+  color: color-mix(in srgb, var(--gradient-from) 88%, white);
+  border-color: color-mix(in srgb, var(--gradient-from) 42%, rgba(255, 255, 255, 0.14));
+  background: color-mix(in srgb, var(--gradient-from) 19%, rgba(255, 255, 255, 0.06));
+  box-shadow: 0 0 22px color-mix(in srgb, var(--gradient-from) 16%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.drive-skip-control {
+  width: 54px;
+  height: 54px;
+  background: rgba(255, 255, 255, 0.095);
+  border-color: rgba(255, 255, 255, 0.13);
+}
+
+.drive-skip-control svg {
+  width: 23px;
+  height: 23px;
+}
+
+.drive-primary-control {
+  width: 72px;
+  height: 72px;
+  background: linear-gradient(140deg, var(--gradient-from), var(--gradient-to));
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--gradient-from) 28%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+.drive-primary-control svg {
+  width: 29px;
+  height: 29px;
+}
+
+.drive-lyric-line.is-active::before {
+  position: absolute;
+  z-index: 0;
+  inset: 18% 8%;
+  border-radius: 28px;
+  background: radial-gradient(ellipse at center, color-mix(in srgb, var(--gradient-from) 18%, transparent), transparent 72%);
+  content: '';
+  pointer-events: none;
+}
+
+.drive-lyric-line > div {
+  position: relative;
+  z-index: 1;
+  text-wrap: pretty;
+}
+
+.drive-empty-lyrics {
+  padding: 24px;
+}
+
+.drive-empty-lyrics > div {
+  width: min(100%, 420px);
+  padding: clamp(26px, 5vw, 48px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 26px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018));
+  box-shadow: 0 22px 56px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.055);
+}
+
+.drive-empty-lyrics > div > div {
+  display: grid;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 18px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--gradient-from) 34%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--gradient-from) 12%, rgba(255, 255, 255, 0.04));
+  color: color-mix(in srgb, var(--gradient-from) 78%, white);
+  font-size: 1.8rem;
+}
+
+.drive-empty-lyrics-title {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: clamp(1rem, 2.3vw, 1.3rem);
+  font-weight: 700;
+}
+
+.drive-empty-lyrics-caption {
+  margin-top: 6px;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 0.9rem;
+}
+
+@media (min-width: 768px) {
+  .drive-header {
+    min-height: 78px;
+  }
+
+  .drive-track-info.is-visible {
+    min-height: 96px;
+    padding: 16px 22px;
+  }
+
+  .drive-lyrics-cover {
+    width: 64px;
+    height: 64px;
+  }
+
+  .large-cover-container > .drive-cover-layout {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: center;
+    gap: clamp(20px, 3vw, 44px);
+  }
+
+  .drive-cover-art {
+    width: clamp(260px, 34vw, 420px);
+    border-radius: 30px;
+  }
+
+  .drive-track-copy {
+    text-align: left;
+    padding: 12px 4px;
+  }
+
+  .drive-track-copy h2 {
+    font-size: clamp(1.8rem, 4.2vw, 3.5rem);
+  }
+
+  .drive-track-copy p {
+    font-size: clamp(1rem, 1.55vw, 1.4rem);
+  }
+
+  .drive-bottom-panel {
+    padding-top: 14px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .drive-cover-art {
+    width: clamp(340px, 30vw, 470px);
+  }
+
+  .large-cover-container > .drive-cover-layout {
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: clamp(24px, 3vw, 48px);
+  }
+
+  .drive-track-copy h2 {
+    font-size: clamp(3rem, 4vw, 4.4rem);
+  }
+}
+
+@media (max-width: 767px) {
+  .drive-header {
+    min-height: 64px;
+    gap: 8px;
+    padding-inline: 14px;
+  }
+
+  .drive-header-button {
+    min-height: 48px;
+    padding-inline: 15px;
+    font-size: 0.86rem;
+  }
+
+  .drive-mode-label {
+    font-size: 0.58rem;
+    letter-spacing: 0.14em;
+  }
+
+  .drive-mode-label::before {
+    width: 6px;
+    height: 6px;
+  }
+
+  .drive-track-info {
+    width: calc(100% - 28px);
+    min-height: 76px;
+    margin: 2px auto 6px;
+    padding: 10px 13px;
+    gap: 12px;
+    border-radius: 18px;
+  }
+
+  .drive-track-info.is-hidden {
+    margin: 0 auto;
+    padding-block: 0;
+  }
+
+  .drive-lyrics-cover {
+    width: 52px;
+    height: 52px;
+    border-radius: 13px;
+  }
+
+  .drive-lyrics-title {
+    font-size: 0.98rem;
+  }
+
+  .drive-lyrics-artist {
+    font-size: 0.8rem;
+  }
+
+  .drive-like-control {
+    width: 46px;
+    height: 46px;
+  }
+
+  .drive-lyrics-container {
+    padding-inline: 14px;
+  }
+
+  .large-cover-container > .drive-cover-layout {
+    gap: clamp(12px, 2.5dvh, 22px);
+    padding-inline: 8px;
+  }
+
+  .drive-cover-art {
+    width: min(62vw, 270px, 35dvh);
+    border-radius: 24px;
+  }
+
+  .drive-track-copy {
+    max-width: 100%;
+  }
+
+  .drive-track-copy::before {
+    margin-bottom: 6px;
+    font-size: 0.59rem;
+  }
+
+  .drive-track-copy h2 {
+    font-size: clamp(1.08rem, 5.1vw, 1.5rem);
+  }
+
+  .drive-track-copy p {
+    font-size: clamp(0.84rem, 3.7vw, 1rem);
+  }
+
+  .drive-bottom-panel {
+    width: 100%;
+    padding: 8px 16px max(12px, env(safe-area-inset-bottom, 0px));
+    border-radius: 20px 20px 0 0;
+  }
+
+  .drive-seek-area {
+    min-height: 34px;
+  }
+
+  .drive-time-labels {
+    font-size: 0.72rem;
+  }
+
+  .drive-controls {
+    gap: clamp(7px, 2.2vw, 12px);
+    min-height: 72px;
+    padding-block: 3px 5px;
+  }
+
+  .drive-action-control {
+    width: 48px;
+    height: 48px;
+  }
+
+  .drive-skip-control {
+    width: 52px;
+    height: 52px;
+  }
+
+  .drive-primary-control {
+    width: 70px;
+    height: 70px;
+  }
+
+  .drive-lyric-line.is-active::before {
+    inset-inline: 0;
+    filter: blur(14px);
+  }
+}
+
+@media (max-width: 360px) {
+  .drive-header {
+    padding-inline: 10px;
+    gap: 5px;
+  }
+
+  .drive-header-button {
+    padding-inline: 12px;
+  }
+
+  .drive-mode-label {
+    font-size: 0.52rem;
+    letter-spacing: 0.1em;
+  }
+
+  .drive-controls {
+    gap: 6px;
+  }
+
+  .drive-action-control {
+    width: 44px;
+    height: 44px;
+  }
+
+  .drive-skip-control {
+    width: 48px;
+    height: 48px;
+  }
+
+  .drive-primary-control {
+    width: 64px;
+    height: 64px;
+  }
+}
+
+@media (max-height: 620px) and (max-width: 767px) {
+  .drive-header {
+    min-height: 54px;
+    padding-top: max(6px, env(safe-area-inset-top, 0px));
+    padding-bottom: 4px;
+  }
+
+  .drive-track-info.is-visible {
+    min-height: 62px;
+    padding-block: 6px;
+  }
+
+  .drive-lyrics-cover {
+    width: 44px;
+    height: 44px;
+  }
+
+  .drive-cover-art {
+    width: min(45vw, 190px, 30dvh);
+  }
+
+  .large-cover-container > .drive-cover-layout {
+    gap: 10px;
+  }
+
+  .drive-bottom-panel {
+    padding-top: 4px;
+  }
+
+  .drive-controls {
+    min-height: 58px;
+    padding-block: 0 2px;
+  }
+
+  .drive-action-control {
+    width: 42px;
+    height: 42px;
+  }
+
+  .drive-skip-control {
+    width: 46px;
+    height: 46px;
+  }
+
+  .drive-primary-control {
+    width: 60px;
+    height: 60px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drive-header-button,
+  .drive-action-control,
+  .drive-skip-control,
+  .drive-primary-control,
+  .drive-cover-art,
+  .drive-track-info {
+    transition-duration: 0.01ms !important;
+  }
 }

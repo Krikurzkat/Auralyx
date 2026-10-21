@@ -5,18 +5,21 @@ import {
   RiDownloadCloud2Line,
   RiEqualizerLine,
   RiDeleteBin6Line,
-  RiFileMusicLine,
   RiPaletteLine,
 } from 'react-icons/ri';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+import { useUIStore } from '../stores/uiStore';
 import {
   usePlayerStore,
   type DuplicateImportBehavior,
   type ImportMetadataMode,
+  type LyricsDisplayMode,
   type LyricsImportMode,
 } from '../stores/playerStore';
 import { localDb } from '../services/localDb';
+import { shallow } from 'zustand/shallow';
+import { applyThemeGradient, createRandomThemeGradient, getSavedRandomThemeGradient, saveRandomThemeGradient } from '../utils/themePalettes';
 
 interface ColorPalette {
   id: string;
@@ -25,6 +28,7 @@ interface ColorPalette {
 }
 
 const colorPalettes: ColorPalette[] = [
+  { id: 'random', name: 'Random', gradient: ['#A855F7', '#FB7185'] },
   { id: 'sunset-fire', name: 'Sunset Fire', gradient: ['#FF6B35', '#8B1538'] },
   { id: 'ocean-deep', name: 'Ocean Deep', gradient: ['#1E88E5', '#6A1B9A'] },
   { id: 'twilight-sky', name: 'Twilight Sky', gradient: ['#90CAF9', '#E1BEE7'] },
@@ -61,6 +65,7 @@ const colorPalettes: ColorPalette[] = [
 
 export default function SettingsPage() {
   const navigate = useNavigate();
+  const { reduceMotion, toggleReduceMotion } = useUIStore();
   const {
     manualFadeDuration,
     autoFadeDuration,
@@ -70,6 +75,7 @@ export default function SettingsPage() {
     duplicateImportBehavior,
     attachSidecarFiles,
     lyricsImportMode,
+    lyricsDisplayMode,
     setManualFadeDuration,
     setAutoFadeDuration,
     setVolume,
@@ -78,8 +84,29 @@ export default function SettingsPage() {
     setDuplicateImportBehavior,
     setAttachSidecarFiles,
     setLyricsImportMode,
-  } = usePlayerStore();
+    setLyricsDisplayMode,
+  } = usePlayerStore((state) => ({
+    manualFadeDuration: state.manualFadeDuration,
+    autoFadeDuration: state.autoFadeDuration,
+    volume: state.volume,
+    rememberLastPlayback: state.rememberLastPlayback,
+    importMetadataMode: state.importMetadataMode,
+    duplicateImportBehavior: state.duplicateImportBehavior,
+    attachSidecarFiles: state.attachSidecarFiles,
+    lyricsImportMode: state.lyricsImportMode,
+    lyricsDisplayMode: state.lyricsDisplayMode,
+    setManualFadeDuration: state.setManualFadeDuration,
+    setAutoFadeDuration: state.setAutoFadeDuration,
+    setVolume: state.setVolume,
+    setRememberLastPlayback: state.setRememberLastPlayback,
+    setImportMetadataMode: state.setImportMetadataMode,
+    setDuplicateImportBehavior: state.setDuplicateImportBehavior,
+    setAttachSidecarFiles: state.setAttachSidecarFiles,
+    setLyricsImportMode: state.setLyricsImportMode,
+    setLyricsDisplayMode: state.setLyricsDisplayMode,
+  }), shallow);
   const [selectedPalette, setSelectedPalette] = useState(() => localStorage.getItem('selectedTheme') || 'sunset-fire');
+  const [randomGradient, setRandomGradient] = useState(() => getSavedRandomThemeGradient() || colorPalettes[0].gradient);
   const [showAllPalettes, setShowAllPalettes] = useState(false);
 
   const displayedPalettes = showAllPalettes ? colorPalettes : colorPalettes.slice(0, 8);
@@ -87,10 +114,13 @@ export default function SettingsPage() {
   useEffect(() => {
     const savedTheme = localStorage.getItem('selectedTheme') || 'sunset-fire';
     const palette = colorPalettes.find((item) => item.id === savedTheme);
-    if (palette) {
-      document.documentElement.style.setProperty('--gradient-from', palette.gradient[0]);
-      document.documentElement.style.setProperty('--gradient-to', palette.gradient[1]);
-      document.documentElement.style.setProperty('--color-accent', palette.gradient[0]);
+    if (savedTheme === 'random') {
+      const gradient = getSavedRandomThemeGradient() || createRandomThemeGradient();
+      setRandomGradient(gradient);
+      saveRandomThemeGradient(gradient);
+      applyThemeGradient(gradient);
+    } else if (palette) {
+      applyThemeGradient(palette.gradient);
     }
   }, []);
 
@@ -99,9 +129,14 @@ export default function SettingsPage() {
     const palette = colorPalettes.find((item) => item.id === paletteId);
     if (!palette) return;
 
-    document.documentElement.style.setProperty('--gradient-from', palette.gradient[0]);
-    document.documentElement.style.setProperty('--gradient-to', palette.gradient[1]);
-    document.documentElement.style.setProperty('--color-accent', palette.gradient[0]);
+    if (paletteId === 'random') {
+      const gradient = createRandomThemeGradient();
+      setRandomGradient(gradient);
+      saveRandomThemeGradient(gradient);
+      applyThemeGradient(gradient);
+    } else {
+      applyThemeGradient(palette.gradient);
+    }
     localStorage.setItem('selectedTheme', paletteId);
     toast.success(`Theme changed to ${palette.name}`);
   };
@@ -113,7 +148,7 @@ export default function SettingsPage() {
     try {
       await localDb.deleteDatabase();
       Object.keys(localStorage).forEach((key) => {
-        if (key.startsWith('go_music_') || key === 'selectedTheme' || key === 'manualFadeDuration' || key === 'autoFadeDuration') {
+        if (key.startsWith('go_music_') || key === 'selectedTheme' || key === 'selectedThemeColors' || key === 'manualFadeDuration' || key === 'autoFadeDuration') {
           localStorage.removeItem(key);
         }
       });
@@ -152,29 +187,32 @@ export default function SettingsPage() {
           )}
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-          {displayedPalettes.map((palette) => (
-            <button
-              key={palette.id}
-              onClick={() => handlePaletteSelect(palette.id)}
-              className={`group relative overflow-hidden rounded-xl border-2 transition-all ${
-                selectedPalette === palette.id
-                  ? 'scale-105 border-white shadow-lg'
-                  : 'border-white/10 hover:border-white/30 hover:scale-102'
-              }`}
-            >
-              <div className="flex h-24 flex-col">
-                <div className="flex-1" style={{ background: `linear-gradient(135deg, ${palette.gradient[0]}, ${palette.gradient[1]})` }} />
-                <div className="bg-black/80 px-2 py-1.5 text-center backdrop-blur">
-                  <div className="text-[10px] font-semibold text-white">{palette.name}</div>
+          {displayedPalettes.map((item) => {
+            const palette = item.id === 'random' ? { ...item, gradient: randomGradient } : item;
+            return (
+              <button
+                key={palette.id}
+                onClick={() => handlePaletteSelect(palette.id)}
+                className={`group relative overflow-hidden rounded-xl border-2 transition-all ${
+                  selectedPalette === palette.id
+                    ? 'scale-105 border-white shadow-lg'
+                    : 'border-white/10 hover:border-white/30 hover:scale-102'
+                }`}
+              >
+                <div className="flex h-24 flex-col">
+                  <div className="flex-1" style={{ background: `linear-gradient(135deg, ${palette.gradient[0]}, ${palette.gradient[1]})` }} />
+                  <div className="bg-black/80 px-2 py-1.5 text-center backdrop-blur">
+                    <div className="text-[10px] font-semibold text-white">{palette.name}</div>
+                  </div>
                 </div>
-              </div>
-              {selectedPalette === palette.id && (
-                <div className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-lg">
-                  <RiCheckLine size={14} className="text-black" />
-                </div>
-              )}
-            </button>
-          ))}
+                {selectedPalette === palette.id && (
+                  <div className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-lg">
+                    <RiCheckLine size={14} className="text-black" />
+                  </div>
+                )}
+              </button>
+            );
+          })}
         </div>
         {showAllPalettes && (
           <button
@@ -184,6 +222,49 @@ export default function SettingsPage() {
             Show less
           </button>
         )}
+      </div>
+
+      <div className="rounded-2xl border border-white/5 bg-glass-card p-6 backdrop-blur-xl">
+        <div className="mb-2 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-dimText">
+          <RiEqualizerLine size={16} />
+          Lyrics Display
+        </div>
+        <p className="mb-5 text-xs text-dimText">
+          Choose how synced lyrics look in the desktop Fullscreen Player and Drive Mode. Phones and tablets keep their current layout.
+        </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {([
+            ['vertical', 'Vertical Focus', 'Stacked lines, with the current lyric centered and the edges softly blurred.'],
+            ['karaoke', 'Karaoke Lines', 'The active lyric gets a theme-colored glow as each timed line arrives.'],
+            ['spotlight', 'Spotlight', 'Shows one synced lyric at a time in a large, uncluttered view.'],
+            ['clean', 'Clean Scroll', 'Keeps more lines readable and marks the current line without blur.'],
+          ] as const).map(([mode, title, description]) => {
+            const selected = lyricsDisplayMode === mode;
+            return (
+              <button
+                key={mode}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => {
+                  setLyricsDisplayMode(mode as LyricsDisplayMode);
+                  toast.success(`${title} lyrics mode selected`);
+                }}
+                className={`rounded-xl border p-4 text-left transition ${selected
+                  ? 'border-accent/60 bg-accent/10 shadow-[0_0_24px_rgba(232,71,10,0.12)]'
+                  : 'border-white/10 bg-white/[0.025] hover:border-white/20 hover:bg-white/[0.05]'
+                }`}
+              >
+                <span className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-semibold text-white">{title}</span>
+                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${selected ? 'border-accent bg-accent text-white' : 'border-white/25 text-transparent'}`}>
+                    {selected && <RiCheckLine size={13} />}
+                  </span>
+                </span>
+                <span className="mt-2 block text-xs leading-relaxed text-dimText">{description}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="rounded-2xl border border-white/5 bg-glass-card backdrop-blur-xl p-6">
@@ -255,6 +336,7 @@ export default function SettingsPage() {
             </div>
             <Toggle
               checked={rememberLastPlayback}
+              label="Remember Last Playback"
               onChange={() => {
                 const nextValue = !rememberLastPlayback;
                 setRememberLastPlayback(nextValue);
@@ -316,6 +398,7 @@ export default function SettingsPage() {
             </div>
             <Toggle
               checked={attachSidecarFiles}
+              label="Attach Folder Covers and LRC"
               onChange={() => {
                 const nextValue = !attachSidecarFiles;
                 setAttachSidecarFiles(nextValue);
@@ -345,6 +428,24 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      <div className="rounded-2xl border border-white/5 bg-glass-card p-6 backdrop-blur-xl">
+        <div className="mb-5 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-dimText">
+          <RiEqualizerLine size={16} />
+          Accessibility
+        </div>
+        <div className="flex items-center justify-between gap-4 py-2">
+          <div>
+            <div className="text-sm font-medium">Reduce Motion (3D)</div>
+            <div className="text-xs text-dimText">Limits decorative motion and visual effects to save battery.</div>
+          </div>
+          <Toggle
+            checked={reduceMotion}
+            label="Reduce Motion (3D)"
+            onChange={toggleReduceMotion}
+          />
+        </div>
+      </div>
+
       <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-6">
         <div className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-red-200">
           <RiDeleteBin6Line size={16} />
@@ -370,15 +471,26 @@ export default function SettingsPage() {
   );
 }
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+function Toggle({ checked, label, onChange }: { checked: boolean; label: string; onChange: () => void }) {
   return (
     <button
       type="button"
       onClick={onChange}
-      className={`relative h-7 w-12 rounded-full border transition ${checked ? 'border-accent bg-accent/40' : 'border-white/10 bg-white/10'}`}
-      aria-pressed={checked}
+      role="switch"
+      aria-label={label}
+      aria-checked={checked}
+      className={`relative inline-flex h-8 w-[3.25rem] shrink-0 items-center rounded-full border-2 p-1 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${
+        checked
+          ? 'border-accent bg-accent shadow-[inset_0_1px_3px_rgba(0,0,0,0.22)]'
+          : 'border-white/35 bg-white/15 hover:bg-white/20'
+      }`}
     >
-      <span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition ${checked ? 'left-6' : 'left-1'}`} />
+      <span
+        aria-hidden="true"
+        className={`h-5 w-5 rounded-full bg-white shadow-[0_1px_4px_rgba(0,0,0,0.45)] ring-1 ring-black/10 transition-transform duration-200 ${
+          checked ? 'translate-x-5' : 'translate-x-0'
+        }`}
+      />
     </button>
   );
 }

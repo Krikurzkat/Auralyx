@@ -2,6 +2,14 @@ import { create } from 'zustand';
 import { localDb, LocalTrack } from '../services/localDb';
 import { Playlist } from '../types';
 import { usePlayerStore, type ImportMetadataMode } from './playerStore';
+import {
+  getEmbeddedLyrics,
+  extractEmbeddedLyricsFromBlobDirect,
+  extractFullEmbeddedMetadata,
+  hasSyncedLyricTimestamps,
+  type ParsedAudioMetadata,
+} from '../utils/embeddedMetadata';
+import { normalizeLyricText } from '../services/lyricsService';
 
 // ─── Helpers ───
 
@@ -296,83 +304,6 @@ function isMissingMetadata(value?: string | null): boolean {
   );
 }
 
-type ParsedAudioMetadata = {
-  common: { lyrics?: unknown };
-  native?: Record<string, Array<{ id?: unknown; value?: unknown }>>;
-};
-
-function hasSyncedLyricTimestamps(text: string): boolean {
-  return /\[\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?\]/.test(text);
-}
-
-function cleanLyricText(text: string): string {
-  return text
-    .replace(/\r/g, '')
-    .replace(/\u0000/g, '')
-    .split('\n')
-    .map((line) => line.trimEnd())
-    .join('\n')
-    .trim();
-}
-
-function getLyricTextFromValue(value: unknown): string[] {
-  if (!value) return [];
-  if (typeof value === 'string') return [value];
-  if (Array.isArray(value)) return value.flatMap(getLyricTextFromValue);
-
-  if (typeof value === 'object') {
-    const record = value as Record<string, unknown>;
-    const directText = record.text ?? record.lyrics ?? record.value;
-    if (typeof directText === 'string') return [directText];
-    if (Array.isArray(directText)) return directText.flatMap(getLyricTextFromValue);
-  }
-
-  return [];
-}
-
-function isNativeLyricsTag(tagId: unknown): boolean {
-  if (typeof tagId !== 'string') return false;
-  const normalized = tagId.toLowerCase();
-  if (normalized.includes('lyricist')) return false;
-
-  return [
-    'uslt',
-    'ult',
-    'sylt',
-    'lyrics',
-    'lyric',
-    'unsyncedlyrics',
-    'unsynced lyrics',
-    'syncedlyrics',
-    'synclyrics',
-    'wm/lyrics',
-    'wm/synclyrics',
-    '©lyr',
-    '----:com.apple.itunes:lyrics',
-  ].some((key) => normalized === key || normalized.endsWith(`:${key}`));
-}
-
-function getEmbeddedLyrics(metadata: ParsedAudioMetadata): string | undefined {
-  const lyricTexts: string[] = [];
-
-  if (Array.isArray(metadata.common.lyrics)) {
-    lyricTexts.push(...metadata.common.lyrics.flatMap(getLyricTextFromValue));
-  }
-
-  Object.values(metadata.native || {}).forEach((tags) => {
-    tags.forEach((tag) => {
-      if (isNativeLyricsTag(tag.id)) {
-        lyricTexts.push(...getLyricTextFromValue(tag.value));
-      }
-    });
-  });
-
-  const cleanedTexts = Array.from(new Set(lyricTexts.map(cleanLyricText).filter(Boolean)));
-  if (cleanedTexts.length === 0) return undefined;
-
-  return cleanedTexts.find(hasSyncedLyricTimestamps) || cleanedTexts.join('\n\n');
-}
-
 function parseFilenameTemplate(fileName: string, artistFrequencies?: Map<string, number>): { title: string; artist?: string; album?: string; genre?: string; year?: number } {
   const baseName = fileName
     .replace(/\.[^.]+$/, '')
@@ -586,6 +517,7 @@ interface LocalLibraryState {
   updateTrack: (id: string, updates: Partial<LocalTrack>) => Promise<void>;
   clearLibrary: () => Promise<void>;
   updateTrackDuration: (id: string, duration: number) => Promise<void>;
+  extractAndApplyEmbeddedMetadata: (id: string) => Promise<boolean>;
 
   createPlaylist: (title: string) => Promise<Playlist>;
   updatePlaylist: (id: string, updates: Partial<Playlist>) => Promise<void>;
@@ -794,11 +726,15 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
         coverUrl = coverUrl
           || await getBatchCoverUrl(file)
           || findReusableAlbumCover(album, artist, [...get().localTracks, ...newTracks]);
-        const embeddedLyrics = getEmbeddedLyrics(metadata);
+        let embeddedLyrics = getEmbeddedLyrics(metadata as ParsedAudioMetadata);
+        if (!embeddedLyrics) {
+          embeddedLyrics = await extractEmbeddedLyricsFromBlobDirect(file);
+        }
         const sidecarLyrics = await getBatchLyrics(file);
-        const lyrics = playerPreferences.lyricsImportMode === 'sidecar'
+        const rawLyrics = playerPreferences.lyricsImportMode === 'sidecar'
           ? sidecarLyrics || embeddedLyrics
           : embeddedLyrics || sidecarLyrics;
+        const lyrics = rawLyrics ? normalizeLyricText(rawLyrics) : undefined;
 
         // Check duplicate by same title+artist
         const existingTracks = get().localTracks;
@@ -833,16 +769,33 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
 
         await localDb.saveTrack(track);
         newTracks.push(track);
-      } catch {
-        // Fallback: add with basic metadata derived from filename
+
+        // Universally ensure uploaded tracks have synchronized lyrics directly
+        if (!lyrics || !hasSyncedLyricTimestamps(lyrics)) {
+          import('../services/lyricsService').then(({ autoUpgradeTrackLyrics }) => {
+            autoUpgradeTrackLyrics(track).catch(() => {});
+          });
+        }
+      } catch (err) {
+        console.warn(`[LocalLibrary] Primary metadata parse failed for ${file.name}, trying embedded fallback:`, err);
+        // Fallback: extract via direct binary inspector
+        const embeddedFallback = await extractFullEmbeddedMetadata(file);
         const filenameMetadata = parseFilenameTemplate(file.name, artistFrequencies);
-        const title = filenameMetadata.title;
-        const artist = filenameMetadata.artist || 'Unknown Artist';
-        const album = filenameMetadata.album || 'Unknown Album';
-        const releaseYear = filenameMetadata.year;
-        const coverUrl = await getBatchCoverUrl(file)
+        const title = cleanFilenamePart(pickImportedText(embeddedFallback.title, filenameMetadata.title, filenameMetadata.title, playerPreferences.importMetadataMode));
+        const artist = cleanFilenamePart(pickImportedText(embeddedFallback.artist, filenameMetadata.artist, 'Unknown Artist', playerPreferences.importMetadataMode));
+        const album = cleanFilenamePart(pickImportedText(embeddedFallback.album, filenameMetadata.album, 'Unknown Album', playerPreferences.importMetadataMode));
+        const genre = pickImportedText(embeddedFallback.genre, filenameMetadata.genre, '', playerPreferences.importMetadataMode);
+        const releaseYear = pickImportedYear(embeddedFallback.year, filenameMetadata.year, playerPreferences.importMetadataMode);
+        const coverUrl = embeddedFallback.coverUrl
+          || await getBatchCoverUrl(file)
           || findReusableAlbumCover(album, artist, [...get().localTracks, ...newTracks]);
-        const lyrics = await getBatchLyrics(file);
+        const sidecarLyrics = await getBatchLyrics(file);
+        const rawLyrics = playerPreferences.lyricsImportMode === 'sidecar'
+          ? sidecarLyrics || embeddedFallback.lyrics
+          : embeddedFallback.lyrics || sidecarLyrics;
+        const lyrics = rawLyrics ? normalizeLyricText(rawLyrics) : undefined;
+        const duration = embeddedFallback.duration ? Math.round(embeddedFallback.duration) : Math.round(await getAudioDuration(file));
+
         const track: LocalTrack = {
           id: generateId(),
           title,
@@ -850,8 +803,8 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
           artistId: `local_artist_${slugifyLocalId(artist, 'unknown')}`,
           album,
           albumId: `local_album_${slugifyLocalId(album, 'unknown')}`,
-          duration: Math.round(await getAudioDuration(file)),
-          genre: filenameMetadata.genre || '',
+          duration,
+          genre,
           releaseDate: releaseYear ? String(releaseYear) : '',
           lyrics,
           plays: 0,
@@ -861,13 +814,20 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
           fileHash,
           uploadStatus: 'approved',
           visibility: 'private',
-          moderationFlags: ['local_import', 'metadata_parse_failed'],
+          moderationFlags: ['local_import'],
           blob: file,
           isLocal: true,
           addedAt: Date.now(),
         };
         await localDb.saveTrack(track);
         newTracks.push(track);
+
+        // Universally ensure uploaded tracks have synchronized lyrics directly
+        if (!lyrics || !hasSyncedLyricTimestamps(lyrics)) {
+          import('../services/lyricsService').then(({ autoUpgradeTrackLyrics }) => {
+            autoUpgradeTrackLyrics(track).catch(() => {});
+          });
+        }
       }
     }
 
@@ -912,6 +872,49 @@ export const useLocalLibraryStore = create<LocalLibraryState>((set, get) => ({
     await localDb.saveTrack(updated);
     set(s => ({ localTracks: s.localTracks.map(t => t.id === id ? updated : t) }));
     syncTrackIntoPlayer(updated);
+  },
+
+  extractAndApplyEmbeddedMetadata: async (id: string): Promise<boolean> => {
+    const { localTracks } = get();
+    const track = localTracks.find(t => t.id === id);
+    if (!track || !track.blob) return false;
+
+    try {
+      const meta = await extractFullEmbeddedMetadata(track.blob);
+      const updates: Partial<LocalTrack> = {};
+      if (meta.lyrics) updates.lyrics = normalizeLyricText(meta.lyrics);
+      if (meta.title && (!track.title || track.title.toLowerCase().startsWith('track') || track.title.toLowerCase() === 'unknown title')) {
+        updates.title = meta.title;
+      }
+      if (meta.artist && (!track.artist || track.artist.toLowerCase() === 'unknown artist')) {
+        updates.artist = meta.artist;
+      }
+      if (meta.album && (!track.album || track.album.toLowerCase() === 'unknown album')) {
+        updates.album = meta.album;
+      }
+      if (meta.coverUrl && !track.coverUrl) {
+        updates.coverUrl = meta.coverUrl;
+      }
+      if (meta.year && !track.releaseDate) {
+        updates.releaseDate = String(meta.year);
+      }
+      if (meta.genre && !track.genre) {
+        updates.genre = meta.genre;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await get().updateTrack(id, updates);
+        if (updates.lyrics && !hasSyncedLyricTimestamps(updates.lyrics)) {
+          import('../services/lyricsService').then(({ autoUpgradeTrackLyrics }) => {
+            autoUpgradeTrackLyrics({ ...track, ...updates }).catch(() => {});
+          });
+        }
+        return true;
+      }
+    } catch (err) {
+      console.error('[LocalLibrary] Failed to extract embedded metadata:', err);
+    }
+    return false;
   },
 
   createPlaylist: async (title: string) => {

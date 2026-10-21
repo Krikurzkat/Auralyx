@@ -1,4 +1,4 @@
-import React from 'react';
+// React import removed — not needed without StrictMode wrapper
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
@@ -18,6 +18,7 @@ import ListeningHistoryPage from './pages/ListeningHistoryPage';
 import QueuePage from './pages/QueuePage';
 import GlobalInteractionEffects from './components/motion/GlobalInteractionEffects';
 import './index.css';
+import { applyThemeGradient, createRandomThemeGradient, getSavedRandomThemeGradient, saveRandomThemeGradient } from './utils/themePalettes';
 
 import { gsap } from "gsap";
 import { useGSAP } from "@gsap/react";
@@ -33,6 +34,7 @@ const initializeTheme = () => {
   
   const colorPalettes = [
     // Row 1
+    { id: 'random', gradient: ['#A855F7', '#FB7185'] },
     { id: 'sunset-fire', gradient: ['#FF6B35', '#8B1538'] },
     { id: 'ocean-deep', gradient: ['#1E88E5', '#6A1B9A'] },
     { id: 'twilight-sky', gradient: ['#90CAF9', '#E1BEE7'] },
@@ -74,55 +76,55 @@ const initializeTheme = () => {
   ];
   
   const palette = colorPalettes.find(p => p.id === savedTheme);
-  if (palette) {
-    document.documentElement.style.setProperty('--gradient-from', palette.gradient[0]);
-    document.documentElement.style.setProperty('--gradient-to', palette.gradient[1]);
-    document.documentElement.style.setProperty('--color-accent', palette.gradient[0]);
+  if (savedTheme === 'random') {
+    const gradient = getSavedRandomThemeGradient() || createRandomThemeGradient();
+    saveRandomThemeGradient(gradient);
+    applyThemeGradient(gradient);
+  } else if (palette) {
+    applyThemeGradient(palette.gradient as [string, string]);
   }
 };
 
 initializeTheme();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <BrowserRouter>
-      <Toaster
-        position="top-center"
-        toastOptions={{
-          duration: 4000,
-          style: {
-            background: '#141414',
-            border: '1px solid rgba(255,255,255,0.1)',
-            color: '#ffffff',
-          },
-        }}
-      />
-      <GlobalInteractionEffects>
-        <Routes>
-          <Route path="/login" element={<Navigate to="/local" replace />} />
-          <Route path="/signup" element={<Navigate to="/local" replace />} />
-          <Route element={<AppShell />}>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/search" element={<SearchPage />} />
-            <Route path="/library" element={<LibraryPage />} />
-            <Route path="/playlist/:id" element={<PlaylistPage />} />
-            <Route path="/album/:id" element={<AlbumPage />} />
-            <Route path="/artist/:id" element={<ArtistPage />} />
-            <Route path="/podcast/:id" element={<PodcastPage />} />
-            <Route path="/podcasts" element={<SearchPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/profile" element={<Navigate to="/settings" replace />} />
-            <Route path="/liked" element={<LikedSongsPage />} />
-            <Route path="/local" element={<LocalLibraryPage />} />
-            <Route path="/recently-played" element={<RecentlyPlayedPage />} />
-            <Route path="/listening-history" element={<ListeningHistoryPage />} />
-            <Route path="/queue" element={<QueuePage />} />
-            <Route path="/upgrade" element={<Navigate to="/settings" replace />} />
-            <Route path="/admin" element={<Navigate to="/local" replace />} />
-            <Route path="*" element={<Navigate to="/local" replace />} />
-          </Route>
-        </Routes>
-      </GlobalInteractionEffects>
-    </BrowserRouter>
-  </React.StrictMode>
+  <BrowserRouter>
+    <Toaster
+      position="top-center"
+      toastOptions={{
+        duration: 4000,
+        style: {
+          background: '#141414',
+          border: '1px solid rgba(255,255,255,0.1)',
+          color: '#ffffff',
+        },
+      }}
+    />
+    <GlobalInteractionEffects>
+      <Routes>
+        <Route path="/login" element={<Navigate to="/local" replace />} />
+        <Route path="/signup" element={<Navigate to="/local" replace />} />
+        <Route element={<AppShell />}>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/search" element={<SearchPage />} />
+          <Route path="/library" element={<LibraryPage />} />
+          <Route path="/playlist/:id" element={<PlaylistPage />} />
+          <Route path="/album/:id" element={<AlbumPage />} />
+          <Route path="/artist/:id" element={<ArtistPage />} />
+          <Route path="/podcast/:id" element={<PodcastPage />} />
+          <Route path="/podcasts" element={<SearchPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/profile" element={<Navigate to="/settings" replace />} />
+          <Route path="/liked" element={<LikedSongsPage />} />
+          <Route path="/local" element={<LocalLibraryPage />} />
+          <Route path="/recently-played" element={<RecentlyPlayedPage />} />
+          <Route path="/listening-history" element={<ListeningHistoryPage />} />
+          <Route path="/queue" element={<QueuePage />} />
+          <Route path="/upgrade" element={<Navigate to="/settings" replace />} />
+          <Route path="/admin" element={<Navigate to="/local" replace />} />
+          <Route path="*" element={<Navigate to="/local" replace />} />
+        </Route>
+      </Routes>
+    </GlobalInteractionEffects>
+  </BrowserRouter>
 );

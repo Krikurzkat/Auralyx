@@ -1,20 +1,103 @@
 import { usePlayerStore } from '../../stores/playerStore';
 import { useUIStore } from '../../stores/uiStore';
 import { formatDuration, getLyricsForTrack } from '../../utils/formatters';
+import { autoUpgradeTrackLyrics, hasSyncedLyricTimestamps } from '../../services/lyricsService';
 import { RiDeleteBinLine } from 'react-icons/ri';
 import { useMemo, useEffect, useRef, useState } from 'react';
 import { useFluidLyricMotion } from '../../utils/lyricMotion';
-import RightPanelParticles from '../ui/RightPanelParticles';
 import { usePerformance } from '../../hooks/usePerformance';
+import { gsap } from 'gsap';
+import { shallow } from 'zustand/shallow';
+import AudioReactiveBars from '../ui/AudioReactiveBars';
+
+function QueueNowPlayingIndicators({
+  isTrackIntroAnimating,
+  enableShadows,
+}: {
+  isTrackIntroAnimating: boolean;
+  enableShadows: boolean;
+}) {
+  // Isolate the high-frequency playback progress subscription from the whole
+  // queue panel so 20 Hz audio updates only repaint these small indicators.
+  const progress = usePlayerStore((state) => state.showQueue && !state.isFullscreenOpen ? state.progress : 0);
+  const queueDurationProgress = isTrackIntroAnimating ? 0 : Math.min(100, Math.max(0, progress));
+
+  return (
+    <>
+      <div className="absolute left-[32px] -translate-x-1/2 top-0 -bottom-8 w-2 pointer-events-none" style={{ zIndex: 0 }}>
+        <div className="absolute inset-0 bg-black/40" />
+        <div className="absolute top-0 bottom-0 left-0 right-0">
+          <div
+            className="absolute top-0 left-0 right-0 transition-[height] duration-150"
+            style={{
+              height: `${queueDurationProgress}%`,
+              background: 'linear-gradient(to bottom, var(--accent), color-mix(in srgb, var(--accent) 58%, transparent))',
+              boxShadow: enableShadows ? '0 0 18px color-mix(in srgb, var(--accent) 68%, transparent), 0 0 34px color-mix(in srgb, var(--accent) 34%, transparent), inset 0 0 8px rgba(255, 255, 255, 0.26)' : 'none',
+            }}
+          />
+        </div>
+      </div>
+      <div className="relative flex-shrink-0">
+        <div className="rp-now-playing-pulse absolute -inset-2 rounded-full" />
+        <svg className="absolute -inset-1 h-[72px] w-[72px] overflow-visible" style={{ zIndex: 1 }} viewBox="0 0 72 72">
+          <circle cx="36" cy="36" r="34" stroke="rgba(0,0,0,0.4)" strokeWidth="3" fill="none" />
+          {[1, -1].map((direction) => (
+            <path
+              key={direction}
+              d={direction === 1 ? 'M 36 2 A 34 34 0 0 1 36 70' : 'M 36 2 A 34 34 0 0 0 36 70'}
+              fill="none"
+              stroke="var(--accent)"
+              strokeWidth="5"
+              strokeLinecap="round"
+              strokeDasharray={Math.PI * 34}
+              strokeDashoffset={Math.PI * 34 * (1 - queueDurationProgress / 100)}
+              className="transition-[stroke-dashoffset] duration-150"
+              style={{ filter: enableShadows ? 'drop-shadow(0 0 5px var(--accent)) drop-shadow(0 0 9px color-mix(in srgb, var(--accent) 28%, transparent))' : 'none' }}
+            />
+          ))}
+        </svg>
+        <div className="rp-now-playing-cover relative w-16 h-16 rounded-full overflow-hidden border-2 border-accent/70 shadow-lg" style={{ zIndex: 2 }}>
+          <QueueCurrentCover />
+        </div>
+        <div className="absolute -bottom-1 left-1/2 z-[3] -translate-x-1/2 rounded-full border border-accent/40 bg-black/70 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.16em] text-accent shadow-lg">
+          Now
+        </div>
+      </div>
+    </>
+  );
+}
+
+function QueueCurrentCover() {
+  const currentTrack = usePlayerStore((state) => state.currentTrack);
+  if (!currentTrack) return null;
+  return currentTrack.coverUrl ? (
+    <img src={currentTrack.coverUrl.startsWith('/') ? `http://localhost:3001${currentTrack.coverUrl}` : currentTrack.coverUrl} alt={currentTrack.title} className="h-full w-full object-cover" />
+  ) : (
+    <div className="h-full w-full" style={{ background: `linear-gradient(135deg, ${currentTrack.coverGradient?.[0] || '#333'}, ${currentTrack.coverGradient?.[1] || '#222'})` }} />
+  );
+}
 
 export default function RightPanel() {
-  const { currentTrack, queue, queueIndex, isPlaying, currentTime, progress, showQueue, showLyrics, removeFromQueue, playTrack, lyricsTransition } = usePlayerStore();
-  const { rightPanelView, setRightPanel, reduceMotion, toggleReduceMotion } = useUIStore();
+  const { currentTrack, queue, queueIndex, isPlaying, currentTime, showQueue, showLyrics, removeFromQueue, playTrack, isFullscreenOpen } = usePlayerStore((state) => ({
+    currentTrack: state.currentTrack,
+    queue: state.queue,
+    queueIndex: state.queueIndex,
+    isPlaying: state.isPlaying,
+    currentTime: state.showLyrics && !state.isFullscreenOpen ? Math.floor(state.currentTime) : 0,
+    showQueue: state.showQueue,
+    showLyrics: state.showLyrics,
+    removeFromQueue: state.removeFromQueue,
+    playTrack: state.playTrack,
+    isFullscreenOpen: state.isFullscreenOpen,
+  }), shallow);
+  const { rightPanelView, setRightPanel, reduceMotion } = useUIStore();
   const performanceSettings = usePerformance();
 
   const lyricsContainerRef = useRef<HTMLDivElement>(null);
   const queueContainerRef = useRef<HTMLDivElement>(null);
   const activeTrackRef = useRef<HTMLDivElement>(null);
+  const previousActiveTrackIdRef = useRef<string | null>(null);
+  const [isTrackIntroAnimating, setTrackIntroAnimating] = useState(false);
 
   // Track previous view for directional tab transitions
   const prevViewRef = useRef(rightPanelView);
@@ -39,17 +122,28 @@ export default function RightPanel() {
 
   const lyrics = useMemo(() => {
     return currentTrack ? getLyricsForTrack(currentTrack.id, currentTrack.lyrics) : [];
-  }, [currentTrack]);
+  }, [currentTrack?.id, currentTrack?.lyrics]);
 
-  // Use the fluid physics-based lyric motion system (same as FullscreenPlayer/DrivePlayer)
+  // Auto-upgrade: normalize + fetch synced lyrics from LRCLIB when track changes
+  useEffect(() => {
+    if (!currentTrack) return;
+    if (!currentTrack.lyrics || !hasSyncedLyricTimestamps(currentTrack.lyrics)) {
+      autoUpgradeTrackLyrics(currentTrack).catch(() => {});
+    }
+  }, [currentTrack?.id]);
+
+  const shouldAnimateLyrics = isPlaying && !isFullscreenOpen && rightPanelView === 'lyrics';
+
   const {
     centeredFocusPosition: centeredLyricFocusPosition,
     activeLyricIndex: fluidActiveLyricIndex,
   } = useFluidLyricMotion(
     lyrics,
     currentTime,
-    isPlaying
+    shouldAnimateLyrics
   );
+
+  const isSynced = useMemo(() => lyrics.some((l) => l.time >= 0), [lyrics]);
 
   // Compute a visible window of lyrics around the focus position
   const lyricWindowCenter = lyrics.length > 0
@@ -89,6 +183,37 @@ export default function RightPanel() {
     }
   }, [currentTrack?.id, previousTracks.length]);
 
+  // Pop the newly active cover first, then start its duration path.
+  useEffect(() => {
+    const trackId = currentTrack?.id ?? null;
+    const isTrackChange = trackId !== previousActiveTrackIdRef.current;
+    previousActiveTrackIdRef.current = trackId;
+    if (!trackId || !isTrackChange) {
+      if (!trackId) setTrackIntroAnimating(false);
+      return;
+    }
+
+    const cover = activeTrackRef.current?.querySelector<HTMLElement>('.rp-now-playing-cover');
+    setTrackIntroAnimating(!reduceMotion);
+
+    if (cover && !reduceMotion) {
+      gsap.killTweensOf(cover);
+      const intro = gsap.timeline({ onComplete: () => setTrackIntroAnimating(false) });
+      intro.fromTo(cover, { scale: 0.84 }, {
+        scale: 1,
+        duration: 0.5,
+        ease: 'back.out(1.7)',
+        overwrite: 'auto',
+      });
+      return () => {
+        intro.kill();
+        gsap.killTweensOf(cover);
+      };
+    }
+
+    setTrackIntroAnimating(false);
+  }, [currentTrack?.id, reduceMotion]);
+
   // Queue entrance animation tracking
   const [queueMounted, setQueueMounted] = useState(false);
   useEffect(() => {
@@ -102,20 +227,37 @@ export default function RightPanel() {
     }
   }, [rightPanelView]);
 
-  if (!showQueue && !showLyrics) return null;
+  // Sync rightPanelView with playerStore
+  useEffect(() => {
+    if (showQueue && !showLyrics && rightPanelView !== 'queue') {
+      setRightPanel('queue');
+    } else if (!showQueue && showLyrics && rightPanelView !== 'lyrics') {
+      setRightPanel('lyrics');
+    }
+  }, [showQueue, showLyrics, rightPanelView, setRightPanel]);
 
+  if ((!showQueue && !showLyrics) || rightPanelView === 'hidden') return null;
+
+  const handleTabChange = (view: 'queue' | 'lyrics') => {
+    setRightPanel(view);
+    if (view === 'queue') {
+      usePlayerStore.setState({ showQueue: true, showLyrics: false });
+    } else {
+      usePlayerStore.setState({ showQueue: false, showLyrics: true });
+    }
+  };
 
   return (
-    <aside className="hidden w-[320px] flex-shrink-0 border-l border-white/5 bg-glass-heavy backdrop-blur-2xl/60 xl:block">
-      <div className="flex h-full flex-col overflow-y-auto p-4 pb-24 scrollbar-hidden">
+    <aside className={`hidden h-full min-h-0 w-[320px] flex-shrink-0 border-l border-white/5 xl:block ${performanceSettings.enableBlur ? 'bg-glass-heavy backdrop-blur-2xl/60' : 'bg-[#111]'}`}>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden p-4 pb-24 scrollbar-hidden">
         {/* Panel tabs */}
-        <div className="mb-4 flex items-center gap-1 rounded-xl bg-glass backdrop-blur-2xl/60 p-1">
+        <div className={`mb-4 flex items-center gap-1 rounded-xl p-1 ${performanceSettings.enableBlur ? 'bg-glass backdrop-blur-2xl/60' : 'bg-white/5'}`}>
           {(['queue', 'lyrics'] as const).map(view => (
             <button
               key={view}
-              onClick={() => setRightPanel(view)}
+              onClick={() => handleTabChange(view)}
               className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium capitalize transition-all duration-300 ${
-                rightPanelView === view ? 'bg-glass-card backdrop-blur-xl text-white shadow-lg' : 'text-dimText hover:text-softText'
+                rightPanelView === view ? `bg-glass-card text-white shadow-lg ${performanceSettings.enableBlur ? 'backdrop-blur-xl' : ''}` : 'text-dimText hover:text-softText'
               }`}
             >
               {view}
@@ -129,12 +271,6 @@ export default function RightPanel() {
             {/* Unified Queue Timeline */}
             <div className="relative overflow-visible rounded-2xl border border-white/10">
               <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
-                {!reduceMotion && performanceSettings.enableParticles && (
-                  <RightPanelParticles
-                    variant="queue"
-                    colors={currentTrack?.coverGradient as [string, string] | undefined}
-                  />
-                )}
                 {currentTrack && performanceSettings.enableHeavyAnimations && (
                   <div className="absolute inset-0 opacity-30">
                     <div 
@@ -147,9 +283,9 @@ export default function RightPanel() {
                 )}
               </div>
 
-              <div className="relative rounded-2xl bg-white/5 backdrop-blur-md p-4">
+              <div className={`relative rounded-2xl bg-white/5 p-4 ${performanceSettings.enableBlur ? 'backdrop-blur-md' : ''}`}>
                 {/* Header */}
-                <div className="flex items-center justify-between mb-6">
+                <div className="mb-6 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-white/10 border border-white/20">
                       <span className="text-sm">🎵</span>
@@ -161,16 +297,10 @@ export default function RightPanel() {
                       </p>
                     </div>
                   </div>
-                  {isPlaying && (
-                    <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-accent/15 border border-accent/30">
-                      <div className="w-1 h-1 rounded-full bg-accent animate-pulse" style={{ animationDuration: '1.5s' }} />
-                      <span className="text-[8px] font-black uppercase tracking-wider text-accent">Live</span>
-                    </div>
-                  )}
                 </div>
 
                 {/* Path Timeline */}
-                <div ref={queueContainerRef} className="relative max-h-[500px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
+                <div ref={queueContainerRef} className="relative -mx-4 -mt-4 max-h-[516px] overflow-y-auto pl-4 pr-6 pt-4 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
                   {currentTrack || upNext.length > 0 ? (
                     <div className="relative pl-2 pt-3">
                       {/* Vertical Path Line */}
@@ -254,75 +384,15 @@ export default function RightPanel() {
                           style={{ '--queue-stagger': previousTracks.length } as React.CSSProperties}
                         >
                           <div className="relative flex items-start gap-4 group min-h-[100px]">
-                            <div className="absolute left-[32px] -translate-x-1/2 top-0 -bottom-8 w-2 pointer-events-none" style={{ zIndex: 0 }}>
-                              <div className="absolute inset-0 bg-black/40" />
-                              <div 
-                                className="absolute top-0 left-0 right-0 h-[66px]"
-                                style={{ 
-                                    background: 'linear-gradient(to bottom, var(--accent), color-mix(in srgb, var(--accent) 58%, transparent))',
-                                    boxShadow: '0 0 12px color-mix(in srgb, var(--accent) 58%, transparent)'
-                                }}
-                              />
-                              <div className="absolute top-[66px] bottom-0 left-0 right-0 bg-transparent">
-                                <div 
-                                  className="w-full transition-all duration-300"
-                                  style={{ 
-                                    height: `${progress > 50 ? ((progress - 50) / 50) * 100 : 0}%`,
-                                    background: 'var(--accent)',
-                                    boxShadow: '0 0 18px color-mix(in srgb, var(--accent) 68%, transparent), 0 0 34px color-mix(in srgb, var(--accent) 34%, transparent), inset 0 0 8px rgba(255, 255, 255, 0.26)'
-                                  }}
-                                />
-                              </div>
-                            </div>
-                            <div className="relative flex-shrink-0">
-                              <div className="rp-now-playing-pulse absolute -inset-2 rounded-full" />
-                              <svg className="absolute -inset-1 h-[72px] w-[72px] overflow-visible" style={{ zIndex: 1 }} viewBox="0 0 72 72">
-                                <circle cx="36" cy="36" r="34" stroke="rgba(0,0,0,0.4)" strokeWidth="3" fill="none" />
-                                {progress > 0 && (
-                                  <path
-                                    d={`M 36 2 A 34 34 0 0 1 ${36 + 34 * Math.sin((Math.min(progress, 50) / 50) * Math.PI)} ${36 - 34 * Math.cos((Math.min(progress, 50) / 50) * Math.PI)}`}
-                                    stroke="var(--accent)"
-                                    strokeWidth="5"
-                                    fill="none"
-                                    strokeLinecap="round"
-                                    className="transition-all duration-300"
-                                    style={{
-                                      filter: 'drop-shadow(0 0 5px var(--accent)) drop-shadow(0 0 9px color-mix(in srgb, var(--accent) 28%, transparent))'
-                                    }}
-                                  />
-                                )}
-                                {progress > 0 && (
-                                  <path
-                                    d={`M 36 2 A 34 34 0 0 0 ${36 - 34 * Math.sin((Math.min(progress, 50) / 50) * Math.PI)} ${36 - 34 * Math.cos((Math.min(progress, 50) / 50) * Math.PI)}`}
-                                    stroke="var(--accent)"
-                                    strokeWidth="5"
-                                    fill="none"
-                                    strokeLinecap="round"
-                                    className="transition-all duration-300"
-                                    style={{
-                                      filter: 'drop-shadow(0 0 5px var(--accent)) drop-shadow(0 0 9px color-mix(in srgb, var(--accent) 28%, transparent))'
-                                    }}
-                                  />
-                                )}
-                              </svg>
-                              <div className="rp-now-playing-cover relative w-16 h-16 rounded-full overflow-hidden border-2 border-accent/70 shadow-lg" style={{ zIndex: 2 }}>
-                                {currentTrack.coverUrl ? (
-                                  <img src={currentTrack.coverUrl.startsWith('/') ? `http://localhost:3001${currentTrack.coverUrl}` : currentTrack.coverUrl} alt={currentTrack.title} className="h-full w-full object-cover" />
-                                ) : (
-                                  <div className="h-full w-full" style={{ background: `linear-gradient(135deg, ${currentTrack.coverGradient?.[0] || '#333'}, ${currentTrack.coverGradient?.[1] || '#222'})` }} />
-                                )}
-                              </div>
-                              <div className="absolute -bottom-1 left-1/2 z-[3] -translate-x-1/2 rounded-full border border-accent/40 bg-black/70 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.16em] text-accent shadow-lg backdrop-blur-md">
-                                Now
-                              </div>
-                            </div>
+                            <QueueNowPlayingIndicators
+                              isTrackIntroAnimating={isTrackIntroAnimating}
+                              enableShadows={performanceSettings.enableShadows}
+                            />
                             <div className="flex-1 pt-2 min-w-0">
                               <div className="flex items-center gap-2 mb-2">
                                 <div className="truncate text-sm font-black text-white">{currentTrack.title}</div>
                                 {isPlaying && (
-                                  <div className="flex items-center gap-0.5 flex-shrink-0">
-                                    {[0, 1, 2].map((i) => (<div key={i} className="w-0.5 bg-accent rounded-full animate-[bounce_0.8s_ease-in-out_infinite]" style={{ height: `${6 + i * 2}px`, animationDelay: `${i * 0.1}s` }} />))}
-                                  </div>
+                                  <AudioReactiveBars isActive={isPlaying && showQueue && !isFullscreenOpen} className="flex-shrink-0" />
                                 )}
                               </div>
                               <div className="truncate text-xs text-white/80">{currentTrack.artist}</div>
@@ -401,17 +471,11 @@ export default function RightPanel() {
 
         {/* Lyrics view — Physics-based kinetic lyrics */}
         {rightPanelView === 'lyrics' && (
-          <div className={`rp-tab-panel ${tabTransitionClass}`}>
+          <div className={`rp-tab-panel flex min-h-0 flex-1 flex-col ${tabTransitionClass}`}>
             {currentTrack ? (
-              <div className="relative rounded-3xl overflow-hidden">
+              <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl">
                 {/* Animated Background Blobs */}
                 <div className="absolute inset-0 overflow-hidden">
-                  {!reduceMotion && performanceSettings.enableParticles && (
-                    <RightPanelParticles
-                      variant="lyrics"
-                      colors={currentTrack.coverGradient as [string, string] | undefined}
-                    />
-                  )}
                   {performanceSettings.enableHeavyAnimations && (
                     <>
                       <div 
@@ -437,33 +501,39 @@ export default function RightPanel() {
                 </div>
 
                 {/* Glass Container */}
-                <div className="relative backdrop-blur-xl bg-gradient-to-br from-white/10 via-white/5 to-transparent border border-white/20 rounded-3xl p-6 shadow-2xl">
+                <div className={`relative flex min-h-0 flex-1 flex-col rounded-3xl border border-white/20 bg-gradient-to-br from-white/10 via-white/5 to-transparent p-6 shadow-2xl ${performanceSettings.enableBlur ? 'backdrop-blur-xl' : ''}`}>
                   {/* Floating Header */}
-                  <div className="mb-6 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="relative">
-                        <div 
-                          className="w-10 h-10 rounded-xl flex items-center justify-center backdrop-blur-md border border-white/30 shadow-lg"
-                          style={{
-                            background: `linear-gradient(135deg, ${currentTrack.coverGradient?.[0] || '#666'}40, ${currentTrack.coverGradient?.[1] || '#444'}20)`,
-                          }}
-                        >
-                          <span className="text-lg">🎵</span>
+                  <div className="mb-6 flex min-w-0 items-center gap-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      {/* Album Art Thumbnail */}
+                      <div className="relative flex-shrink-0">
+                        <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/20 shadow-lg">
+                          {currentTrack.coverUrl ? (
+                            <img
+                              src={currentTrack.coverUrl.startsWith('/') ? `http://localhost:3001${currentTrack.coverUrl}` : currentTrack.coverUrl}
+                              alt={currentTrack.title}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div
+                              className="h-full w-full"
+                              style={{ background: `linear-gradient(135deg, ${currentTrack.coverGradient?.[0] || '#666'}, ${currentTrack.coverGradient?.[1] || '#444'})` }}
+                            />
+                          )}
                         </div>
                         {isPlaying && (
-                          <div 
+                          <div
                             className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-accent border-2 border-black animate-pulse"
                             style={{ animationDuration: '2s' }}
                           />
                         )}
                       </div>
-                      <div>
-                        <h3 className="text-xs font-black uppercase tracking-[0.15em] text-white/95">Synced Lyrics</h3>
-                        <p className="text-[10px] text-white/50 mt-0.5">{lyrics.length} lines</p>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="block w-full truncate text-sm font-bold leading-tight text-white/95">{currentTrack.title}</h3>
                       </div>
                     </div>
                     {isPlaying && (
-                      <div className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-accent/20 border border-accent/40 backdrop-blur-md shadow-lg">
+                      <div className="flex shrink-0 items-center gap-1 rounded-full border border-accent/40 bg-accent/20 px-3 py-1.5 shadow-lg backdrop-blur-md">
                         <div className="flex gap-0.5">
                           {[0, 1, 2].map((i) => (
                             <div
@@ -482,11 +552,10 @@ export default function RightPanel() {
                   </div>
 
                   {/* Kinetic Lyrics Container */}
-                  <div 
+                  <div
                     ref={lyricsContainerRef}
-                    className="relative overflow-hidden"
+                    className="lyric-scroller relative min-h-[240px] flex-1 overflow-hidden"
                     style={{
-                      height: '420px',
                       maskImage: 'linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)',
                       WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)',
                     }}
@@ -497,23 +566,30 @@ export default function RightPanel() {
                           const actualIndex = lyricWindowStart + index;
                           const relativePosition = actualIndex - centeredLyricFocusPosition;
                           const distance = Math.abs(relativePosition);
-                          
-                          // Ultra-simplified calculations for maximum performance
+
                           const yOffset = relativePosition * 110;
-                          const focusFactor = Math.max(0, 1 - distance * 0.8);
-                          const opacity = 0.3 + focusFactor * 0.7;
-                          const scale = 0.94 + focusFactor * 0.06;
-                          const isCurrent = actualIndex === fluidActiveLyricIndex;
-                          
-                          // Simple glow for current line only
-                          const textShadow = isCurrent
-                            ? `0 0 16px var(--accent), 0 2px 8px rgba(0,0,0,0.5)`
-                            : '0 1px 4px rgba(0,0,0,0.4)';
+                          const isCurrent = isSynced && actualIndex === fluidActiveLyricIndex;
+                          const isPreSinging = isSynced && fluidActiveLyricIndex < 0;
+
+                          const opacity = !isSynced
+                            ? 0.85
+                            : isPreSinging
+                              ? 0.22
+                              : (isCurrent ? 1.0 : Math.max(0.12, 0.40 - distance * 0.12));
+                          const scale = !isSynced
+                            ? 1.0
+                            : isPreSinging
+                              ? 0.96
+                              : (isCurrent ? 1.04 : Math.max(0.92, 0.98 - distance * 0.03));
+
+                          const textShadow = (isCurrent && !isPreSinging)
+                            ? '0 2px 20px rgba(0,0,0,0.85), 0 0 20px rgba(255,255,255,0.18), 0 1px 4px rgba(0,0,0,0.9)'
+                            : '0 1px 4px rgba(0,0,0,0.5)';
 
                           return (
                             <div
                               key={`${line.time}-${actualIndex}`}
-                              className="absolute w-full left-0 px-3 text-left"
+                              className="absolute left-0 w-full px-3 text-center select-none pointer-events-none"
                               style={{
                                 top: '50%',
                                 fontSize: '1.1rem',
@@ -523,22 +599,12 @@ export default function RightPanel() {
                                 color: '#ffffff',
                                 textShadow,
                                 fontWeight: isCurrent ? '900' : '700',
-                                willChange: 'transform, opacity',
+                                letterSpacing: '-0.015em',
                                 wordWrap: 'break-word',
                                 overflowWrap: 'break-word',
                               }}
                             >
-                              {/* Accent glow bar for active line */}
-                              {isCurrent && (
-                                <div
-                                  className="absolute -left-1 top-1/2 -translate-y-1/2 w-[3px] rounded-full bg-accent"
-                                  style={{
-                                    height: '70%',
-                                    boxShadow: '0 0 10px var(--accent), 0 0 20px var(--accent)',
-                                  }}
-                                />
-                              )}
-                              {line.text || '♪'}
+                              <span>{line.text || '♪'}</span>
                             </div>
                           );
                         })}
@@ -555,8 +621,8 @@ export default function RightPanel() {
                 </div>
               </div>
             ) : (
-              <div className="relative rounded-3xl overflow-hidden">
-                <div className="backdrop-blur-xl bg-gradient-to-br from-white/10 via-white/5 to-transparent border border-white/20 rounded-3xl p-12 text-center shadow-2xl">
+              <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl">
+                <div className="flex min-h-[360px] flex-1 flex-col items-center justify-center rounded-3xl border border-white/20 bg-gradient-to-br from-white/10 via-white/5 to-transparent p-8 text-center shadow-2xl backdrop-blur-xl">
                   <div 
                     className="w-20 h-20 mx-auto mb-5 rounded-2xl flex items-center justify-center backdrop-blur-md border border-white/30 shadow-xl"
                     style={{
@@ -573,22 +639,6 @@ export default function RightPanel() {
           </div>
         )}
 
-        {/* Settings / Accessibility (Always at bottom) */}
-        <div className="mt-auto pt-8">
-          <div className="rounded-xl bg-glass backdrop-blur-2xl/40 p-3">
-            <label className="flex cursor-pointer items-center justify-between text-sm">
-              <span className="text-softText font-medium">Reduce Motion (3D)</span>
-              <div className="relative">
-                <input type="checkbox" className="sr-only" checked={reduceMotion} onChange={toggleReduceMotion} />
-                <div className={`block h-5 w-9 rounded-full transition-colors ${reduceMotion ? 'bg-accent' : 'bg-white/10'}`} />
-                <div className={`dot absolute left-1 top-1 h-3 w-3 rounded-full bg-white transition-transform ${reduceMotion ? 'translate-x-4' : ''}`} />
-              </div>
-            </label>
-            <p className="mt-1.5 text-[10px] text-dimText leading-tight">
-              Disables 3D visualizers and particle effects to save battery and reduce motion.
-            </p>
-          </div>
-        </div>
       </div>
     </aside>
   );

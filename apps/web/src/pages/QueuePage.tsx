@@ -1,8 +1,16 @@
 import { RiPlayList2Line, RiPlayFill, RiDeleteBinLine } from 'react-icons/ri';
 import { usePlayerStore } from '../stores/playerStore';
+import { shallow } from 'zustand/shallow';
 
 export default function QueuePage() {
-  const { queue, queueIndex, currentTrack, playTrack, removeFromQueue, clearQueue } = usePlayerStore();
+  const { queue, queueIndex, currentTrack, playTrack, removeFromQueue, clearQueue } = usePlayerStore((state) => ({
+    queue: state.queue,
+    queueIndex: state.queueIndex,
+    currentTrack: state.currentTrack,
+    playTrack: state.playTrack,
+    removeFromQueue: state.removeFromQueue,
+    clearQueue: state.clearQueue,
+  }), shallow);
 
   return (
     <div className="page-enter space-y-4 sm:space-y-6 pb-8">

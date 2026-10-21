@@ -1,4 +1,5 @@
 import { parseLRC, type LyricLine } from './lrcParser';
+import { normalizeLyricText, stripLrcHeaders } from '../services/lyricsService';
 
 export function formatDuration(seconds: number): string {
   if (!seconds || isNaN(seconds)) return '0:00';
@@ -25,15 +26,16 @@ export function getLyricsForTrack(_trackId: string, lrcContent?: string): LyricL
   // If LRC content is provided, parse it
   if (lrcContent) {
     try {
-      const syncedLyrics = parseLRC(lrcContent);
+      const normalized = normalizeLyricText(lrcContent);
+      const syncedLyrics = parseLRC(normalized);
       if (syncedLyrics.length > 0) return syncedLyrics;
 
-      return lrcContent
-        .replace(/\r/g, '')
+      const cleanedPlain = stripLrcHeaders(normalized);
+      return cleanedPlain
         .split('\n')
         .map((line) => line.trim())
         .filter(Boolean)
-        .map((text, index) => ({ time: index * 4, text }));
+        .map((text) => ({ time: -1, text }));
     } catch (error) {
       console.error('Error parsing LRC content:', error);
     }

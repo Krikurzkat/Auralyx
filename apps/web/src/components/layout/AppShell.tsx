@@ -1,41 +1,68 @@
+import { useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import BottomPlayer from './BottomPlayer';
 import RightPanel from './RightPanel';
 import FullscreenPlayer from '../player/FullscreenPlayer';
+import VisualizerPlayer from '../player/VisualizerPlayer';
+import DrivePlayer from '../player/DrivePlayer';
 import { useUIStore } from '../../stores/uiStore';
-import { useGalaxyS8PlusLayout } from '../../hooks/useGalaxyS8PlusLayout';
+import { usePerformance } from '../../hooks/usePerformance';
 import AlbumArtGlow from '../ui/AlbumArtGlow';
-import BlinkingStars from '../ui/BlinkingStars';
+
+import { usePlayerStore } from '../../stores/playerStore';
+
+function useWideViewport() {
+  const [isWideViewport, setIsWideViewport] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(min-width: 1280px)').matches
+  );
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(min-width: 1280px)');
+    const update = () => setIsWideViewport(mediaQuery.matches);
+    update();
+    mediaQuery.addEventListener('change', update);
+    return () => mediaQuery.removeEventListener('change', update);
+  }, []);
+
+  return isWideViewport;
+}
 
 export default function AppShell() {
-  const { contextMenu, closeContextMenu, modalContent, closeModal } = useUIStore();
-  const isGalaxyS8PlusLayout = useGalaxyS8PlusLayout();
+  const {
+    contextMenu,
+    closeContextMenu,
+    modalContent,
+    closeModal,
+    isVisualizerOpen,
+    setVisualizerOpen,
+    isDriveModeOpen,
+    setDriveModeOpen,
+    reduceMotion,
+  } = useUIStore();
+  const isFullscreenOpen = usePlayerStore((s) => s.isFullscreenOpen);
+  const performanceSettings = usePerformance();
+  const isWideViewport = useWideViewport();
 
   return (
-    <div className="relative flex h-[100dvh] bg-glass backdrop-blur-2xl text-white overflow-hidden">
-      {/* Dynamic Background Blobs for Glassmorphism Effect */}
-      <AlbumArtGlow />
-      <BlinkingStars />
+    <div className="relative flex h-[100dvh] bg-glass text-white overflow-hidden">
+      {/* Dynamic Background — hidden in reduce motion mode or when FullscreenPlayer is open */}
+      {!reduceMotion && !isFullscreenOpen && performanceSettings.enableBlur && <AlbumArtGlow />}
 
-      {/* Sidebar */}
+      {/* Sidebar — always rendered, handles its own collapse/mobile logic */}
       <Sidebar />
 
-      {/* Main area */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      {/* Main area — fills remaining space, never shrinks below 0 */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <TopBar />
-        <main
-          className={`flex-1 overflow-y-auto px-4 md:px-6 ${
-            isGalaxyS8PlusLayout ? 'py-3 pb-[112px]' : 'py-5 pb-[140px] md:pb-[100px]'
-          }`}
-        >
+        <main className="flex-1 overflow-y-auto px-3 sm:px-4 md:px-6 py-4 pb-[130px] md:pb-[96px]">
           <Outlet />
         </main>
       </div>
 
       {/* Right panel */}
-      <RightPanel />
+      {isWideViewport && <RightPanel />}
 
       {/* Bottom player */}
       <BottomPlayer />
@@ -43,6 +70,15 @@ export default function AppShell() {
       {/* Fullscreen player overlay */}
       <FullscreenPlayer />
 
+      {/* Visualizer player modal */}
+      {isVisualizerOpen && (
+        <VisualizerPlayer onClose={() => setVisualizerOpen(false)} />
+      )}
+
+      {/* Drive mode player modal (only when fullscreen player shell is not hosting it) */}
+      {isDriveModeOpen && !isFullscreenOpen && (
+        <DrivePlayer onClose={() => setDriveModeOpen(false)} />
+      )}
 
       {/* Context menu */}
       {contextMenu && (

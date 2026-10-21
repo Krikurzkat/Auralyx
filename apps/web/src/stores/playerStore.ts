@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { Track } from '../types';
+import { connectLocalAudioForVisualization } from '../utils/audioVisualizer';
 
 type AudioSlot = 0 | 1;
 const LAST_PLAYBACK_KEY = 'go_music_last_playback';
@@ -10,10 +11,13 @@ const DUPLICATE_IMPORT_BEHAVIOR_KEY = 'go_music_duplicate_import_behavior';
 const ATTACH_SIDECAR_FILES_KEY = 'go_music_attach_sidecar_files';
 const LYRICS_IMPORT_MODE_KEY = 'go_music_lyrics_import_mode';
 const LYRICS_TRANSITION_KEY = 'go_music_lyrics_transition';
+const LYRICS_DISPLAY_MODE_KEY = 'go_music_lyrics_display_mode';
 
 const _blobUrlByAudio = new WeakMap<HTMLAudioElement, string>();
 let _crossfadeAnimationFrame: number | null = null;
 let _crossfadeTimeout: number | null = null;
+let _autoCrossfadeAttemptId = 0;
+let _autoCrossfadePreparing = false;
 let _pendingAutoAdvance: {
   nextTrack: Track;
   nextIndex: number;
@@ -58,9 +62,25 @@ function getAudioDebugSnapshot(audio: HTMLAudioElement | null, label: string) {
 
 export type RepeatMode = 'off' | 'all' | 'one';
 export type LyricsTransitionMode = 'smooth' | 'fade' | 'slide' | 'instant';
+export type LyricsDisplayMode = 'vertical' | 'karaoke' | 'spotlight' | 'clean';
 export type LyricsImportMode = 'embedded' | 'sidecar';
 export type ImportMetadataMode = 'embedded-first' | 'filename-first' | 'filename-only';
 export type DuplicateImportBehavior = 'skip' | 'allow';
+
+function readVolumeSetting(key: string, fallback: number) {
+  if (typeof window === 'undefined') return fallback;
+  const raw = window.localStorage.getItem(key);
+  if (raw === null || raw === '78') {
+    try {
+      window.localStorage.setItem(key, String(fallback));
+    } catch {
+      // ignore
+    }
+    return fallback;
+  }
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : fallback;
+}
 
 function readNumberSetting(key: string, fallback: number) {
   if (typeof window === 'undefined') return fallback;
@@ -111,6 +131,7 @@ interface PlayerState {
   attachSidecarFiles: boolean;
   lyricsImportMode: LyricsImportMode;
   lyricsTransition: LyricsTransitionMode;
+  lyricsDisplayMode: LyricsDisplayMode;
 
   // UI
   isFullscreen: boolean;
@@ -136,6 +157,7 @@ interface PlayerState {
   nextTrack: () => void;
   prevTrack: () => void;
   seekTo: (percent: number) => void;
+  seek: (seconds: number) => void;
   setVolume: (vol: number) => void;
   toggleMute: () => void;
   toggleShuffle: () => void;
@@ -148,10 +170,13 @@ interface PlayerState {
   setAttachSidecarFiles: (value: boolean) => void;
   setLyricsImportMode: (mode: LyricsImportMode) => void;
   setLyricsTransition: (mode: LyricsTransitionMode) => void;
+  setLyricsDisplayMode: (mode: LyricsDisplayMode) => void;
   setFullscreenOpen: (value: boolean) => void;
   toggleFullscreen: () => void;
   toggleLyrics: () => void;
   toggleQueue: () => void;
+  setShowLyrics: (show: boolean) => void;
+  setShowQueue: (show: boolean) => void;
   addToQueue: (track: Track) => void;
   playNext: (track: Track) => void;
   removeFromQueue: (index: number) => void;
@@ -159,6 +184,7 @@ interface PlayerState {
   reorderQueue: (from: number, to: number) => void;
   setProgress: (progress: number) => void;
   setCurrentTime: (time: number) => void;
+  setPlaybackPosition: (time: number, duration: number) => void;
   setDuration: (duration: number) => void;
   restoreLastPlayback: (tracks: Track[]) => void;
   resetPlaybackState: () => void;
@@ -203,6 +229,9 @@ function clearAudioBlobUrl(audio: HTMLAudioElement | null) {
 }
 
 function clearCrossfadeAnimation() {
+  // Also invalidate any pending play() promise from a previous auto-fade.
+  _autoCrossfadeAttemptId += 1;
+  _autoCrossfadePreparing = false;
   if (_crossfadeAnimationFrame !== null) {
     cancelAnimationFrame(_crossfadeAnimationFrame);
     _crossfadeAnimationFrame = null;
@@ -218,10 +247,18 @@ function isPageHidden() {
 }
 
 function scheduleCrossfadeStep(callback: (time: number) => void) {
-  _crossfadeTimeout = window.setTimeout(() => {
-    _crossfadeTimeout = null;
-    callback(performance.now());
-  }, isPageHidden() ? 250 : 50);
+  if (isPageHidden()) {
+    _crossfadeTimeout = window.setTimeout(() => {
+      _crossfadeTimeout = null;
+      callback(performance.now());
+    }, 250);
+    return;
+  }
+
+  _crossfadeAnimationFrame = window.requestAnimationFrame((time) => {
+    _crossfadeAnimationFrame = null;
+    callback(time);
+  });
 }
 
 function getTargetVolume(state: Pick<PlayerState, 'volume' | 'isMuted'>) {
@@ -272,6 +309,10 @@ function setAudioSource(audio: HTMLAudioElement, track: Track) {
     audio.removeAttribute('src');
     audio.load();
   }
+
+  // The helper checks the element's actual URL, so it also handles restored
+  // local tracks whose metadata no longer carries the original Blob property.
+  void connectLocalAudioForVisualization([audio]);
 
   // #region debug-point A:set-audio-source
   reportTrackSwitchDebug('A', 'setAudioSource', {
@@ -531,6 +572,90 @@ function performManualCrossfade(
       stopInactiveAudio(inactiveAudio);
       onPlayFailure();
     });
+
+  autoApplyEmbeddedLyricsIfMissing(nextTrack);
+}
+
+function autoApplyEmbeddedLyricsIfMissing(track: Track) {
+  if (!track) return;
+
+  (async () => {
+    try {
+      const { autoUpgradeTrackLyrics, hasSyncedLyricTimestamps, normalizeLyricText } = await import('../services/lyricsService');
+
+      // 1. If track already has lyrics, normalize them immediately if they contain unescaped / corrupted linebreaks
+      if (track.lyrics) {
+        const cleaned = normalizeLyricText(track.lyrics);
+        if (cleaned && cleaned !== track.lyrics) {
+          track.lyrics = cleaned;
+          const cur = usePlayerStore.getState().currentTrack;
+          if (cur && cur.id === track.id) {
+            usePlayerStore.setState((s) => ({
+              currentTrack: { ...cur, lyrics: cleaned },
+              queue: s.queue.map((t) => (t.id === cur.id ? { ...t, lyrics: cleaned } : t)),
+            }));
+          }
+          try {
+            const { localDb } = await import('../services/localDb');
+            const stored = await localDb.getTrack(track.id);
+            if (stored) {
+              await localDb.saveTrack({ ...stored, lyrics: cleaned });
+            }
+          } catch {}
+        }
+      }
+
+      // 2. If track is local and missing lyrics or has unsynced lyrics, check if audio file has embedded synced lyrics
+      if ((!track.lyrics || !hasSyncedLyricTimestamps(track.lyrics)) && track.isLocal) {
+        const resolveBlob = async (): Promise<Blob | undefined> => {
+          const localTrack = track as Track & { blob?: Blob };
+          if (localTrack.blob) return localTrack.blob;
+          try {
+            const { localDb } = await import('../services/localDb');
+            const stored = await localDb.getTrack(track.id);
+            return stored?.blob;
+          } catch {
+            return undefined;
+          }
+        };
+
+        const blob = await resolveBlob();
+        if (blob) {
+          const { extractEmbeddedLyricsFromBlobDirect, extractFullEmbeddedMetadata } = await import('../utils/embeddedMetadata');
+          let lyrics = await extractEmbeddedLyricsFromBlobDirect(blob);
+          if (!lyrics) {
+            const full = await extractFullEmbeddedMetadata(blob);
+            lyrics = full.lyrics;
+          }
+          if (lyrics && (!track.lyrics || hasSyncedLyricTimestamps(lyrics))) {
+            const normalized = normalizeLyricText(lyrics);
+            track.lyrics = normalized;
+            const cur = usePlayerStore.getState().currentTrack;
+            if (cur && cur.id === track.id) {
+              usePlayerStore.setState((s) => ({
+                currentTrack: { ...cur, lyrics: normalized },
+                queue: s.queue.map((t) => (t.id === cur.id ? { ...t, lyrics: normalized } : t)),
+              }));
+            }
+            try {
+              const { localDb } = await import('../services/localDb');
+              const stored = await localDb.getTrack(track.id);
+              if (stored) {
+                await localDb.saveTrack({ ...stored, lyrics: normalized });
+              }
+            } catch {}
+          }
+        }
+      }
+
+      // 3. If lyrics are still missing or unsynced plain text, upgrade from LRCLIB online
+      if (!track.lyrics || !hasSyncedLyricTimestamps(track.lyrics)) {
+        await autoUpgradeTrackLyrics(track);
+      }
+    } catch (err) {
+      console.warn('[PlayerStore] Auto-apply lyrics error:', err);
+    }
+  })().catch(() => {});
 }
 
 function performDirectTrackSwitch(
@@ -564,6 +689,8 @@ function performDirectTrackSwitch(
     setAudioSource(activeAudio, nextTrack);
   }
 
+  autoApplyEmbeddedLyricsIfMissing(nextTrack);
+
   setState({
     currentTrack: nextTrack,
     isPlaying: true,
@@ -586,7 +713,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   progress: 0,
   currentTime: 0,
   duration: 0,
-  volume: readNumberSetting(PLAYER_VOLUME_KEY, 78),
+  volume: readVolumeSetting(PLAYER_VOLUME_KEY, 100),
   isMuted: false,
 
   queue: [],
@@ -605,6 +732,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   attachSidecarFiles: readBooleanSetting(ATTACH_SIDECAR_FILES_KEY, true),
   lyricsImportMode: readOptionSetting<LyricsImportMode>(LYRICS_IMPORT_MODE_KEY, 'embedded', ['embedded', 'sidecar']),
   lyricsTransition: readOptionSetting<LyricsTransitionMode>(LYRICS_TRANSITION_KEY, 'smooth', ['smooth', 'fade', 'slide', 'instant']),
+  lyricsDisplayMode: readOptionSetting<LyricsDisplayMode>(LYRICS_DISPLAY_MODE_KEY, 'vertical', ['vertical', 'karaoke', 'spotlight', 'clean']),
 
   isFullscreen: false,
   isFullscreenOpen: false,
@@ -854,6 +982,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // Safety checks
     if (
       state.isCrossfading ||
+      _autoCrossfadePreparing ||
       state.autoFadeDuration <= 0 ||
       !state.currentTrack ||
       !activeAudio ||
@@ -904,6 +1033,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
     // Prepare next track
     clearCrossfadeAnimation();
+    _autoCrossfadePreparing = true;
+    const attemptId = _autoCrossfadeAttemptId;
     stopInactiveAudio(inactiveAudio);
     setAudioSource(inactiveAudio, nextTrack);
     inactiveAudio.currentTime = 0;
@@ -918,6 +1049,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // Wait for play to start before beginning crossfade
     if (playPromise) {
       playPromise.then(() => {
+        if (attemptId !== _autoCrossfadeAttemptId) {
+          inactiveAudio.pause();
+          return;
+        }
+        _autoCrossfadePreparing = false;
         _pendingAutoAdvance = {
           nextTrack,
           nextIndex,
@@ -936,7 +1072,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
         // Start equal-power crossfade animation
         const targetVolume = getTargetVolume(get());
-        const durationMs = state.autoFadeDuration * 1000;
+        const remainingAtFadeStart = Math.max(0.1, activeAudio.duration - activeAudio.currentTime);
+        const durationMs = Math.min(state.autoFadeDuration * 1000, remainingAtFadeStart * 1000);
 
         const startTime = performance.now();
         const startVolume = activeAudio.volume;
@@ -970,6 +1107,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         
         scheduleCrossfadeStep(animate);
       }).catch((err) => {
+        if (attemptId !== _autoCrossfadeAttemptId) return;
+        _autoCrossfadePreparing = false;
         console.error('Crossfade play failed, falling back to direct switch:', err);
         _pendingAutoAdvance = null;
         reportTrackSwitchDebug('C', 'auto crossfade fallback to direct switch', {
@@ -978,6 +1117,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         });
         get().playTrack(nextTrack, queue, true);
       });
+    } else {
+      _autoCrossfadePreparing = false;
     }
   },
 
@@ -1147,6 +1288,18 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set({ progress: percent });
   },
 
+  seek: (seconds) => {
+    const state = get();
+    const audio = state.audioRef;
+    const dur = (audio && audio.duration) || state.duration || 1;
+    const clampedSecs = Math.max(0, Math.min(dur, seconds));
+    if (audio) {
+      audio.currentTime = clampedSecs;
+    }
+    const percent = Math.max(0, Math.min(100, (clampedSecs / dur) * 100));
+    set({ currentTime: clampedSecs, progress: percent });
+  },
+
   setVolume: (vol) => {
     const state = get();
     const audio = getActiveAudio(state);
@@ -1168,8 +1321,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const state = get();
     const audio = getActiveAudio(state);
     if (state.isMuted) {
-      if (audio) audio.volume = clampAudioVolume(state.volume / 100);
-      set({ isMuted: false });
+      const restoredVol = state.volume > 0 ? state.volume : 100;
+      if (audio) audio.volume = clampAudioVolume(restoredVol / 100);
+      set({ isMuted: false, volume: restoredVol });
     } else {
       if (audio) audio.volume = clampAudioVolume(0);
       set({ isMuted: true });
@@ -1276,10 +1430,18 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
     set({ lyricsTransition: mode });
   },
+  setLyricsDisplayMode: (mode) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(LYRICS_DISPLAY_MODE_KEY, mode);
+    }
+    set({ lyricsDisplayMode: mode });
+  },
   setFullscreenOpen: (value) => set({ isFullscreen: value, isFullscreenOpen: value }),
   toggleFullscreen: () => set(s => ({ isFullscreen: !s.isFullscreenOpen, isFullscreenOpen: !s.isFullscreenOpen })),
   toggleLyrics: () => set(s => ({ showLyrics: !s.showLyrics })),
   toggleQueue: () => set(s => ({ showQueue: !s.showQueue })),
+  setShowLyrics: (show) => set({ showLyrics: show }),
+  setShowQueue: (show) => set({ showQueue: show }),
 
   addToQueue: (track) => set(s => ({ queue: [...s.queue, track] })),
   playNext: (track) => set(s => {
@@ -1307,6 +1469,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setProgress: (progress) => set({ progress }),
   setCurrentTime: (time) => set({ currentTime: time }),
+  setPlaybackPosition: (time, duration) => set({
+    currentTime: time,
+    progress: duration > 0 ? (time / duration) * 100 : 0,
+  }),
   setDuration: (duration) => set({ duration }),
   restoreLastPlayback: (tracks) => {
     const snapshot = readLastPlaybackSnapshot();
