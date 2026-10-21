@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "Auralyx",
+    "slug": "auralyx",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "mobile",
+    "scheme": "auralyx",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
@@ -19,25 +19,26 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#121212",
+        "backgroundColor": "#090C16",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.READ_MEDIA_AUDIO",
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
-        "android.permission.WAKE_LOCK",
+        "android.permission.WAKE_LOCK"
+      ],
+      "blockedPermissions": [
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
         "android.permission.ACCESS_MEDIA_LOCATION",
         "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.READ_MEDIA_VIDEO"
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.SYSTEM_ALERT_WINDOW"
       ],
-      "package": "com.johndogmoc.mobile"
+      "package": "com.krikurzkat.auralyx",
+      "versionCode": 1
     },
     "web": {
       "output": "static",
@@ -58,9 +59,9 @@
       [
         "expo-media-library",
         {
-          "photosPermission": "Allow Auralyx to access your photos and media to discover local music.",
-          "savePhotosPermission": "Allow Go-Music to save photos.",
-          "isAccessMediaLocationEnabled": true
+          "photosPermission": "Allow Auralyx to access your media library to find local tracks.",
+          "isAccessMediaLocationEnabled": false,
+          "granularPermissions": ["audio"]
         }
       ]
     ],

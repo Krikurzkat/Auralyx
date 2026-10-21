@@ -111,22 +111,35 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   scanLocalMusic: async () => {
     try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
+      const { status } = await MediaLibrary.requestPermissionsAsync(false, ['audio']);
       if (status !== 'granted') return [];
 
-      const media = await MediaLibrary.getAssetsAsync({
-        mediaType: 'audio',
-        first: 100,
-      });
+      const tracks: Track[] = [];
+      let after: string | undefined;
+      let hasNextPage = true;
 
-      const tracks: Track[] = media.assets.map((asset) => ({
-        id: asset.id,
-        url: asset.uri,
-        title: asset.filename.replace(/\.[^/.]+$/, ''),
-        artist: 'Unknown Artist',
-        duration: asset.duration,
-        artwork: undefined,
-      }));
+      while (hasNextPage) {
+        const page = await MediaLibrary.getAssetsAsync({
+          mediaType: 'audio',
+          first: 100,
+          after,
+        });
+
+        tracks.push(
+          ...page.assets.map((asset) => ({
+            id: asset.id,
+            url: asset.uri,
+            title: asset.filename.replace(/\.[^/.]+$/, ''),
+            artist: 'Unknown Artist',
+            duration: asset.duration,
+            artwork: undefined,
+          })),
+        );
+
+        hasNextPage = page.hasNextPage;
+        after = page.endCursor;
+        if (page.assets.length === 0) break;
+      }
 
       return tracks;
     } catch (error) {
